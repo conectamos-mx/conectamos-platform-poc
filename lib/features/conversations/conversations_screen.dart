@@ -5927,7 +5927,7 @@ class _FeedOutboundBubble extends StatelessWidget {
                       const SizedBox(width: 4),
                     ],
                     Text(
-                      '$senderName → $toPhone',
+                      '$senderName → ${recipientName ?? toPhone}',
                       style: AppTextStyles.caption,
                     ),
                   ],
