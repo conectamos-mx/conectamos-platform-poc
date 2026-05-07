@@ -23,10 +23,17 @@ class ExecutionDetailScreen extends ConsumerStatefulWidget {
 class _ExecutionDetailScreenState
     extends ConsumerState<ExecutionDetailScreen> {
   bool _loading = true;
-  bool _reloading = false;
+  DateTime? _lastFetch;
   String? _error;
   Map<String, dynamic>? _exec;
   Map<String, dynamic>? _flow;
+
+  String _elapsedSince(DateTime t) {
+    final d = DateTime.now().difference(t);
+    if (d.inSeconds < 60) return 'hace ${d.inSeconds}s';
+    if (d.inMinutes < 60) return 'hace ${d.inMinutes}m';
+    return 'hace ${d.inHours}h';
+  }
 
   @override
   void initState() {
@@ -37,7 +44,6 @@ class _ExecutionDetailScreenState
   Future<void> _load() async {
     setState(() {
       _loading = _exec == null;
-      _reloading = true;
       _error = null;
     });
     try {
@@ -57,7 +63,7 @@ class _ExecutionDetailScreenState
         _loading = false;
       });
     } finally {
-      setState(() { _reloading = false; });
+      setState(() { _lastFetch = DateTime.now(); });
     }
   }
 
@@ -123,6 +129,36 @@ class _ExecutionDetailScreenState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            if (_lastFetch != null)
+                              Text(
+                                'Act. ${_elapsedSince(_lastFetch!)}',
+                                style: AppFonts.geist(fontSize: 11, color: AppColors.ctText3),
+                              ),
+                            const SizedBox(width: 4),
+                            SizedBox(
+                              width: 32,
+                              height: 32,
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: _loading
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: AppColors.ctTeal,
+                                        ),
+                                      )
+                                    : const Icon(Icons.refresh_rounded,
+                                        size: 16, color: AppColors.ctText3),
+                                onPressed: _loading ? null : _load,
+                              ),
+                            ),
+                          ],
+                        ),
                         LineageBreadcrumb(exec: exec),
                         LayoutBuilder(
                           builder: (ctx, constraints) {
@@ -177,25 +213,6 @@ final content = _MainContent(exec: exec, flow: flow);
         icon: const Icon(Icons.arrow_back_rounded, color: AppColors.ctText),
         onPressed: () => context.go('/executions'),
       ),
-      actions: [
-        _reloading
-            ? const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.ctTeal,
-                  ),
-                ),
-              )
-            : IconButton(
-                icon: const Icon(Icons.refresh_rounded, color: AppColors.ctText2),
-                tooltip: 'Actualizar',
-                onPressed: _load,
-              ),
-      ],
     );
   }
 }
