@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -26,6 +27,7 @@ class _ExecutionDetailScreenState
     extends ConsumerState<ExecutionDetailScreen> {
   bool _loading = true;
   DateTime? _lastFetch;
+  Timer? _ticker;
   String? _error;
   Map<String, dynamic>? _exec;
   Map<String, dynamic>? _flow;
@@ -41,6 +43,12 @@ class _ExecutionDetailScreenState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -65,6 +73,10 @@ class _ExecutionDetailScreenState
         _loading = false;
       });
     } finally {
+      _ticker?.cancel();
+      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
       setState(() { _lastFetch = DateTime.now(); });
     }
   }
