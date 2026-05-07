@@ -5447,6 +5447,8 @@ class _FeedMessagesState extends State<_FeedMessages> {
                     channelType: widget.channelType,
                     messageType: messageType,
                     mediaUrl: mediaUrl,
+                    recipientName: msg['recipient_name'] as String?,
+                    broadcastId: msg['broadcast_id'] as String?,
                   );
                 }
                 return _FeedInboundBubble(
@@ -5826,6 +5828,8 @@ class _FeedOutboundBubble extends StatelessWidget {
     required this.channelType,
     this.messageType,
     this.mediaUrl,
+    this.recipientName,
+    this.broadcastId,
   });
 
   final String body;
@@ -5837,6 +5841,8 @@ class _FeedOutboundBubble extends StatelessWidget {
   final String channelType;
   final String? messageType;
   final String? mediaUrl;
+  final String? recipientName;
+  final String? broadcastId;
 
   Widget _statusIcon(Color baseColor) {
     switch (waStatus) {
@@ -5896,6 +5902,43 @@ class _FeedOutboundBubble extends StatelessWidget {
                     ),
                   ],
                 ),
+                // Sub-label: broadcast chip or recipient name
+                if (broadcastId != null) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.ctSurface2,
+                          border: Border.all(color: AppColors.ctBorder),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.campaign_rounded, size: 10, color: AppColors.ctText3),
+                            const SizedBox(width: 4),
+                            Text('Broadcast',
+                                style: AppFonts.geist(fontSize: 10, color: AppColors.ctText3)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else if (recipientName != null) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      const Icon(Icons.arrow_forward, size: 12, color: AppColors.ctText2),
+                      const SizedBox(width: 3),
+                      Text(recipientName!,
+                          style: AppFonts.geist(fontSize: 10, color: AppColors.ctText2)),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 2),
                 Container(
                   constraints: const BoxConstraints(maxWidth: 440),
@@ -5937,6 +5980,35 @@ class _FeedOutboundBubble extends StatelessWidget {
               ],
             ),
           ),
+          // Avatar mini del destinatario (solo cuando hay recipient_name y no es broadcast)
+          if (recipientName != null && broadcastId == null) ...[
+            const SizedBox(width: 6),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 1,
+                  height: 14,
+                  color: AppColors.ctText2.withValues(alpha: 0.4),
+                ),
+                const SizedBox(height: 2),
+                CircleAvatar(
+                  radius: 9,
+                  backgroundColor: _FeedMessages._avatarBg(recipientName!),
+                  child: Text(
+                    recipientName!.trim().split(RegExp(r'\s+')).take(2)
+                        .map((w) => w.isNotEmpty ? w[0].toUpperCase() : '')
+                        .join(),
+                    style: TextStyle(
+                      fontSize: 7,
+                      fontWeight: FontWeight.w700,
+                      color: _FeedMessages._avatarFg(recipientName!),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
