@@ -2,11 +2,14 @@
 // Centro de Aplicaciones — V1 (diseño aprobado)
 
 import 'dart:async';
+import 'dart:html' as html;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/api/connections_api.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/api/ai_workers_api.dart';
 import '../../core/theme/app_theme.dart';
@@ -61,10 +64,16 @@ class Integration {
   final String? lastSync;
   final List<String>? permissions;
 
-  Integration copyWith({IntegrationState? state}) => Integration(
+  Integration copyWith({
+    IntegrationState? state,
+    String? accountLabel,
+    String? lastSync,
+  }) => Integration(
     id: id, name: name, category: category, logoKey: logoKey,
     short: short, desc: desc, state: state ?? this.state, auth: auth,
-    accountLabel: accountLabel, lastSync: lastSync, permissions: permissions,
+    accountLabel: accountLabel ?? this.accountLabel,
+    lastSync: lastSync ?? this.lastSync,
+    permissions: permissions,
   );
 }
 
@@ -157,6 +166,13 @@ const _kApps = <Integration>[
     state: IntegrationState.available, auth: 'apikey',
     permissions: ['Crear facturas', 'Leer y crear clientes', 'Gestionar inventario'],
   ),
+  Integration(
+    id: 'gsheets', name: 'Google Sheets', category: IntegrationCategory.analytics,
+    logoKey: 'gsheets', short: 'Hojas de cálculo en la nube',
+    desc: 'Exporta ejecuciones, campos y datos de operadores directamente a Google Sheets en tiempo real.',
+    state: IntegrationState.available, auth: 'oauth',
+    permissions: ['Leer y escribir hojas de cálculo', 'Crear y compartir documentos', 'Acceso a Google Drive'],
+  ),
 ];
 
 const _kApiIntegrations = <Integration>[
@@ -218,6 +234,10 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
   late Set<String> _connectedIds;
   Integration? _managingItem;
 
+  // Google Sheets runtime state
+  String? _gsheetsEmail;
+  String? _gsheetsConnectedAt;
+
   late final AnimationController _drawerCtrl;
   late final Animation<Offset> _drawerSlide;
 
@@ -236,7 +256,48 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
       ref.read(topbarTitleProvider.notifier).state = 'Conexiones';
       ref.read(topbarSubtitleProvider.notifier).state = 'Centro de aplicaciones';
       ref.read(topbarActionsProvider.notifier).state = [];
+      _checkGoogleCallback();
+      _loadGoogleStatus();
     });
+  }
+
+  Future<void> _loadGoogleStatus() async {
+    try {
+      final status = await ConnectionsApi.getGoogleStatus();
+      if (!mounted) return;
+      final connected = status['connected'] as bool? ?? false;
+      setState(() {
+        if (connected) {
+          _connectedIds = {..._connectedIds, 'gsheets'};
+          _gsheetsEmail = status['email'] as String?;
+          _gsheetsConnectedAt = status['connected_at'] as String?;
+        } else {
+          _connectedIds = Set.from(_connectedIds)..remove('gsheets');
+          _gsheetsEmail = null;
+          _gsheetsConnectedAt = null;
+        }
+      });
+    } catch (_) {
+      // silently ignore — keep static state
+    }
+  }
+
+  void _checkGoogleCallback() {
+    final search = html.window.location.search ?? '';
+    if (search.contains('google=success')) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Google Sheets conectado correctamente.'),
+        backgroundColor: Color(0xFF107C41),
+        duration: Duration(seconds: 4),
+      ));
+      _loadGoogleStatus();
+    } else if (search.contains('google=error')) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Error al conectar Google Sheets. Intenta de nuevo.'),
+        backgroundColor: AppColors.ctDanger,
+        duration: const Duration(seconds: 4),
+      ));
+    }
   }
 
   @override
@@ -257,7 +318,19 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
           it.name.toLowerCase().contains(q) ||
           it.short.toLowerCase().contains(q);
       return inCat && inQ;
-    }).map((it) => _connectedIds.contains(it.id) ? it.copyWith(state: IntegrationState.connected) : it).toList();
+    }).map((it) {
+      if (_connectedIds.contains(it.id)) {
+        if (it.id == 'gsheets') {
+          return it.copyWith(
+            state: IntegrationState.connected,
+            accountLabel: _gsheetsEmail,
+            lastSync: _gsheetsConnectedAt != null ? 'Conectado el $_gsheetsConnectedAt' : null,
+          );
+        }
+        return it.copyWith(state: IntegrationState.connected);
+      }
+      return it;
+    }).toList();
   }
 
   int _catCount(IntegrationCategory cat) => cat == IntegrationCategory.all
@@ -274,11 +347,34 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
       _showManageSheet(item, 'outbound');
       return;
     }
+    if (item.id == 'gsheets') {
+      final isConnected = _connectedIds.contains('gsheets');
+      if (isConnected || item.state == IntegrationState.attention) {
+        _openManage(item);
+      } else {
+        _connectGsheets();
+      }
+      return;
+    }
     final isConnected = _connectedIds.contains(item.id);
     if (isConnected || item.state == IntegrationState.attention) {
       _openManage(item);
     } else {
       _showOAuth(item);
+    }
+  }
+
+  Future<void> _connectGsheets() async {
+    try {
+      final authUrl = await ConnectionsApi.getGoogleAuthUrl();
+      await launchUrl(Uri.parse(authUrl), mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('No se pudo iniciar la conexión: ${_connDioError(e)}'),
+        backgroundColor: AppColors.ctDanger,
+        duration: const Duration(seconds: 4),
+      ));
     }
   }
 
@@ -307,6 +403,29 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
 
   void _disconnect(Integration item) {
     _closeManage();
+    if (item.id == 'gsheets') {
+      Future.delayed(const Duration(milliseconds: 260), () async {
+        if (!mounted) return;
+        setState(() {
+          _connectedIds = Set.from(_connectedIds)..remove('gsheets');
+          _gsheetsEmail = null;
+          _gsheetsConnectedAt = null;
+        });
+        try {
+          await ConnectionsApi.disconnectGoogle();
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Error al desconectar: ${_connDioError(e)}'),
+            backgroundColor: AppColors.ctDanger,
+            duration: const Duration(seconds: 4),
+          ));
+          // Reload real status to reconcile UI
+          _loadGoogleStatus();
+        }
+      });
+      return;
+    }
     Future.delayed(const Duration(milliseconds: 260), () {
       if (mounted) setState(() => _connectedIds = Set.from(_connectedIds)..remove(item.id));
     });
@@ -1166,6 +1285,7 @@ class _IntegrationLogo extends StatelessWidget {
   static const _brandBg = {
     'gdrive':     Color(0xFF4285F4),
     'gcal':       Color(0xFF0F9D58),
+    'gsheets':    Color(0xFF0F9D58),
     'onedrive':   Color(0xFF0078D4),
     'outlook':    Color(0xFF0078D4),
     'dropbox':    Color(0xFF0061FF),
@@ -1180,6 +1300,7 @@ class _IntegrationLogo extends StatelessWidget {
   static const _brandInitials = {
     'gdrive':     'G',
     'gcal':       'G',
+    'gsheets':    'S',
     'onedrive':   'O',
     'outlook':    'O',
     'dropbox':    'D',
