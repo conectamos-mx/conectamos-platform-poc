@@ -2797,6 +2797,8 @@ class _ActionDialogState extends State<_ActionDialog> {
   final _sheetNameCtrl = TextEditingController();
   // Each entry: (col: controller, val: controller)
   final List<(TextEditingController, TextEditingController)> _columnMappingRows = [];
+  // Parallel list: selected flowField key per row (null = custom text mode)
+  final List<String?> _columnMappingKeys = [];
 
   // condition
   String? _conditionField;
@@ -2821,10 +2823,14 @@ class _ActionDialogState extends State<_ActionDialog> {
         _spreadsheetIdCtrl.text = cfg['spreadsheet_id'] as String? ?? '';
         _sheetNameCtrl.text = cfg['sheet_name'] as String? ?? 'Sheet1';
         final mapping = cfg['column_mapping'] as Map? ?? {};
+        final fieldKeyRe = RegExp(r'^\{\{fields\.(\w+)\}\}$');
         for (final e in mapping.entries) {
+          final valStr = e.value.toString();
+          final m = fieldKeyRe.firstMatch(valStr);
+          _columnMappingKeys.add(m?.group(1));
           _columnMappingRows.add((
             TextEditingController(text: e.key.toString()),
-            TextEditingController(text: e.value.toString()),
+            TextEditingController(text: valStr),
           ));
         }
       }
@@ -2844,6 +2850,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     }
     if (_columnMappingRows.isEmpty) {
       _columnMappingRows.add((TextEditingController(text: 'A'), TextEditingController()));
+      _columnMappingKeys.add(null);
     }
     _loadFlows();
   }
@@ -3193,6 +3200,7 @@ class _ActionDialogState extends State<_ActionDialog> {
                           TextEditingController(),
                           TextEditingController(),
                         ));
+                        _columnMappingKeys.add(null);
                       }),
                       icon: const Icon(Icons.add, size: 14,
                           color: AppColors.ctTeal),
@@ -3216,47 +3224,128 @@ class _ActionDialogState extends State<_ActionDialog> {
                 ..._columnMappingRows.asMap().entries.map((entry) {
                   final i = entry.key;
                   final row = entry.value;
+                  final selectedKey = _columnMappingKeys.length > i ? _columnMappingKeys[i] : null;
+                  final hasFields = widget.flowFields.isNotEmpty;
+                  // If selected key is no longer in flowFields (e.g. field deleted), treat as custom
+                  final effectiveKey = (selectedKey != null &&
+                      widget.flowFields.any((f) => (f['key'] as String?) == selectedKey))
+                      ? selectedKey
+                      : null;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(
-                          width: 70,
-                          child: _ColMappingField(
-                            controller: row.$1,
-                            placeholder: 'A',
-                            onChanged: () => setState(() {}),
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 70,
+                              child: _ColMappingField(
+                                controller: row.$1,
+                                placeholder: 'A',
+                                onChanged: () => setState(() {}),
+                              ),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 6),
+                              child: Text('→',
+                                  style: TextStyle(
+                                      fontFamily: 'Geist',
+                                      fontSize: 13,
+                                      color: AppColors.ctText2)),
+                            ),
+                            if (hasFields)
+                              Expanded(
+                                child: _DropdownContainer(
+                                  child: DropdownButton<String?>(
+                                    value: effectiveKey,
+                                    isExpanded: true,
+                                    underline: const SizedBox.shrink(),
+                                    dropdownColor: AppColors.ctSurface,
+                                    hint: const Text(
+                                      'Campo del flujo…',
+                                      style: TextStyle(
+                                        fontFamily: 'Geist',
+                                        fontSize: 13,
+                                        color: AppColors.ctText3,
+                                      ),
+                                    ),
+                                    items: [
+                                      const DropdownMenuItem<String?>(
+                                        value: null,
+                                        child: Text(
+                                          'Personalizado…',
+                                          style: TextStyle(
+                                            fontFamily: 'Geist',
+                                            fontSize: 13,
+                                            color: AppColors.ctText2,
+                                          ),
+                                        ),
+                                      ),
+                                      ...widget.flowFields.map((f) {
+                                        final key = f['key'] as String? ?? '';
+                                        final label = f['label'] as String? ?? key;
+                                        return DropdownMenuItem<String?>(
+                                          value: key,
+                                          child: Text(
+                                            label,
+                                            style: const TextStyle(
+                                              fontFamily: 'Geist',
+                                              fontSize: 13,
+                                              color: AppColors.ctText,
+                                            ),
+                                          ),
+                                        );
+                                      }),
+                                    ],
+                                    onChanged: (v) => setState(() {
+                                      if (_columnMappingKeys.length > i) {
+                                        _columnMappingKeys[i] = v;
+                                      }
+                                      if (v != null) {
+                                        row.$2.text = '{{fields.$v}}';
+                                      } else {
+                                        row.$2.clear();
+                                      }
+                                    }),
+                                  ),
+                                ),
+                              )
+                            else
+                              Expanded(
+                                child: _ColMappingField(
+                                  controller: row.$2,
+                                  placeholder: '{{fields.nombre}}',
+                                  onChanged: () => setState(() {}),
+                                ),
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle_outline,
+                                  size: 16, color: AppColors.ctDanger),
+                              onPressed: _columnMappingRows.length > 1
+                                  ? () => setState(() {
+                                        row.$1.dispose();
+                                        row.$2.dispose();
+                                        _columnMappingRows.removeAt(i);
+                                        _columnMappingKeys.removeAt(i);
+                                      })
+                                  : null,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 28, minHeight: 28),
+                            ),
+                          ],
+                        ),
+                        // Custom text field shown below when "Personalizado…" is selected
+                        if (hasFields && (effectiveKey == null))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 78, top: 4),
+                            child: _ColMappingField(
+                              controller: row.$2,
+                              placeholder: '{{fields.nombre}} o valor fijo',
+                              onChanged: () => setState(() {}),
+                            ),
                           ),
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 6),
-                          child: Text('→',
-                              style: TextStyle(
-                                  fontFamily: 'Geist',
-                                  fontSize: 13,
-                                  color: AppColors.ctText2)),
-                        ),
-                        Expanded(
-                          child: _ColMappingField(
-                            controller: row.$2,
-                            placeholder: '{{fields.nombre}}',
-                            onChanged: () => setState(() {}),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.remove_circle_outline,
-                              size: 16, color: AppColors.ctDanger),
-                          onPressed: _columnMappingRows.length > 1
-                              ? () => setState(() {
-                                    row.$1.dispose();
-                                    row.$2.dispose();
-                                    _columnMappingRows.removeAt(i);
-                                  })
-                              : null,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                              minWidth: 28, minHeight: 28),
-                        ),
                       ],
                     ),
                   );
