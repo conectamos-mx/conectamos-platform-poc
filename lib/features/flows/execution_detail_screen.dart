@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api/flows_api.dart';
@@ -271,7 +272,6 @@ class _FieldsBlockState extends State<_FieldsBlock> {
     ('date',     Icons.calendar_month_rounded, 'Fecha'),
     ('yesno',    Icons.toggle_on_rounded,      'Sí/No'),
     ('select',   Icons.checklist_rounded,      'Selección'),
-    ('media',    Icons.camera_alt_rounded,     'Foto'),
     ('location', Icons.location_on_rounded,    'Ubicación'),
   ];
 
@@ -459,15 +459,38 @@ class _FieldsBlockState extends State<_FieldsBlock> {
       }
     }
 
+    // Build evidence photos list from photo/media fields
+    final evidencePhotos = <({String url, String fieldLabel, String fieldKey})>[];
+    for (final field in fields) {
+      final type = field['type'] as String? ?? 'text';
+      if (type != 'photo' && type != 'media') continue;
+      final key = field['key'] as String? ?? '';
+      final label = field['label'] as String? ?? key;
+      final fvRaw = fvMap[key];
+      if (fvRaw == null) continue;
+      final fv = fvRaw.cast<String, dynamic>();
+      if (!_fvHasValue(fv)) continue;
+      final urls = _resolveMedia(fv);
+      for (final url in urls) {
+        if (url.isNotEmpty) {
+          evidencePhotos.add((url: url, fieldLabel: label, fieldKey: key));
+        }
+      }
+    }
+
     // Visible fields after type filter, sorted by type priority (stable)
+    // Photo/media fields are excluded — rendered separately in EvidencesSection
     const typePriority = <String, int>{
       'text': 0, 'number': 1, 'date': 2,
       'boolean': 3, 'yesno': 3,
-      'select': 4, 'photo': 5, 'media': 5, 'location': 6,
+      'select': 4, 'location': 5,
     };
     final visibleFields = (fields
-        .where((f) =>
-            !_hiddenTypes.contains(_normalizeType(f['type'] as String? ?? 'text')))
+        .where((f) {
+          final type = f['type'] as String? ?? 'text';
+          if (type == 'photo' || type == 'media') return false;
+          return !_hiddenTypes.contains(_normalizeType(type));
+        })
         .toList()
         .asMap()
         .entries
@@ -568,6 +591,10 @@ class _FieldsBlockState extends State<_FieldsBlock> {
             );
           },
         ),
+        if (evidencePhotos.isNotEmpty) ...[
+          const SizedBox(height: 22),
+          _EvidencesSection(photos: evidencePhotos),
+        ],
         if (legacyKeys.isNotEmpty) ...[
           const SizedBox(height: 22),
           _LegacyFieldsCard(slugs: legacyKeys, values: legacyValues),
@@ -687,6 +714,133 @@ class _WrapGrid extends StatelessWidget {
     );
   }
 }
+
+// ── Evidences Section ─────────────────────────────────────────────────────────
+
+class _EvidencesSection extends StatelessWidget {
+  const _EvidencesSection({required this.photos});
+  final List<({String url, String fieldLabel, String fieldKey})> photos;
+
+  @override
+  Widget build(BuildContext context) {
+    final photoCount = photos.length;
+    final fieldCount = photos.map((p) => p.fieldKey).toSet().length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Evidencias',
+                style: AppFonts.onest(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ctNavy,
+                  letterSpacing: -0.02,
+                )),
+            const SizedBox(width: 10),
+            Text(
+              '$photoCount foto${photoCount == 1 ? '' : 's'} en $fieldCount campo${fieldCount == 1 ? '' : 's'}',
+              style: AppFonts.geist(fontSize: 12, color: AppColors.ctText3),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (var i = 0; i < photos.length; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                _EvidenceThumb(photo: photos[i]),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EvidenceThumb extends StatelessWidget {
+  const _EvidenceThumb({required this.photo});
+  final ({String url, String fieldLabel, String fieldKey}) photo;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 180,
+      height: 180,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(
+              photo.url,
+              fit: BoxFit.cover,
+              errorBuilder: (ctx, err, stack) => Container(
+                color: AppColors.ctSurface2,
+                child: const Icon(Icons.broken_image_rounded,
+                    size: 28, color: AppColors.ctText3),
+              ),
+            ),
+            // Label overlay at bottom
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                color: Colors.black.withValues(alpha: 0.55),
+                child: Text(
+                  photo.fieldLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Geist',
+                    fontSize: 11,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+            // Copy URL button
+            Positioned(
+              bottom: 8,
+              right: 8,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: IconButton(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: photo.url));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('URL copiada'),
+                        duration: Duration(milliseconds: 1500),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.copy_rounded,
+                      size: 13, color: Colors.white),
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Copiar URL',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Legacy Fields Card ────────────────────────────────────────────────────────
 
 class _LegacyFieldsCard extends StatelessWidget {
   const _LegacyFieldsCard(
