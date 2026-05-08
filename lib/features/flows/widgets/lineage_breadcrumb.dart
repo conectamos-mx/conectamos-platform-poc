@@ -5,10 +5,11 @@ import '../../../core/theme/app_theme.dart';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 IconData _typeIconFor(String? src) => switch (src) {
-      'conversacional' => Icons.chat_bubble_outline_rounded,
-      'api'            => Icons.code_rounded,
-      'dashboard'      => Icons.dashboard_outlined,
-      _                => Icons.bolt_rounded,
+      'whatsapp' || 'telegram' || 'conversacional' || 'operator'
+          => Icons.chat_bubble_outline_rounded,
+      'api'       => Icons.code_rounded,
+      'dashboard' => Icons.dashboard_outlined,
+      _           => Icons.bolt_rounded,
     };
 
 String? _firstTrigger(List triggers) =>

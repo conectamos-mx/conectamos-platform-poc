@@ -6,6 +6,26 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 
+// ── Action type maps (extend as needed) ───────────────────────────────────────
+
+const Map<String, IconData> _kActionIcons = {
+  'open_flow':                Icons.account_tree_rounded,
+  'webhook_out':              Icons.cloud_upload_outlined,
+  'emit_event':               Icons.sensors_rounded,
+  'sheets':                   Icons.table_chart_outlined,
+  'google_sheets':            Icons.table_chart_outlined,
+  'google_sheets_append_row': Icons.table_chart_outlined,
+};
+
+const Map<String, String> _kActionLabels = {
+  'open_flow':                'Abrir flujo',
+  'webhook_out':              'Webhook saliente',
+  'emit_event':               'Emitir evento',
+  'sheets':                   'Google Sheets',
+  'google_sheets':            'Google Sheets',
+  'google_sheets_append_row': 'Google Sheets',
+};
+
 class ExecutionMetadataSidebar extends StatelessWidget {
   const ExecutionMetadataSidebar({
     super.key,
@@ -106,11 +126,14 @@ class ExecutionMetadataSidebar extends StatelessWidget {
     final workerName = worker?['name'] as String? ?? '—';
     final workerRole = worker?['role'] as String? ?? '';
 
-    // on_complete from snapshot
-    final rawOnComplete = flow['on_complete'];
-    final onComplete = rawOnComplete is List
-        ? rawOnComplete.whereType<String>().toList()
-        : <String>[];
+    // actions_log from execution response
+    final rawActionsLog = exec['actions_log'];
+    final actionsLog = rawActionsLog is List
+        ? rawActionsLog
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList()
+        : <Map<String, dynamic>>[];
 
     final inheritedValues = <String, dynamic>{};
 
@@ -345,38 +368,110 @@ class ExecutionMetadataSidebar extends StatelessWidget {
                       color: const Color(0xFF94A3B8),
                     )),
                 const SizedBox(height: 6),
-                if (onComplete.isEmpty)
+                if (actionsLog.isEmpty)
                   Text('Sin acciones automáticas',
-                      style:
-                          AppFonts.geist(fontSize: 12, color: const Color(0xFF94A3B8)))
+                      style: AppFonts.geist(
+                          fontSize: 12, color: const Color(0xFF94A3B8)))
                 else
                   Column(
-                    children: onComplete.map((b) => Padding(
-                          padding: const EdgeInsets.only(bottom: 5),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: AppColors.ctSurface2,
-                              border: Border.all(color: AppColors.ctBorder),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.account_tree_rounded,
-                                    size: 12, color: AppColors.ctTeal),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(b,
-                                      style: const TextStyle(
-                                          fontFamily: 'Geist',
-                                          fontSize: 12,
-                                          color: AppColors.ctNavy)),
+                    children: actionsLog.map((action) {
+                      final actionType =
+                          action['action_type'] as String? ?? '';
+                      final actionConfig = action['action_config'] as Map?;
+                      final status = action['status'] as String?;
+                      final condition =
+                          actionConfig?['condition'] as String?;
+                      final icon = _kActionIcons[actionType] ??
+                          Icons.settings_outlined;
+                      final label =
+                          _kActionLabels[actionType] ?? actionType;
+                      final (badgeBg, badgeFg, badgeText) =
+                          switch (status) {
+                        'completed' || 'success' => (
+                            const Color(0xFFD1FAE5),
+                            const Color(0xFF065F46),
+                            'Completado',
+                          ),
+                        'failed' || 'error' => (
+                            const Color(0xFFFEE2E2),
+                            const Color(0xFF991B1B),
+                            'Error',
+                          ),
+                        'pending' || 'queued' => (
+                            const Color(0xFFF1F5F9),
+                            const Color(0xFF475569),
+                            'Pendiente',
+                          ),
+                        _ => (
+                            const Color(0xFFF1F5F9),
+                            const Color(0xFF475569),
+                            status ?? '—',
+                          ),
+                      };
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 5),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.ctSurface2,
+                            border: Border.all(color: AppColors.ctBorder),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(icon,
+                                      size: 14, color: AppColors.ctTeal),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(label,
+                                        style: const TextStyle(
+                                            fontFamily: 'Geist',
+                                            fontSize: 12,
+                                            color: AppColors.ctNavy)),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: badgeBg,
+                                      borderRadius:
+                                          BorderRadius.circular(99),
+                                    ),
+                                    child: Text(badgeText,
+                                        style: AppFonts.geist(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: badgeFg)),
+                                  ),
+                                ],
+                              ),
+                              if (condition != null &&
+                                  condition.isNotEmpty) ...[
+                                const SizedBox(height: 3),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.filter_alt_outlined,
+                                        size: 11,
+                                        color: AppColors.ctText3),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(condition,
+                                          style: AppFonts.geist(
+                                              fontSize: 10,
+                                              color: AppColors.ctText3)),
+                                    ),
+                                  ],
                                 ),
                               ],
-                            ),
+                            ],
                           ),
-                        )).toList(),
+                        ),
+                      );
+                    }).toList(),
                   ),
               ],
             ),

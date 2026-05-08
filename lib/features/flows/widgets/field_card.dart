@@ -17,6 +17,7 @@ class FieldCard extends StatelessWidget {
     required this.isPending,
     required this.isInherited,
     this.fv,
+    this.operatorOptions = const [],
   });
 
   final Map<String, dynamic> field;
@@ -24,6 +25,7 @@ class FieldCard extends StatelessWidget {
   final bool isPending;
   final bool isInherited;
   final Map<String, dynamic>? fv;
+  final List<Map<String, dynamic>> operatorOptions;
 
   bool get _isWide {
     final type = field['type'] as String? ?? 'text';
@@ -54,7 +56,7 @@ class FieldCard extends StatelessWidget {
           _FieldHeader(
               field: field, value: value, isPending: isPending, isInherited: isInherited),
           const SizedBox(height: 10),
-          _FieldValue(field: field, value: value, fv: fv),
+          _FieldValue(field: field, value: value, fv: fv, operatorOptions: operatorOptions),
         ],
       ),
     );
@@ -204,10 +206,16 @@ class _SmallBadge extends StatelessWidget {
 // ── Field Value Dispatcher ────────────────────────────────────────────────────
 
 class _FieldValue extends StatelessWidget {
-  const _FieldValue({required this.field, required this.value, this.fv});
+  const _FieldValue({
+    required this.field,
+    required this.value,
+    this.fv,
+    this.operatorOptions = const [],
+  });
   final Map<String, dynamic> field;
   final dynamic value;
   final Map<String, dynamic>? fv;
+  final List<Map<String, dynamic>> operatorOptions;
 
   @override
   Widget build(BuildContext context) {
@@ -262,7 +270,7 @@ class _FieldValue extends StatelessWidget {
       'number'           => _NumberValue(value: effectiveValue, unit: field['unit'] as String?),
       'date'             => _DateValue(value: effectiveValue),
       'yesno'            => _YesNoValue(value: effectiveValue),
-      'select'           => _SelectValue(value: effectiveValue, options: field['options'] as List? ?? []),
+      'select'           => _SelectValue(value: effectiveValue, options: field['options'] as List? ?? [], operatorOptions: operatorOptions),
       'photo' || 'media' => _PhotoGallery(photos: _toPhotoList(effectiveValue)),
       'location'         => effectiveValue is String && effectiveValue.trim().startsWith('http')
           ? _LocationUrlLink(url: effectiveValue.trim())
@@ -388,32 +396,60 @@ class _NumberValue extends StatelessWidget {
             .format(n)
         : n.toStringAsFixed(n.truncateToDouble() == n ? 0 : 2);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.ctNavy,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          Text(formatted,
-              style: AppFonts.onest(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: AppColors.ctTeal,
-                letterSpacing: -0.03,
-              )),
-          if (unit != null && !isMoney) ...[
-            const SizedBox(width: 8),
-            Text(unit!,
-                style: AppFonts.geist(
-                    fontSize: 13,
-                    color: Colors.white.withValues(alpha: 0.6))),
-          ],
-        ],
-      ),
+    return Stack(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.ctNavy,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(formatted,
+                  style: AppFonts.onest(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ctTeal,
+                    letterSpacing: -0.03,
+                  )),
+              if (unit != null && !isMoney) ...[
+                const SizedBox(width: 8),
+                Text(unit!,
+                    style: AppFonts.geist(
+                        fontSize: 13,
+                        color: Colors.white.withValues(alpha: 0.6))),
+              ],
+            ],
+          ),
+        ),
+        Positioned(
+          bottom: 6,
+          right: 6,
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: IconButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: formatted));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Copiado'),
+                    duration: Duration(milliseconds: 1500),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.copy_rounded,
+                  size: 13, color: AppColors.ctText3),
+              padding: EdgeInsets.zero,
+              tooltip: 'Copiar valor',
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -575,24 +611,79 @@ class _YesNoOption extends StatelessWidget {
 // ── Select ────────────────────────────────────────────────────────────────────
 
 class _SelectValue extends StatelessWidget {
-  const _SelectValue({required this.value, required this.options});
+  const _SelectValue({
+    required this.value,
+    required this.options,
+    this.operatorOptions = const [],
+  });
   final dynamic value;
   final List options;
+  final List<Map<String, dynamic>> operatorOptions;
+
+  String _resolve(String raw) {
+    if (operatorOptions.isEmpty) return raw;
+    final match = operatorOptions.firstWhere(
+      (o) => (o['id'] as String?) == raw,
+      orElse: () => const {},
+    );
+    return (match['name'] as String?) ?? raw;
+  }
+
+  Widget _selectedChip(String label) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.ctTealLight,
+          border: Border.all(color: AppColors.ctTeal),
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.check_rounded, size: 12, color: AppColors.ctTealText),
+            const SizedBox(width: 6),
+            Text(label,
+                style: AppFonts.geist(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ctTealText,
+                )),
+          ],
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
-    if (value == null) return const _PendingSlot();
-    // Support single or multi value
+    // Normalize to List<String>
     final selected = value is List
-        ? (value as List).map((e) => e.toString()).toSet()
-        : {value.toString()};
+        ? (value as List).map((e) => e.toString()).toList()
+        : value != null
+            ? [value.toString()]
+            : <String>[];
 
+    // ≥ 5 options: show only selected chip(s)
+    if (options.length >= 5) {
+      if (selected.isEmpty) {
+        return Text('Sin selección',
+            style: AppFonts.geist(fontSize: 12, color: AppColors.ctText3));
+      }
+      return Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: selected
+            .map((val) => _selectedChip(_resolve(val)))
+            .toList(),
+      );
+    }
+
+    // < 5 options: show all chips, selected highlighted with resolver
+    if (options.isEmpty) return const _PendingSlot();
     return Wrap(
       spacing: 6,
       runSpacing: 6,
       children: options.map<Widget>((opt) {
-        final label = opt.toString();
-        final isSel = selected.contains(label);
+        final raw = opt.toString();
+        final label = _resolve(raw);
+        final isSel = selected.contains(raw);
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
@@ -724,6 +815,25 @@ class _PhotoThumb extends StatelessWidget {
                           fontWeight: FontWeight.w500,
                           color: Colors.white,
                           letterSpacing: 0.02)),
+                ),
+              ),
+              // Copy URL button
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: IconButton(
+                    onPressed: () => Clipboard.setData(ClipboardData(text: src)),
+                    icon: const Icon(Icons.copy_rounded,
+                        size: 13, color: Colors.white),
+                    padding: const EdgeInsets.all(6),
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Copiar URL',
+                  ),
                 ),
               ),
             ],
