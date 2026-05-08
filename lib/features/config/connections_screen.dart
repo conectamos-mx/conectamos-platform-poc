@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/api/connections_api.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/api/ai_workers_api.dart';
@@ -237,6 +236,8 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
   // Google Sheets runtime state
   String? _gsheetsEmail;
   String? _gsheetsConnectedAt;
+  Timer? _gsheetsOAuthTimer;
+  StreamSubscription<html.MessageEvent>? _oauthMessageSub;
 
   late final AnimationController _drawerCtrl;
   late final Animation<Offset> _drawerSlide;
@@ -256,7 +257,6 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
       ref.read(topbarTitleProvider.notifier).state = 'Conexiones';
       ref.read(topbarSubtitleProvider.notifier).state = 'Centro de aplicaciones';
       ref.read(topbarActionsProvider.notifier).state = [];
-      _checkGoogleCallback();
       _loadGoogleStatus();
     });
   }
@@ -282,26 +282,11 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
     }
   }
 
-  void _checkGoogleCallback() {
-    final search = html.window.location.search ?? '';
-    if (search.contains('google=success')) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Google Sheets conectado correctamente.'),
-        backgroundColor: Color(0xFF107C41),
-        duration: Duration(seconds: 4),
-      ));
-      _loadGoogleStatus();
-    } else if (search.contains('google=error')) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('Error al conectar Google Sheets. Intenta de nuevo.'),
-        backgroundColor: AppColors.ctDanger,
-        duration: const Duration(seconds: 4),
-      ));
-    }
-  }
 
   @override
   void dispose() {
+    _gsheetsOAuthTimer?.cancel();
+    _oauthMessageSub?.cancel();
     _drawerCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -367,7 +352,50 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
   Future<void> _connectGsheets() async {
     try {
       final authUrl = await ConnectionsApi.getGoogleAuthUrl();
-      await launchUrl(Uri.parse(authUrl), mode: LaunchMode.externalApplication);
+      final popup = html.window.open(
+        authUrl,
+        'google_oauth',
+        'width=500,height=600,scrollbars=yes,resizable=yes',
+      );
+
+      // Primary: receive postMessage from the popup close page
+      _oauthMessageSub?.cancel();
+      _oauthMessageSub = html.window.onMessage.listen((event) {
+        final data = event.data?.toString() ?? '';
+        if (data != 'google=success' && data != 'google=error') return;
+        _oauthMessageSub?.cancel();
+        _gsheetsOAuthTimer?.cancel();
+        if (!mounted) return;
+        _loadGoogleStatus();
+        if (data == 'google=success') {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Google Sheets conectado correctamente.'),
+            backgroundColor: Color(0xFF107C41),
+            duration: Duration(seconds: 4),
+          ));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: const Text('Error al conectar Google Sheets. Intenta de nuevo.'),
+            backgroundColor: AppColors.ctDanger,
+            duration: const Duration(seconds: 4),
+          ));
+        }
+      });
+
+      // Fallback: poll popup.closed (user closed manually or postMessage missed)
+      _gsheetsOAuthTimer?.cancel();
+      _gsheetsOAuthTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+        if (!mounted) {
+          _gsheetsOAuthTimer?.cancel();
+          _oauthMessageSub?.cancel();
+          return;
+        }
+        if (popup.closed == true) {
+          _gsheetsOAuthTimer?.cancel();
+          _oauthMessageSub?.cancel();
+          _loadGoogleStatus();
+        }
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
