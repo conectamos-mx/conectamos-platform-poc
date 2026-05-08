@@ -380,7 +380,9 @@ class ExecutionMetadataSidebar extends StatelessWidget {
                       final actionConfig = action['action_config'] as Map?;
                       final status = action['status'] as String?;
                       final condition =
-                          actionConfig?['condition'] as String?;
+                          actionConfig?['condition'] as String? ??
+                          (actionConfig?['config'] as Map?)?['condition']
+                              as String?;
                       final icon = _kActionIcons[actionType] ??
                           Icons.settings_outlined;
                       final label =

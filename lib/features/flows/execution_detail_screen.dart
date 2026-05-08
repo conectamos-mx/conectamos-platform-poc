@@ -417,6 +417,12 @@ class _FieldsBlockState extends State<_FieldsBlock> {
         .map((f) => f.cast<String, dynamic>())
         .toList();
 
+    // Extract operator_options for select fields with UUID values
+    final operatorOptions = (widget.exec['operator_options'] as List? ?? [])
+        .whereType<Map>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList();
+
     // Build field_values lookup keyed by field_key
     final rawFvList = widget.exec['field_values'] as List? ?? [];
     final fvMap = <String, Map>{};
@@ -558,6 +564,7 @@ class _FieldsBlockState extends State<_FieldsBlock> {
               totalWidth: totalWidth,
               gap: gap,
               fvMap: fvMap,
+              operatorOptions: operatorOptions,
             );
           },
         ),
@@ -639,6 +646,7 @@ class _WrapGrid extends StatelessWidget {
     required this.totalWidth,
     required this.gap,
     this.fvMap = const {},
+    this.operatorOptions = const [],
   });
 
   final List<Map<String, dynamic>> fields;
@@ -647,6 +655,7 @@ class _WrapGrid extends StatelessWidget {
   final double totalWidth;
   final double gap;
   final Map<String, Map> fvMap;
+  final List<Map<String, dynamic>> operatorOptions;
 
   @override
   Widget build(BuildContext context) {
@@ -662,6 +671,7 @@ class _WrapGrid extends StatelessWidget {
         isPending: isPending,
         isInherited: false,
         fv: fvMap[key]?.cast<String, dynamic>(),
+        operatorOptions: operatorOptions,
       );
       final isWide = card.isWide;
       return SizedBox(

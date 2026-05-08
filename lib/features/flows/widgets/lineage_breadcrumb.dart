@@ -5,7 +5,7 @@ import '../../../core/theme/app_theme.dart';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 IconData _typeIconFor(String? src) => switch (src) {
-      'whatsapp' || 'telegram' || 'conversacional' || 'operator'
+      'whatsapp' || 'telegram' || 'conversational' || 'conversacional' || 'operator'
           => Icons.chat_bubble_outline_rounded,
       'api'       => Icons.code_rounded,
       'dashboard' => Icons.dashboard_outlined,

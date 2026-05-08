@@ -217,8 +217,7 @@ class _FieldValue extends StatelessWidget {
   final Map<String, dynamic>? fv;
   final List<Map<String, dynamic>> operatorOptions;
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildValue(BuildContext context) {
     final type = field['type'] as String? ?? 'text';
 
     // When resolved value is null, try to recover directly from raw fv row
@@ -289,6 +288,32 @@ class _FieldValue extends StatelessWidget {
                       fvLocal['value_media_url'] as String?)
               : const _PendingSlot(),
     };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    try {
+      return _buildValue(context);
+    } catch (_) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.ctSurface2,
+          border: Border.all(color: AppColors.ctBorder),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded,
+                size: 14, color: Color(0xFFF59E0B)),
+            const SizedBox(width: 8),
+            Text('Valor capturado · no se puede mostrar',
+                style: AppFonts.geist(
+                    fontSize: 12, color: AppColors.ctText3)),
+          ],
+        ),
+      );
+    }
   }
 
   static String? _extractPhotoUrl(Map<String, dynamic> fv) {
@@ -403,6 +428,7 @@ class _NumberValue extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: AppColors.ctNavy,
+            border: Border.all(color: AppColors.ctBorder),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -410,14 +436,13 @@ class _NumberValue extends StatelessWidget {
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(formatted,
-                  style: AppFonts.onest(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
+                  style: AppFonts.geist(
+                    fontSize: 14,
                     color: AppColors.ctTeal,
-                    letterSpacing: -0.03,
+                    height: 1.55,
                   )),
               if (unit != null && !isMoney) ...[
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Text(unit!,
                     style: AppFonts.geist(
                         fontSize: 13,
@@ -676,6 +701,15 @@ class _SelectValue extends StatelessWidget {
     }
 
     // < 5 options: show all chips, selected highlighted with resolver
+    if (options.isEmpty && selected.isNotEmpty) {
+      return Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: selected
+            .map((val) => _selectedChip(_resolve(val)))
+            .toList(),
+      );
+    }
     if (options.isEmpty) return const _PendingSlot();
     return Wrap(
       spacing: 6,
