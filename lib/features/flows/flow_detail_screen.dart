@@ -2633,6 +2633,8 @@ IconData _actionIcon(String? type) {
       return Icons.webhook_outlined;
     case 'emit_event':
       return Icons.notifications_outlined;
+    case 'google_sheets_append_row':
+      return Icons.table_chart_outlined;
     default:
       return Icons.account_tree_outlined;
   }
@@ -2644,6 +2646,8 @@ String _actionLabel(String? type) {
       return 'Webhook saliente';
     case 'emit_event':
       return 'Emitir evento';
+    case 'google_sheets_append_row':
+      return 'Google Sheets — Agregar fila';
     default:
       return 'Abrir flujo';
   }
@@ -2662,6 +2666,11 @@ String _actionSubtitle(Map<String, dynamic> action) {
     case 'emit_event':
       final name = action['event_name'] as String? ?? '';
       return '⚡ $name';
+    case 'google_sheets_append_row':
+      final config = action['config'] as Map? ?? {};
+      final sid = config['spreadsheet_id'] as String? ?? '';
+      final display = sid.length > 20 ? '${sid.substring(0, 20)}…' : sid;
+      return '📊 $display';
     default:
       return '';
   }
@@ -2783,6 +2792,12 @@ class _ActionDialogState extends State<_ActionDialog> {
   // emit_event
   final _eventNameCtrl = TextEditingController();
 
+  // google_sheets_append_row
+  final _spreadsheetIdCtrl = TextEditingController();
+  final _sheetNameCtrl = TextEditingController();
+  // Each entry: (col: controller, val: controller)
+  final List<(TextEditingController, TextEditingController)> _columnMappingRows = [];
+
   // condition
   String? _conditionField;
   String _conditionOp = '==';
@@ -2801,6 +2816,18 @@ class _ActionDialogState extends State<_ActionDialog> {
       _integrationCtrl.text = a['integration_id'] as String? ?? '';
       _includeAncestors = a['include_ancestors'] as bool? ?? false;
       _eventNameCtrl.text = a['event_name'] as String? ?? '';
+      if (_type == 'google_sheets_append_row') {
+        final cfg = a['config'] as Map? ?? {};
+        _spreadsheetIdCtrl.text = cfg['spreadsheet_id'] as String? ?? '';
+        _sheetNameCtrl.text = cfg['sheet_name'] as String? ?? 'Sheet1';
+        final mapping = cfg['column_mapping'] as Map? ?? {};
+        for (final e in mapping.entries) {
+          _columnMappingRows.add((
+            TextEditingController(text: e.key.toString()),
+            TextEditingController(text: e.value.toString()),
+          ));
+        }
+      }
       final cond = a['condition'] as String?;
       if (cond != null && cond.isNotEmpty) {
         final re = RegExp(
@@ -2814,6 +2841,9 @@ class _ActionDialogState extends State<_ActionDialog> {
           _conditionValueCtrl.text = cond;
         }
       }
+    }
+    if (_columnMappingRows.isEmpty) {
+      _columnMappingRows.add((TextEditingController(text: 'A'), TextEditingController()));
     }
     _loadFlows();
   }
@@ -2848,6 +2878,12 @@ class _ActionDialogState extends State<_ActionDialog> {
   void dispose() {
     _integrationCtrl.dispose();
     _eventNameCtrl.dispose();
+    _spreadsheetIdCtrl.dispose();
+    _sheetNameCtrl.dispose();
+    for (final row in _columnMappingRows) {
+      row.$1.dispose();
+      row.$2.dispose();
+    }
     _conditionValueCtrl.dispose();
     super.dispose();
   }
@@ -2898,6 +2934,31 @@ class _ActionDialogState extends State<_ActionDialog> {
         updated.remove('carry_ancestors');
         updated.remove('integration_id');
         updated.remove('include_ancestors');
+        updated.remove('config');
+        break;
+      case 'google_sheets_append_row':
+        final sid = _spreadsheetIdCtrl.text.trim();
+        if (sid.isEmpty) return;
+        final validRows = _columnMappingRows
+            .where((r) => r.$1.text.trim().isNotEmpty)
+            .toList();
+        if (validRows.isEmpty) return;
+        updated['config'] = {
+          'spreadsheet_id': sid,
+          'sheet_name': _sheetNameCtrl.text.trim().isEmpty
+              ? 'Sheet1'
+              : _sheetNameCtrl.text.trim(),
+          'column_mapping': {
+            for (final r in validRows) r.$1.text.trim(): r.$2.text.trim(),
+          },
+        };
+        updated.remove('target_flow_slug');
+        updated.remove('carry_fields');
+        updated.remove('carry_ancestors');
+        updated.remove('integration_id');
+        updated.remove('include_ancestors');
+        updated.remove('event_name');
+        updated.remove('event_data');
         break;
     }
     final cond = _buildConditionExpression();
@@ -2974,6 +3035,14 @@ class _ActionDialogState extends State<_ActionDialog> {
                     DropdownMenuItem(
                       value: 'emit_event',
                       child: Text('Emitir evento',
+                          style: TextStyle(
+                              fontFamily: 'Geist',
+                              fontSize: 13,
+                              color: AppColors.ctText)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'google_sheets_append_row',
+                      child: Text('Google Sheets — Agregar fila',
                           style: TextStyle(
                               fontFamily: 'Geist',
                               fontSize: 13,
@@ -3093,6 +3162,105 @@ class _ActionDialogState extends State<_ActionDialog> {
                   controller: _eventNameCtrl,
                   placeholder: 'ej. flujo_completado',
                 ),
+              ] else if (_type == 'google_sheets_append_row') ...[
+                _FormField(
+                  label: 'ID de hoja de cálculo',
+                  controller: _spreadsheetIdCtrl,
+                  placeholder: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms',
+                ),
+                const SizedBox(height: 12),
+                _FormField(
+                  label: 'Nombre de pestaña',
+                  controller: _sheetNameCtrl,
+                  placeholder: 'Hoja1',
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Mapeo de columnas',
+                      style: TextStyle(
+                        fontFamily: 'Geist',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.ctText,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => setState(() {
+                        _columnMappingRows.add((
+                          TextEditingController(),
+                          TextEditingController(),
+                        ));
+                      }),
+                      icon: const Icon(Icons.add, size: 14,
+                          color: AppColors.ctTeal),
+                      label: const Text(
+                        '+ Agregar columna',
+                        style: TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 12,
+                          color: AppColors.ctTeal,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ..._columnMappingRows.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final row = entry.value;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 70,
+                          child: _ColMappingField(
+                            controller: row.$1,
+                            placeholder: 'A',
+                            onChanged: () => setState(() {}),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6),
+                          child: Text('→',
+                              style: TextStyle(
+                                  fontFamily: 'Geist',
+                                  fontSize: 13,
+                                  color: AppColors.ctText2)),
+                        ),
+                        Expanded(
+                          child: _ColMappingField(
+                            controller: row.$2,
+                            placeholder: '{{fields.nombre}}',
+                            onChanged: () => setState(() {}),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline,
+                              size: 16, color: AppColors.ctDanger),
+                          onPressed: _columnMappingRows.length > 1
+                              ? () => setState(() {
+                                    row.$1.dispose();
+                                    row.$2.dispose();
+                                    _columnMappingRows.removeAt(i);
+                                  })
+                              : null,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                              minWidth: 28, minHeight: 28),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
               ],
 
               // ── Condición (opcional) ────────────────────────────────────────
@@ -3291,13 +3459,58 @@ class _ActionDialogState extends State<_ActionDialog> {
                   _PrimaryButton(
                     label: 'Guardar',
                     onTap: _submit,
-                    enabled: _type != 'open_flow' || _selectedFlowSlug != null,
+                    enabled: switch (_type) {
+                      'open_flow' => _selectedFlowSlug != null,
+                      'google_sheets_append_row' =>
+                        _spreadsheetIdCtrl.text.trim().isNotEmpty &&
+                        _columnMappingRows.any((r) => r.$1.text.trim().isNotEmpty),
+                      _ => true,
+                    },
                   ),
                 ],
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── _ColMappingField ──────────────────────────────────────────────────────────
+
+class _ColMappingField extends StatelessWidget {
+  const _ColMappingField({
+    required this.controller,
+    required this.placeholder,
+    required this.onChanged,
+  });
+  final TextEditingController controller;
+  final String placeholder;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.ctSurface2,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.ctBorder2),
+      ),
+      child: TextField(
+        controller: controller,
+        style: const TextStyle(
+            fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText),
+        decoration: InputDecoration(
+          hintText: placeholder,
+          hintStyle: const TextStyle(
+              fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText3),
+          border: InputBorder.none,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        ),
+        onChanged: (_) => onChanged(),
       ),
     );
   }
