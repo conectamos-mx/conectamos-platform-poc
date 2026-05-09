@@ -108,6 +108,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
 
   // ── Timer ────────────────────────────────────────────────────────────────────
   Timer?    _refreshTimer;
+  Timer?    _ticker;
   DateTime? _lastFetch;
 
   // ── Filters ──────────────────────────────────────────────────────────────────
@@ -183,6 +184,9 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
         _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
           if (mounted) _load();
         });
+        _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+          if (mounted) setState(() {});
+        });
       }
     });
   }
@@ -190,6 +194,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _ticker?.cancel();
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
