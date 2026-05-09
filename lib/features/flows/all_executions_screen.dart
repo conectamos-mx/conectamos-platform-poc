@@ -1507,9 +1507,9 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     }
     for (final t in _filterActorTypes) {
       final label = switch (t) {
-        'operator'    => 'Tipo: Operador',
-        'system'      => 'Tipo: Sistema',
-        'tenant_user' => 'Tipo: En revisión',
+        'operator'    => 'Tipo: Conversacional',
+        'system'      => 'Tipo: API',
+        'tenant_user' => 'Tipo: Dashboard',
         _             => 'Tipo: $t',
       };
       chips.add(_FilterChip(
@@ -1793,9 +1793,9 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
       case 'type':
         final t = exec['actor_type'] as String? ?? '';
         return switch (t) {
-          'operator'    => 'Operador',
-          'system'      => 'Sistema',
-          'tenant_user' => 'En revisión',
+          'operator'    => 'Conversacional',
+          'system'      => 'API',
+          'tenant_user' => 'Dashboard',
           _             => t.isEmpty ? '—' : t,
         };
       case 'operator':
@@ -1974,9 +1974,9 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
         };
         return Tooltip(
           message: switch (at) {
-            'operator'    => 'Operador',
-            'system'      => 'Sistema',
-            'tenant_user' => 'En revisión',
+            'operator'    => 'Conversacional',
+            'system'      => 'API',
+            'tenant_user' => 'Dashboard',
             _             => at.isEmpty ? '—' : at,
           },
           child: Icon(icon, size: 14, color: AppColors.ctText2),
@@ -3166,9 +3166,9 @@ class _FilterSidebarState extends State<_FilterSidebar> {
     ];
 
     const actorTypes = [
-      ('operator',    'Operador'),
-      ('system',      'Sistema'),
-      ('tenant_user', 'En revisión'),
+      ('operator',    'Conversacional'),
+      ('system',      'API'),
+      ('tenant_user', 'Dashboard'),
     ];
 
     return Container(
