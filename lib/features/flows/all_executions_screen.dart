@@ -1803,10 +1803,13 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
 
   List<dynamic> _groupedItems() {
     if (_grouping == 'none') return _executions;
-
+    final sorted = _grouping == 'date'
+        ? List<Map<String, dynamic>>.from(_executions)
+        : (List<Map<String, dynamic>>.from(_executions)
+            ..sort((a, b) => _groupKeyFor(a).compareTo(_groupKeyFor(b))));
     final result = <dynamic>[];
     String? lastLbl;
-    for (final exec in _executions) {
+    for (final exec in sorted) {
       final lbl = _groupKeyFor(exec);
       if (lbl != lastLbl) {
         result.add(_DateHeader(lbl));
