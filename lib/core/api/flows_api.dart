@@ -266,6 +266,15 @@ class FlowsApi {
     );
   }
 
+  static Future<Map<String, dynamic>> abandonExecution({
+    required String executionId,
+  }) async {
+    final resp = await ApiClient.instance.post(
+      '/api/v1/dashboard/flow-executions/$executionId/abandon',
+    );
+    return resp.data as Map<String, dynamic>;
+  }
+
   static Future<List<Map<String, dynamic>>> listDashboardConfigurations() async {
     final response = await ApiClient.instance.get(
       '/api/v1/dashboard/configurations',
