@@ -851,12 +851,9 @@ class _PhotoThumb extends StatelessWidget {
             ),
             // Tap area for preview — below copy button
             Positioned.fill(
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: onTap,
-                  splashColor: Colors.white24,
-                ),
+              child: Listener(
+                onPointerUp: (_) => onTap(),
+                behavior: HitTestBehavior.translucent,
               ),
             ),
             // Copy URL button — above gesture detector
