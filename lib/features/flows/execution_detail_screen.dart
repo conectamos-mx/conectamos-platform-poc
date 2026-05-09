@@ -277,7 +277,7 @@ final content = _MainContent(exec: exec, flow: flow);
                               duration: Duration(milliseconds: 2000),
                             ),
                           );
-                          _load();
+                          await _load();
                         }
                       } on DioException catch (e) {
                         final data = e.response?.data;
