@@ -144,7 +144,12 @@ class _ExecutionDetailScreenState
       appBar: _buildAppBar(context),
       body: SelectionArea(child: Column(
         children: [
-          ExecutionHeaderBlock(exec: exec, flow: flow),
+          ExecutionHeaderBlock(
+            exec: exec,
+            flow: flow,
+            showAbandon: showAbandon,
+            onAbandon: () => _abandon(context, exec['id'] as String? ?? ''),
+          ),
           Expanded(
             child: SingleChildScrollView(
               child: Center(
@@ -183,27 +188,6 @@ class _ExecutionDetailScreenState
                                 onPressed: _loading ? null : _load,
                               ),
                             ),
-                            if (showAbandon) ...[
-                              const SizedBox(width: 8),
-                              TextButton.icon(
-                                onPressed: () => _abandon(
-                                    context, exec['id'] as String? ?? ''),
-                                icon: const Icon(Icons.cancel_outlined,
-                                    size: 14,
-                                    color: Color(0xFFEF4444)),
-                                label: const Text('Abandonar',
-                                    style: TextStyle(
-                                        fontFamily: 'Geist',
-                                        fontSize: 13,
-                                        color: Color(0xFFEF4444))),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: const Color(0xFFEF4444),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 6),
-                                  minimumSize: Size.zero,
-                                ),
-                              ),
-                            ],
                           ],
                         ),
                         LineageBreadcrumb(exec: exec),

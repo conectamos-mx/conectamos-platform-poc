@@ -12,10 +12,14 @@ class ExecutionHeaderBlock extends StatelessWidget {
     super.key,
     required this.exec,
     required this.flow,
+    this.showAbandon = false,
+    this.onAbandon,
   });
 
   final Map<String, dynamic> exec;
   final Map<String, dynamic> flow;
+  final bool showAbandon;
+  final VoidCallback? onAbandon;
 
   @override
   Widget build(BuildContext context) {
@@ -136,6 +140,25 @@ class ExecutionHeaderBlock extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (showAbandon) ...[
+                    TextButton.icon(
+                      onPressed: onAbandon,
+                      icon: const Icon(Icons.cancel_outlined,
+                          size: 14, color: Color(0xFFEF4444)),
+                      label: const Text('Abandonar',
+                          style: TextStyle(
+                              fontFamily: 'Geist',
+                              fontSize: 13,
+                              color: Color(0xFFEF4444))),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFFEF4444),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        minimumSize: Size.zero,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   _SmallButton(
                     label: 'Ver definición',
                     icon: Icons.open_in_new_rounded,
