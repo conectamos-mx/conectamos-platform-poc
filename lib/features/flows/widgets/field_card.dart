@@ -757,27 +757,23 @@ class _PhotoGallery extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (photos.isEmpty) return const _PendingSlot();
-
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 140,
-        childAspectRatio: 4 / 3,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemCount: photos.length,
-      itemBuilder: (ctx, i) => _PhotoThumb(
-        src: photos[i],
-        index: i,
-        total: photos.length,
-        onTap: () => showDialog(
-          context: context,
-          barrierColor: Colors.black87,
-          builder: (_) => MediaPreviewDialog(url: photos[i]),
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: List.generate(photos.length, (i) => SizedBox(
+        width: 140,
+        height: 105,
+        child: _PhotoThumb(
+          src: photos[i],
+          index: i,
+          total: photos.length,
+          onTap: () => showDialog(
+            context: context,
+            barrierColor: Colors.black87,
+            builder: (_) => MediaPreviewDialog(url: photos[i]),
+          ),
         ),
-      ),
+      )),
     );
   }
 }
