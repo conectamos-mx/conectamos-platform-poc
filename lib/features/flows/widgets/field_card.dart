@@ -799,83 +799,79 @@ class _PhotoThumb extends StatelessWidget {
     final num = '${(index + 1).toString().padLeft(2, '0')} / ${total.toString().padLeft(2, '0')}';
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.network(src,
-                fit: BoxFit.cover,
-                errorBuilder: (ctx, err, stack) => _MediaErrorSlot(url: src)),
-            // Top-left numerator
-            Positioned(
-              top: 6, left: 6,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xB20B132B),
-                  borderRadius: BorderRadius.circular(99),
+      child: GestureDetector(
+        onTap: onTap,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.network(src,
+                  fit: BoxFit.cover,
+                  errorBuilder: (ctx, err, stack) => _MediaErrorSlot(url: src)),
+              // Top-left numerator
+              Positioned(
+                top: 6, left: 6,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xB20B132B),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(num,
+                      style: const TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          letterSpacing: 0.03)),
                 ),
-                child: Text(num,
-                    style: const TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        letterSpacing: 0.03)),
               ),
-            ),
-            // Bottom gradient + timestamp
-            Positioned(
-              bottom: 0, left: 0, right: 0,
-              child: Container(
-                height: 48,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Color(0x73000000)],
+              // Bottom gradient + timestamp
+              Positioned(
+                bottom: 0, left: 0, right: 0,
+                child: Container(
+                  height: 48,
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Color(0x73000000)],
+                    ),
+                  ),
+                  alignment: Alignment.bottomLeft,
+                  padding: const EdgeInsets.all(8),
+                  child: Text('Evidencia',
+                      style: const TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                          letterSpacing: 0.02)),
+                ),
+              ),
+              // Copy URL button — absorbs its own tap independently
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: IconButton(
+                    onPressed: () => Clipboard.setData(ClipboardData(text: src)),
+                    icon: const Icon(Icons.copy_rounded,
+                        size: 13, color: Colors.white),
+                    padding: const EdgeInsets.all(6),
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Copiar URL',
                   ),
                 ),
-                alignment: Alignment.bottomLeft,
-                padding: const EdgeInsets.all(8),
-                child: Text('Evidencia',
-                    style: const TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                        letterSpacing: 0.02)),
               ),
-            ),
-            // Tap area for preview — below copy button
-            Positioned.fill(
-              child: Listener(
-                onPointerUp: (_) => onTap(),
-                behavior: HitTestBehavior.translucent,
-              ),
-            ),
-            // Copy URL button — above gesture detector
-            Positioned(
-              bottom: 8,
-              right: 8,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: IconButton(
-                  onPressed: () => Clipboard.setData(ClipboardData(text: src)),
-                  icon: const Icon(Icons.copy_rounded,
-                      size: 13, color: Colors.white),
-                  padding: const EdgeInsets.all(6),
-                  constraints: const BoxConstraints(),
-                  tooltip: 'Copiar URL',
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
