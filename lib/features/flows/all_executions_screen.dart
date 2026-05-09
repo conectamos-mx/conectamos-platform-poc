@@ -2326,7 +2326,9 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
                     backgroundColor: AppColors.ctTeal,
                     disabledBackgroundColor: AppColors.ctBorder,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                        horizontal: 20, vertical: 10),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8)),
                   ),
