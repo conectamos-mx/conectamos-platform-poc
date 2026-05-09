@@ -100,7 +100,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
   // ── Sort / grouping ──────────────────────────────────────────────────────────
   String _sortCol = 'created_at';
   String _sortDir = 'desc';
-  String _grouping = 'date'; // 'date' | 'none'
+  String _grouping = 'date'; // 'none' | 'date' | 'flow' | 'type' | 'operator' | 'status'
 
   // ── Columns ──────────────────────────────────────────────────────────────────
   late List<_ColDef> _columns;
@@ -114,7 +114,8 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
   List<String> _filterStatus      = [];
   List<String> _filterWorkerIds   = [];
   List<String> _filterOperatorIds = [];
-  String?      _filterFlowId;
+  List<String> _filterFlowIds     = [];
+  List<String> _filterActorTypes  = [];
   String?      _filterChannelType;
   String?      _filterDateRange;
   String       _filterDateField   = 'created_at';
@@ -159,6 +160,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     _columns = [
       _ColDef('flow',     'Flujo',    visible: true),
       _ColDef('worker',   'Worker',   visible: true),
+      _ColDef('type',     'Tipo',     visible: true),
       _ColDef('status',   'Estado',   visible: true),
       _ColDef('operator', 'Operador', visible: true),
       _ColDef('channel',  'Canal',    visible: true),
@@ -216,7 +218,8 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
         status:      _filterStatus.isNotEmpty ? _filterStatus : null,
         workerIds:   _filterWorkerIds.isNotEmpty ? _filterWorkerIds : null,
         operatorIds: _filterOperatorIds.isNotEmpty ? _filterOperatorIds : null,
-        flowId:      _filterFlowId,
+        flowIds:     _filterFlowIds.isNotEmpty ? _filterFlowIds : null,
+        actorTypes:  _filterActorTypes.isNotEmpty ? _filterActorTypes : null,
         channelType: _filterChannelType,
         dateRange:   _filterDateRange,
         dateField:   _filterDateField,
@@ -291,6 +294,11 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
               .where((id) => id.isNotEmpty)
               .toList();
         }
+        // Auto-hide worker column if only 1 worker
+        if (_availableWorkers.length == 1) {
+          final idx = _columns.indexWhere((c) => c.id == 'worker');
+          if (idx >= 0) _columns[idx].visible = false;
+        }
       });
       debugPrint('[Workers] loaded: ${_availableWorkers.length}');
       // Recargar solo si era la primera carga (seleccionamos workers por default)
@@ -356,10 +364,10 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
 
       setState(() {
         _availableFlows = flows;
-        if (_filterFlowId != null &&
-            !_availableFlows.any((f) => f['id'] == _filterFlowId)) {
-          _filterFlowId = null;
-        }
+        // Remove flow IDs that are no longer available
+        _filterFlowIds = _filterFlowIds
+            .where((id) => _availableFlows.any((f) => f['id'] == id))
+            .toList();
       });
       debugPrint('[Flows] loaded: ${_availableFlows.length} '
           '(workers: ${workerSnapshot.length}, v$myVersion)');
@@ -376,7 +384,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
         _filterWorkerIds = List.from(_filterWorkerIds)..add(id);
       }
       _page = 1;
-      _filterFlowId      = null;
+      _filterFlowIds     = [];
       _filterOperatorIds = [];
     });
     _markDirty();
@@ -387,10 +395,6 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
   }
 
   Future<void> _loadSearchableFields() async {
-    if (_filterWorkerIds.isEmpty) {
-      setState(() => _searchableFields = {});
-      return;
-    }
     final tenantId = ref.read(activeTenantIdProvider);
     if (tenantId.isEmpty) return;
     try {
@@ -409,8 +413,8 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
   // ── Filter helpers ────────────────────────────────────────────────────────
 
   int _activeFiltersCount() {
-    var count = _filterStatus.length + _filterOperatorIds.length;
-    if (_filterFlowId != null)      count++;
+    var count = _filterStatus.length + _filterOperatorIds.length
+        + _filterFlowIds.length + _filterActorTypes.length;
     if (_filterChannelType != null) count++;
     if (_filterDateRange != null)   count++;
     return count;
@@ -432,7 +436,8 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
       _filterStatus        = [];
       _filterWorkerIds     = [];
       _filterOperatorIds   = [];
-      _filterFlowId        = null;
+      _filterFlowIds       = [];
+      _filterActorTypes    = [];
       _filterChannelType   = null;
       _filterDateRange     = null;
       _filterDateField     = 'created_at';
@@ -456,7 +461,8 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
       _filterStatus      = List<String>.from(filters['status']       ?? []);
       _filterWorkerIds   = List<String>.from(filters['worker_ids']   ?? []);
       _filterOperatorIds = List<String>.from(filters['operator_ids'] ?? []);
-      _filterFlowId      = filters['flow_id']      as String?;
+      _filterFlowIds     = List<String>.from(filters['flow_ids']     ?? []);
+      _filterActorTypes  = List<String>.from(filters['actor_types']  ?? []);
       _filterChannelType = filters['channel_type'] as String?;
       _filterDateRange   = filters['date_range']   as String?;
       _filterDateField   = filters['date_field']   as String? ?? 'created_at';
@@ -479,8 +485,9 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     if (_filterStatus.isNotEmpty)           'status':         _filterStatus,
     if (_filterWorkerIds.isNotEmpty)        'worker_ids':     _filterWorkerIds,
     if (_filterOperatorIds.isNotEmpty)      'operator_ids':   _filterOperatorIds,
-    'flow_id':      ?_filterFlowId,
-    'channel_type': ?_filterChannelType,
+    if (_filterFlowIds.isNotEmpty)          'flow_ids':       _filterFlowIds,
+    if (_filterActorTypes.isNotEmpty)       'actor_types':    _filterActorTypes,
+    if (_filterChannelType != null)         'channel_type':   _filterChannelType,
     if (_filterDateRange != null) 'date_range': _filterDateRange,
     'date_field': _filterDateField,
     if (_filterDateFrom != null) 'date_from': _filterDateFrom,
@@ -603,6 +610,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
                         filterDateRange:    _filterDateRange,
                         filterOperatorIds:  _filterOperatorIds,
                         availableOperators: _availableOperators,
+                        filterActorTypes:   _filterActorTypes,
                         onStatusToggle: (s) {
                           setState(() {
                             _filterStatus = _filterStatus.contains(s)
@@ -651,10 +659,25 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
                           _markDirty();
                           _load();
                         },
-                        filterFlowId:   _filterFlowId,
+                        onActorTypeToggle: (t) {
+                          setState(() {
+                            _filterActorTypes = _filterActorTypes.contains(t)
+                                ? _filterActorTypes.where((x) => x != t).toList()
+                                : [..._filterActorTypes, t];
+                            _page = 1;
+                          });
+                          _markDirty();
+                          _load();
+                        },
+                        filterFlowIds:  _filterFlowIds,
                         availableFlows: _availableFlows,
-                        onFlowSelect: (id) {
-                          setState(() { _filterFlowId = id; _page = 1; });
+                        onFlowToggle: (id) {
+                          setState(() {
+                            _filterFlowIds = _filterFlowIds.contains(id)
+                                ? _filterFlowIds.where((x) => x != id).toList()
+                                : [..._filterFlowIds, id];
+                            _page = 1;
+                          });
                           _markDirty();
                           _load();
                         },
@@ -996,7 +1019,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
                       onTap: () {
                         setState(() {
                           _filterWorkerIds   = [];
-                          _filterFlowId      = null;
+                          _filterFlowIds     = [];
                           _filterOperatorIds = [];
                           _page = 1;
                         });
@@ -1100,12 +1123,9 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
         children: [
           Expanded(child: _buildSearchBar()),
           const SizedBox(width: 8),
-          _TopbarChip(
-            icon: Icons.calendar_today_outlined,
-            label: _grouping == 'date' ? 'Por fecha' : 'Sin agrupar',
-            active: _grouping == 'date',
-            onTap: () =>
-                setState(() => _grouping = _grouping == 'date' ? 'none' : 'date'),
+          _GroupingChip(
+            grouping: _grouping,
+            onSelect: (g) => setState(() => _grouping = g),
           ),
           const SizedBox(width: 8),
           _TopbarChip(
@@ -1460,6 +1480,42 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
         },
       ));
     }
+    for (final flowId in _filterFlowIds) {
+      final flow = _availableFlows.firstWhere(
+        (f) => f['id'] == flowId,
+        orElse: () => {'name': flowId},
+      );
+      chips.add(_FilterChip(
+        label: 'Flujo: ${flow['name'] as String? ?? flowId}',
+        onRemove: () {
+          setState(() {
+            _filterFlowIds = _filterFlowIds.where((x) => x != flowId).toList();
+            _page = 1;
+          });
+          _markDirty();
+          _load();
+        },
+      ));
+    }
+    for (final t in _filterActorTypes) {
+      final label = switch (t) {
+        'operator'    => 'Tipo: Operador',
+        'system'      => 'Tipo: Sistema',
+        'tenant_user' => 'Tipo: En revisión',
+        _             => 'Tipo: $t',
+      };
+      chips.add(_FilterChip(
+        label: label,
+        onRemove: () {
+          setState(() {
+            _filterActorTypes = _filterActorTypes.where((x) => x != t).toList();
+            _page = 1;
+          });
+          _markDirty();
+          _load();
+        },
+      ));
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
@@ -1715,17 +1771,44 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     );
   }
 
+  String _groupKeyFor(Map<String, dynamic> exec) {
+    switch (_grouping) {
+      case 'date':
+        final raw = exec['created_at'] as String?;
+        if (raw == null) return '—';
+        try { return _dateGroupLabel(DateTime.parse(raw)); } catch (_) { return '—'; }
+      case 'flow':
+        return exec['flow_name'] as String?
+            ?? (exec['flow_definition'] as Map?)?['name'] as String?
+            ?? (exec['flow'] as Map?)?['name'] as String?
+            ?? '—';
+      case 'type':
+        final t = exec['actor_type'] as String? ?? '';
+        return switch (t) {
+          'operator'    => 'Operador',
+          'system'      => 'Sistema',
+          'tenant_user' => 'En revisión',
+          _             => t.isEmpty ? '—' : t,
+        };
+      case 'operator':
+        return (exec['operator'] as Map?)?['name'] as String?
+            ?? exec['operator_name'] as String?
+            ?? '—';
+      case 'status':
+        final s = exec['status'] as String? ?? 'unknown';
+        return _statusLabel(s);
+      default:
+        return '';
+    }
+  }
+
   List<dynamic> _groupedItems() {
     if (_grouping == 'none') return _executions;
 
     final result = <dynamic>[];
     String? lastLbl;
     for (final exec in _executions) {
-      final raw = exec['created_at'] as String?;
-      String lbl = '—';
-      if (raw != null) {
-        try { lbl = _dateGroupLabel(DateTime.parse(raw)); } catch (_) {}
-      }
+      final lbl = _groupKeyFor(exec);
       if (lbl != lastLbl) {
         result.add(_DateHeader(lbl));
         lastLbl = lbl;
@@ -1772,6 +1855,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
 
     final createdStr = exec['created_at']      as String?;
     final elapsedSec = exec['elapsed_seconds'] as int?;
+    final actorType  = exec['actor_type']      as String?;
 
     final progressMap = exec['fields_progress'] as Map<String, dynamic>?;
     final total    = (progressMap?['total']  as num?)?.toInt() ?? 0;
@@ -1785,7 +1869,9 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     final visible = _columns.where((c) => c.visible).toList();
 
     return InkWell(
-      onTap: () => context.go('/executions/$id'),
+      onTap: () => context.push('/executions/$id').then((_) {
+        if (mounted) _load();
+      }),
       child: Container(
         height: 48,
         decoration: const BoxDecoration(
@@ -1810,6 +1896,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
                     elapsedSec:  elapsedSec,
                     captured:    captured,
                     total:       total,
+                    actorType:   actorType,
                   ),
                 ),
               );
@@ -1841,6 +1928,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     required int? elapsedSec,
     required int captured,
     required int total,
+    String? actorType,
   }) {
     switch (colId) {
       case 'flow':
@@ -1856,13 +1944,31 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
           ),
         );
       case 'worker':
-        final name = worker_?['name'] as String?
+        final name = worker_?['display_name'] as String?
+            ?? worker_?['name'] as String?
             ?? worker_?['id'] as String?
             ?? '—';
         return Text(
           name,
           overflow: TextOverflow.ellipsis,
           style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2),
+        );
+      case 'type':
+        final at = actorType ?? '';
+        final icon = switch (at) {
+          'operator'    => Icons.chat_bubble_outline_rounded,
+          'system'      => Icons.code_rounded,
+          'tenant_user' => Icons.dashboard_outlined,
+          _             => Icons.help_outline_rounded,
+        };
+        return Tooltip(
+          message: switch (at) {
+            'operator'    => 'Operador',
+            'system'      => 'Sistema',
+            'tenant_user' => 'En revisión',
+            _             => at.isEmpty ? '—' : at,
+          },
+          child: Icon(icon, size: 14, color: AppColors.ctText2),
         );
       case 'status':
         return _StatusBadge(status: status);
@@ -2023,7 +2129,8 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
         status:      _filterStatus.isEmpty ? null : _filterStatus,
         workerIds:   _filterWorkerIds.isEmpty ? null : _filterWorkerIds,
         operatorIds: _filterOperatorIds.isEmpty ? null : _filterOperatorIds,
-        flowId:      _filterFlowId,
+        flowIds:     _filterFlowIds.isEmpty ? null : _filterFlowIds,
+        actorTypes:  _filterActorTypes.isEmpty ? null : _filterActorTypes,
         channelType: _filterChannelType,
         dateRange:   _filterDateRange,
         dateField:   _filterDateField,
@@ -2073,12 +2180,15 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     if (_filterStatus.isNotEmpty) {
       parts.add('Estado: ${_filterStatus.map(_statusLabel).join(', ')}');
     }
-    if (_filterFlowId != null) {
-      final flow = _availableFlows.firstWhere(
-        (f) => f['id'] == _filterFlowId,
-        orElse: () => {'name': _filterFlowId},
-      );
-      parts.add('Flujo: ${flow['name']}');
+    if (_filterFlowIds.isNotEmpty) {
+      final names = _filterFlowIds.map((id) {
+        final flow = _availableFlows.firstWhere(
+          (f) => f['id'] == id,
+          orElse: () => {'name': id},
+        );
+        return flow['name'] as String? ?? id;
+      }).join(', ');
+      parts.add('Flujo: $names');
     }
     if (_filterChannelType != null) {
       parts.add('Canal: $_filterChannelType');
@@ -2208,23 +2318,8 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
                           fontSize: 13, color: AppColors.ctText2)),
                 ),
                 const SizedBox(width: 8),
-                ElevatedButton.icon(
+                ElevatedButton(
                   onPressed: _exporting ? null : _doExport,
-                  icon: _exporting
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.download_rounded, size: 16),
-                  label: Text(
-                    _exporting ? 'Exportando...' : 'Descargar XLSX',
-                    style: AppFonts.geist(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.ctTeal,
                     disabledBackgroundColor: AppColors.ctBorder,
@@ -2232,6 +2327,27 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
                         horizontal: 16, vertical: 10),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_exporting)
+                        const SizedBox(
+                          width: 14, height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      else
+                        const Icon(Icons.download_rounded, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        _exporting ? 'Exportando...' : 'Descargar XLSX',
+                        style: AppFonts.geist(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -2838,9 +2954,107 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
+// ── _GroupingChip ─────────────────────────────────────────────────────────────
+
+class _GroupingChip extends StatefulWidget {
+  const _GroupingChip({required this.grouping, required this.onSelect});
+  final String grouping;
+  final void Function(String) onSelect;
+  @override
+  State<_GroupingChip> createState() => _GroupingChipState();
+}
+
+class _GroupingChipState extends State<_GroupingChip> {
+  final _key = GlobalKey();
+
+  static const _options = [
+    ('none',     'Sin agrupar',   Icons.format_list_bulleted_rounded),
+    ('date',     'Por fecha',     Icons.calendar_today_outlined),
+    ('flow',     'Por flujo',     Icons.account_tree_outlined),
+    ('type',     'Por tipo',      Icons.category_outlined),
+    ('operator', 'Por operador',  Icons.person_outline_rounded),
+    ('status',   'Por estatus',   Icons.circle_outlined),
+  ];
+
+  String _label() {
+    for (final (v, l, _) in _options) {
+      if (v == widget.grouping) return l;
+    }
+    return 'Sin agrupar';
+  }
+
+  void _openMenu() {
+    final box = _key.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final offset     = box.localToGlobal(Offset.zero);
+    final size       = box.size;
+    final screenSize = MediaQuery.of(context).size;
+
+    final items = <PopupMenuEntry<String>>[
+      for (final (value, label, icon) in _options)
+        PopupMenuItem<String>(
+          value: value,
+          padding: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                Icon(icon, size: 14,
+                    color: widget.grouping == value
+                        ? AppColors.ctTeal : AppColors.ctText2),
+                const SizedBox(width: 8),
+                Text(label,
+                    style: AppFonts.geist(fontSize: 13,
+                        color: widget.grouping == value
+                            ? AppColors.ctTeal : AppColors.ctText)),
+                if (widget.grouping == value) ...[
+                  const Spacer(),
+                  const Icon(Icons.check_rounded,
+                      size: 13, color: AppColors.ctTeal),
+                ],
+              ],
+            ),
+          ),
+        ),
+    ];
+
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        offset.dx,
+        offset.dy + size.height + 4,
+        screenSize.width - offset.dx - size.width,
+        0,
+      ),
+      items:       items,
+      color:       AppColors.ctSurface,
+      elevation:   4,
+      constraints: const BoxConstraints(minWidth: 180, maxWidth: 220),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: AppColors.ctBorder),
+      ),
+    ).then((value) {
+      if (value == null || !mounted) return;
+      widget.onSelect(value);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _TopbarChip(
+      key:    _key,
+      icon:   Icons.group_work_outlined,
+      label:  _label(),
+      active: widget.grouping != 'none',
+      onTap:  _openMenu,
+    );
+  }
+}
+
 // ── _FilterSidebar ────────────────────────────────────────────────────────────
 
-class _FilterSidebar extends StatelessWidget {
+class _FilterSidebar extends StatefulWidget {
   const _FilterSidebar({
     required this.filterStatus,
     required this.filterChannelType,
@@ -2850,7 +3064,8 @@ class _FilterSidebar extends StatelessWidget {
     required this.filterDateTo,
     required this.filterOperatorIds,
     required this.availableOperators,
-    required this.filterFlowId,
+    required this.filterActorTypes,
+    required this.filterFlowIds,
     required this.availableFlows,
     required this.onStatusToggle,
     required this.onChannelTypeSelect,
@@ -2858,7 +3073,8 @@ class _FilterSidebar extends StatelessWidget {
     required this.onDateFieldSelect,
     required this.onDateRangeChange,
     required this.onOperatorToggle,
-    required this.onFlowSelect,
+    required this.onActorTypeToggle,
+    required this.onFlowToggle,
     required this.hasWorkers,
   });
 
@@ -2870,7 +3086,8 @@ class _FilterSidebar extends StatelessWidget {
   final String?                                   filterDateTo;
   final List<String>                              filterOperatorIds;
   final List<Map<String, dynamic>>                availableOperators;
-  final String?                                   filterFlowId;
+  final List<String>                              filterActorTypes;
+  final List<String>                              filterFlowIds;
   final List<Map<String, dynamic>>                availableFlows;
   final bool                                      hasWorkers;
   final void Function(String)                     onStatusToggle;
@@ -2879,22 +3096,52 @@ class _FilterSidebar extends StatelessWidget {
   final void Function(String)                     onDateFieldSelect;
   final void Function(String?, String?, String?)  onDateRangeChange;
   final void Function(String)                     onOperatorToggle;
-  final void Function(String?)                    onFlowSelect;
+  final void Function(String)                     onActorTypeToggle;
+  final void Function(String)                     onFlowToggle;
+
+  @override
+  State<_FilterSidebar> createState() => _FilterSidebarState();
+}
+
+class _FilterSidebarState extends State<_FilterSidebar> {
+  List<Map<String, String>> _availableStatuses = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStatuses();
+  }
+
+  Future<void> _loadStatuses() async {
+    final statuses = await ExecutionsApi.getExecutionStatuses();
+    if (mounted) setState(() => _availableStatuses = statuses);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final statuses = [
-      ('active',           'Activa'),
-      ('completed',        'Completada'),
-      ('pending',          'Pendiente'),
-      ('pending_dashboard','En revisión'),
-      ('paused',           'Pausada'),
-      ('abandoned',        'Abandonada'),
-      ('failed',           'Error'),
-    ];
-    final channels = [
+    final statuses = _availableStatuses.isNotEmpty
+        ? _availableStatuses
+        : [
+            {'value': 'active',             'label': 'Activa'},
+            {'value': 'paused',             'label': 'Pausada'},
+            {'value': 'completed',          'label': 'Completada'},
+            {'value': 'abandoned',          'label': 'Abandonada'},
+            {'value': 'escalated',          'label': 'Escalada'},
+            {'value': 'pending_completion', 'label': 'Pendiente de completar'},
+            {'value': 'pending_dashboard',  'label': 'En revisión'},
+            {'value': 'pending_input',      'label': 'Esperando respuesta'},
+            {'value': 'created',            'label': 'Creada'},
+          ];
+
+    const channels = [
       ('whatsapp', 'WhatsApp'),
       ('telegram', 'Telegram'),
+    ];
+
+    const actorTypes = [
+      ('operator',    'Operador'),
+      ('system',      'Sistema'),
+      ('tenant_user', 'En revisión'),
     ];
 
     return Container(
@@ -2909,11 +3156,23 @@ class _FilterSidebar extends StatelessWidget {
           _SidebarSection(
             title: 'Estado',
             children: [
-              for (final (value, label) in statuses)
+              for (final s in statuses)
+                _SidebarCheckRow(
+                  label:    s['label'] ?? s['value'] ?? '',
+                  selected: widget.filterStatus.contains(s['value'] ?? ''),
+                  onTap:    () => widget.onStatusToggle(s['value'] ?? ''),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _SidebarSection(
+            title: 'Tipo',
+            children: [
+              for (final (value, label) in actorTypes)
                 _SidebarCheckRow(
                   label:    label,
-                  selected: filterStatus.contains(value),
-                  onTap:    () => onStatusToggle(value),
+                  selected: widget.filterActorTypes.contains(value),
+                  onTap:    () => widget.onActorTypeToggle(value),
                 ),
             ],
           ),
@@ -2937,17 +3196,17 @@ class _FilterSidebar extends StatelessWidget {
                       ('completed_at', 'Completada'),
                     ])
                       GestureDetector(
-                        onTap: () => onDateFieldSelect(field),
+                        onTap: () => widget.onDateFieldSelect(field),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: filterDateField == field
+                            color: widget.filterDateField == field
                                 ? AppColors.ctTeal
                                 : AppColors.ctSurface2,
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: filterDateField == field
+                              color: widget.filterDateField == field
                                   ? AppColors.ctTeal
                                   : AppColors.ctBorder,
                             ),
@@ -2955,7 +3214,7 @@ class _FilterSidebar extends StatelessWidget {
                           child: Text(label, style: AppFonts.geist(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: filterDateField == field
+                            color: widget.filterDateField == field
                                 ? AppColors.ctNavy
                                 : AppColors.ctText2,
                           )),
@@ -2974,22 +3233,22 @@ class _FilterSidebar extends StatelessWidget {
               ])
                 _SidebarRadioRow(
                   label:    label,
-                  selected: filterDateRange == value,
-                  onTap: () => onDateRangeChange(
-                    filterDateRange == value ? null : value, null, null),
+                  selected: widget.filterDateRange == value,
+                  onTap: () => widget.onDateRangeChange(
+                    widget.filterDateRange == value ? null : value, null, null),
                 ),
               // Rango personalizado — un solo modal con inicio + fin
               _SidebarRangePickerRow(
-                filterDateFrom:   filterDateFrom,
-                filterDateTo:     filterDateTo,
-                isActive:         filterDateRange == 'custom',
+                filterDateFrom:   widget.filterDateFrom,
+                filterDateTo:     widget.filterDateTo,
+                isActive:         widget.filterDateRange == 'custom',
                 onRangeSelected:  (from, to) =>
-                    onDateRangeChange('custom', from, to),
-                onClear: () => onDateRangeChange(null, null, null),
+                    widget.onDateRangeChange('custom', from, to),
+                onClear: () => widget.onDateRangeChange(null, null, null),
               ),
             ],
           ),
-          if (hasWorkers) ...[
+          if (widget.hasWorkers) ...[
             const SizedBox(height: 8),
             _SidebarSection(
               title: 'Canal',
@@ -2997,45 +3256,39 @@ class _FilterSidebar extends StatelessWidget {
                 for (final (value, label) in channels)
                   _SidebarRadioRow(
                     label:    label,
-                    selected: filterChannelType == value,
-                    onTap:    () => onChannelTypeSelect(
-                        filterChannelType == value ? null : value),
+                    selected: widget.filterChannelType == value,
+                    onTap:    () => widget.onChannelTypeSelect(
+                        widget.filterChannelType == value ? null : value),
                   ),
               ],
             ),
           ],
-          if (hasWorkers && availableOperators.isNotEmpty) ...[
+          if (widget.hasWorkers && widget.availableOperators.isNotEmpty) ...[
             const SizedBox(height: 8),
             _SidebarSection(
               title: 'Operadores',
               children: [
-                for (final op in availableOperators)
+                for (final op in widget.availableOperators)
                   _SidebarCheckRow(
                     label: op['display_name'] as String? ??
                         op['name'] as String? ??
                         op['id'] as String? ?? '—',
-                    selected: filterOperatorIds.contains(op['id'] as String? ?? ''),
-                    onTap: () => onOperatorToggle(op['id'] as String? ?? ''),
+                    selected: widget.filterOperatorIds.contains(op['id'] as String? ?? ''),
+                    onTap: () => widget.onOperatorToggle(op['id'] as String? ?? ''),
                   ),
               ],
             ),
           ],
-          if (hasWorkers && availableFlows.isNotEmpty) ...[
+          if (widget.hasWorkers && widget.availableFlows.isNotEmpty) ...[
             const SizedBox(height: 8),
             _SidebarSection(
               title: 'Flujo',
               children: [
-                _SidebarCheckRow(
-                  label: 'Todos los flujos',
-                  selected: filterFlowId == null,
-                  onTap: () => onFlowSelect(null),
-                ),
-                for (final flow in availableFlows)
+                for (final flow in widget.availableFlows)
                   _SidebarCheckRow(
                     label: flow['name'] as String? ?? '—',
-                    selected: filterFlowId == flow['id'],
-                    onTap: () => onFlowSelect(
-                        filterFlowId == flow['id'] ? null : flow['id'] as String?),
+                    selected: widget.filterFlowIds.contains(flow['id'] as String? ?? ''),
+                    onTap: () => widget.onFlowToggle(flow['id'] as String? ?? ''),
                   ),
               ],
             ),

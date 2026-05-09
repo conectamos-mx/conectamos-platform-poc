@@ -30,6 +30,7 @@ class _ExecutionDetailScreenState
   bool _loading = true;
   DateTime? _lastFetch;
   Timer? _ticker;
+  Timer? _refreshTimer;
   String? _error;
   Map<String, dynamic>? _exec;
   Map<String, dynamic>? _flow;
@@ -50,6 +51,7 @@ class _ExecutionDetailScreenState
   @override
   void dispose() {
     _ticker?.cancel();
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
@@ -78,6 +80,10 @@ class _ExecutionDetailScreenState
       _ticker?.cancel();
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) setState(() {});
+      });
+      _refreshTimer?.cancel();
+      _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (mounted) _load();
       });
       setState(() { _lastFetch = DateTime.now(); });
     }

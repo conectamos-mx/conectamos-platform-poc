@@ -15,7 +15,8 @@ class ExecutionsApi {
     List<String>? status,
     List<String>? workerIds,
     List<String>? operatorIds,
-    String? flowId,
+    List<String>? flowIds,
+    List<String>? actorTypes,
     String? channelType,
     String? dateRange,
     String dateField = 'created_at',
@@ -39,7 +40,8 @@ class ExecutionsApi {
     if (status != null && status.isNotEmpty) params['status'] = status;
     if (workerIds != null && workerIds.isNotEmpty) params['worker_id'] = workerIds;
     if (operatorIds != null && operatorIds.isNotEmpty) params['operator_id'] = operatorIds;
-    if (flowId != null) params['flow_id'] = flowId;
+    if (flowIds != null && flowIds.isNotEmpty) params['flow_id'] = flowIds;
+    if (actorTypes != null && actorTypes.isNotEmpty) params['actor_type'] = actorTypes;
     if (channelType != null) params['channel_type'] = channelType;
     if (dateRange != null) params['date_range'] = dateRange;
     if (dateFrom != null) params['date_from'] = dateFrom;
@@ -102,7 +104,8 @@ class ExecutionsApi {
     List<String>? status,
     List<String>? workerIds,
     List<String>? operatorIds,
-    String? flowId,
+    List<String>? flowIds,
+    List<String>? actorTypes,
     String? channelType,
     String? dateRange,
     String dateField = 'created_at',
@@ -116,7 +119,8 @@ class ExecutionsApi {
     if (status != null && status.isNotEmpty) params['status'] = status;
     if (workerIds != null && workerIds.isNotEmpty) params['worker_id'] = workerIds;
     if (operatorIds != null && operatorIds.isNotEmpty) params['operator_id'] = operatorIds;
-    if (flowId != null) params['flow_id'] = flowId;
+    if (flowIds != null && flowIds.isNotEmpty) params['flow_id'] = flowIds;
+    if (actorTypes != null && actorTypes.isNotEmpty) params['actor_type'] = actorTypes;
     if (channelType != null) params['channel_type'] = channelType;
     if (dateRange != null) params['date_range'] = dateRange;
     if (dateFrom != null) params['date_from'] = dateFrom;
@@ -131,6 +135,32 @@ class ExecutionsApi {
       options: Options(responseType: ResponseType.bytes),
     );
     return Uint8List.fromList(resp.data as List<int>);
+  }
+
+  /// Retorna la lista de estatus disponibles para ejecuciones.
+  static Future<List<Map<String, String>>> getExecutionStatuses() async {
+    try {
+      final response = await ApiClient.instance.get('/flow-executions/statuses');
+      final raw = response.data;
+      final list = raw is Map ? (raw['statuses'] ?? []) : (raw is List ? raw : []);
+      return (list as List)
+          .whereType<Map>()
+          .map((e) => {'value': e['value']?.toString() ?? '', 'label': e['label']?.toString() ?? ''})
+          .where((e) => e['value']!.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return [
+        {'value': 'active',             'label': 'Activa'},
+        {'value': 'paused',             'label': 'Pausada'},
+        {'value': 'completed',          'label': 'Completada'},
+        {'value': 'abandoned',          'label': 'Abandonada'},
+        {'value': 'escalated',          'label': 'Escalada'},
+        {'value': 'pending_completion', 'label': 'Pendiente de completar'},
+        {'value': 'pending_dashboard',  'label': 'En revisión'},
+        {'value': 'pending_input',      'label': 'Esperando respuesta'},
+        {'value': 'created',            'label': 'Creada'},
+      ];
+    }
   }
 
   /// Campos buscables por clave de campo (para filtro avanzado).
