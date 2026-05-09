@@ -158,27 +158,6 @@ class _ExecutionDetailScreenState
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            if (showAbandon) ...[
-                              TextButton.icon(
-                                onPressed: () => _abandon(
-                                    context, exec['id'] as String? ?? ''),
-                                icon: const Icon(Icons.cancel_outlined,
-                                    size: 14,
-                                    color: Color(0xFFEF4444)),
-                                label: const Text('Abandonar',
-                                    style: TextStyle(
-                                        fontFamily: 'Geist',
-                                        fontSize: 13,
-                                        color: Color(0xFFEF4444))),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: const Color(0xFFEF4444),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 6),
-                                  minimumSize: Size.zero,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
                             if (_lastFetch != null)
                               Text(
                                 'Act. ${_elapsedSince(_lastFetch!)}',
@@ -204,6 +183,33 @@ class _ExecutionDetailScreenState
                                 onPressed: _loading ? null : _load,
                               ),
                             ),
+                            if (showAbandon) ...[
+                              const SizedBox(width: 4),
+                              Container(
+                                width: 1,
+                                height: 14,
+                                color: AppColors.ctBorder,
+                              ),
+                              const SizedBox(width: 4),
+                              TextButton.icon(
+                                onPressed: () => _abandon(
+                                    context, exec['id'] as String? ?? ''),
+                                icon: const Icon(Icons.cancel_outlined,
+                                    size: 14,
+                                    color: Color(0xFFEF4444)),
+                                label: const Text('Abandonar',
+                                    style: TextStyle(
+                                        fontFamily: 'Geist',
+                                        fontSize: 13,
+                                        color: Color(0xFFEF4444))),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xFFEF4444),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  minimumSize: Size.zero,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                         LineageBreadcrumb(exec: exec),
