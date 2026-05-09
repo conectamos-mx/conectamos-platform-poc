@@ -2319,11 +2319,18 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 TextButton(
                   onPressed: _exporting
                       ? null
                       : () => setState(() => _showExportModal = false),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                   child: Text('Cancelar',
                       style: AppFonts.geist(
                           fontSize: 13, color: AppColors.ctText2)),
