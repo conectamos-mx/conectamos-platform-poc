@@ -415,12 +415,8 @@ class _FieldsBlockState extends State<_FieldsBlock> {
           if (match != null) return [match.group(0)!];
         }
       }
-      // Validar que sea una URL real antes de retornar
-      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-        return [trimmed];
-      }
-      // No es una URL válida (ej. "[Imagen]", texto plano) — ignorar
-      return [];
+      // Es una URL directa
+      return [trimmed];
     }
 
     return [];
