@@ -809,7 +809,7 @@ class _PhotoThumb extends StatelessWidget {
               // Top-left numerator
               Positioned(
                 top: 6, left: 6,
-                child: Container(
+                child: IgnorePointer(child: Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
@@ -823,12 +823,12 @@ class _PhotoThumb extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                           color: Colors.white,
                           letterSpacing: 0.03)),
-                ),
+                )),
               ),
               // Bottom gradient + timestamp
               Positioned(
                 bottom: 0, left: 0, right: 0,
-                child: Container(
+                child: IgnorePointer(child: Container(
                   height: 48,
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
@@ -846,7 +846,7 @@ class _PhotoThumb extends StatelessWidget {
                           fontWeight: FontWeight.w500,
                           color: Colors.white,
                           letterSpacing: 0.02)),
-                ),
+                )),
               ),
               // Copy URL button — absorbs its own tap independently
               Positioned(
