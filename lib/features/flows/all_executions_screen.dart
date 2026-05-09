@@ -2797,14 +2797,20 @@ class _StatusBadge extends StatelessWidget {
           (AppColors.ctTealLight, AppColors.ctTealDark, 'activa'),
       'completed' =>
           (AppColors.ctOkBg, AppColors.ctOkText, 'completada'),
-      'pending' =>
-          (AppColors.ctInfoBg, AppColors.ctInfoText, 'pendiente'),
-      'pending_dashboard' || 'pending_review' =>
-          (AppColors.ctInfoBg, AppColors.ctInfoText, 'en revisión'),
       'paused' =>
           (AppColors.ctWarnBg, AppColors.ctWarnText, 'pausada'),
       'abandoned' =>
           (AppColors.ctSurface2, AppColors.ctText3, 'abandonada'),
+      'escalated' =>
+          (AppColors.ctRedBg, AppColors.ctRedText, 'escalada'),
+      'pending_dashboard' || 'pending_review' =>
+          (AppColors.ctInfoBg, AppColors.ctInfoText, 'en revisión'),
+      'pending_completion' =>
+          (const Color(0xFFE8F4FD), const Color(0xFF1565C0), 'completando'),
+      'pending_input' =>
+          (AppColors.ctWarnBg, AppColors.ctWarnText, 'esperando input'),
+      'created' =>
+          (const Color(0xFFF3F4F6), const Color(0xFF6B7280), 'creada'),
       'cancelled' =>
           (AppColors.ctSurface2, AppColors.ctText3, 'cancelada'),
       'failed' || 'error' =>
