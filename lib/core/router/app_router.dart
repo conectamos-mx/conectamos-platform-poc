@@ -19,6 +19,7 @@ import '../../features/config/settings_screen.dart';
 import '../../features/settings/operator_fields_screen.dart';
 import '../../features/config/ai_workers_screen.dart';
 import '../../features/config/workflows_screen.dart';
+import '../../features/catalogs/catalog_detail_screen.dart';
 import '../../features/catalogs/catalogs_screen.dart';
 import '../../features/flows/all_executions_screen.dart';
 import '../../features/flows/executions_screen.dart';
@@ -279,7 +280,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   pageBuilder: (context, state) {
                     final slug = state.pathParameters['catalogSlug'] ?? '';
                     return NoTransitionPage(
-                      child: CatalogDetailPlaceholder(slug: slug),
+                      child: CatalogDetailScreen(slug: slug),
                     );
                   },
                 ),

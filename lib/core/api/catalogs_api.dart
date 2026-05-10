@@ -29,6 +29,17 @@ class CatalogsApi {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
+  static Future<Map<String, dynamic>> getCatalogBySlug({
+    required String tenantId,
+    required String slug,
+  }) async {
+    final response = await ApiClient.instance.get(
+      '/api/v1/catalogs/by-slug/$slug',
+      queryParameters: {'tenant_id': tenantId},
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   static Future<Map<String, dynamic>> createCatalog({
     required String tenantId,
     required Map<String, dynamic> body,
@@ -41,11 +52,13 @@ class CatalogsApi {
   }
 
   static Future<Map<String, dynamic>> updateCatalog({
+    required String tenantId,
     required String catalogId,
     required Map<String, dynamic> body,
   }) async {
     final response = await ApiClient.instance.put(
       '/api/v1/catalogs/$catalogId',
+      queryParameters: {'tenant_id': tenantId},
       data: body,
     );
     return Map<String, dynamic>.from(response.data as Map);
@@ -65,4 +78,44 @@ class CatalogsApi {
     );
     return Map<String, dynamic>.from(response.data as Map);
   }
+
+  static Future<List<Map<String, dynamic>>> listItems({
+    required String tenantId,
+    required String catalogId,
+  }) async {
+    final response = await ApiClient.instance.get(
+      '/api/v1/catalogs/$catalogId/items',
+      queryParameters: {'tenant_id': tenantId},
+    );
+    final raw = response.data;
+    final list = raw is List
+        ? raw
+        : (raw is Map ? (raw['items'] ?? raw['data'] ?? []) : []);
+    return List<Map<String, dynamic>>.from(
+        (list as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
+  }
+
+  static Future<List<Map<String, dynamic>>> searchItems({
+    required String tenantId,
+    required String catalogId,
+    required String q,
+  }) async {
+    final response = await ApiClient.instance.get(
+      '/api/v1/catalogs/$catalogId/items/search',
+      queryParameters: {'tenant_id': tenantId, 'q': q},
+    );
+    final raw = response.data;
+    final list = raw is List
+        ? raw
+        : (raw is Map ? (raw['items'] ?? raw['data'] ?? []) : []);
+    return List<Map<String, dynamic>>.from(
+        (list as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
+  }
+
+  // stub — endpoint de sync log no disponible aún
+  static Future<List<Map<String, dynamic>>> listSyncLog({
+    required String tenantId,
+    required String catalogId,
+  }) async =>
+      [];
 }
