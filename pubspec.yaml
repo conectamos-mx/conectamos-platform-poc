@@ -59,6 +59,7 @@ dependencies:
   # Path URL strategy (Flutter Web)
   flutter_web_plugins:
     sdk: flutter
+  graphview: ^1.5.1
 
 dev_dependencies:
   flutter_test:
