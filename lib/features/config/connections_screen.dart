@@ -298,12 +298,17 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
       if (tenantId.isEmpty) return;
       final status = await ConnectionsApi.getMicrosoftStatus(tenantId: tenantId);
       if (!mounted) return;
-      final connected = status['connected'] as bool? ?? false;
+      final connections = (status['connections'] as List?) ?? [];
+      final microsoftConn = connections
+          .cast<Map<String, dynamic>>()
+          .where((c) => c['provider'] == 'microsoft' && c['status'] == 'active')
+          .firstOrNull;
+      final connected = microsoftConn != null;
       setState(() {
         if (connected) {
           _connectedIds = {..._connectedIds, 'onedrive'};
-          _microsoftEmail = status['email'] as String?;
-          _microsoftConnectedAt = status['connected_at'] as String?;
+          _microsoftEmail = microsoftConn['email'] as String?;
+          _microsoftConnectedAt = microsoftConn['connected_at'] as String?;
         } else {
           _connectedIds = Set.from(_connectedIds)..remove('onedrive');
           _microsoftEmail = null;
