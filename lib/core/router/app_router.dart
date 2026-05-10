@@ -19,6 +19,7 @@ import '../../features/config/settings_screen.dart';
 import '../../features/settings/operator_fields_screen.dart';
 import '../../features/config/ai_workers_screen.dart';
 import '../../features/config/workflows_screen.dart';
+import '../../features/catalogs/catalogs_screen.dart';
 import '../../features/flows/all_executions_screen.dart';
 import '../../features/flows/executions_screen.dart';
 import '../../features/flows/execution_detail_screen.dart';
@@ -37,6 +38,7 @@ const _kRoutePermissions = {
   '/connections':  'settings.view',
   '/settings':     'settings.view',
   '/workers':      'settings.manage',
+  '/catalogs':     'catalogs.view',
   '/broadcast':    'broadcasts.send',
   '/escalaciones': 'escalations.view',
 };
@@ -260,6 +262,26 @@ final routerProvider = Provider<GoRouter>((ref) {
                 GoRoute(
                   path: 'operator-fields',
                   pageBuilder: (c, s) => const NoTransitionPage(child: OperatorFieldsScreen()),
+                ),
+              ],
+            ),
+          ]),
+          // Branch 13 — Catalogs
+          StatefulShellBranch(routes: [
+            GoRoute(
+              path: '/catalogs',
+              pageBuilder: (context, state) => const NoTransitionPage(
+                child: CatalogsScreen(),
+              ),
+              routes: [
+                GoRoute(
+                  path: ':catalogSlug',
+                  pageBuilder: (context, state) {
+                    final slug = state.pathParameters['catalogSlug'] ?? '';
+                    return NoTransitionPage(
+                      child: CatalogDetailPlaceholder(slug: slug),
+                    );
+                  },
                 ),
               ],
             ),

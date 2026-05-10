@@ -108,6 +108,7 @@ const _kRouteBranchIndex = {
   '/channels':      10,
   '/connections':   11,
   '/settings':      12,
+  '/catalogs':      13,
 };
 
 // ── TOPBAR ────────────────────────────────────────────────────────────────────
@@ -799,6 +800,15 @@ class _Sidebar extends ConsumerWidget {
                             collapsed: collapsed,
                             navigationShell: navigationShell,
                           ),
+                        if (hasPermission(ref, 'catalogs', 'view'))
+                          _NavItem(
+                            icon: Icons.folder_copy_outlined,
+                            label: 'Catálogos',
+                            route: '/catalogs',
+                            currentRoute: currentRoute,
+                            collapsed: collapsed,
+                            navigationShell: navigationShell,
+                          ),
                         const SizedBox(height: 4),
                         // ── Configuración ─────────────────────────────────
                         if (hasPermission(ref, 'settings', 'view') ||
@@ -847,7 +857,6 @@ class _Sidebar extends ConsumerWidget {
                         // ── Próximamente (comentado) ──────────────────────
                         // _NavSection(label: 'Próximamente', collapsed: collapsed),
                         // _DisabledNavItem(icon: Icons.bar_chart_rounded, label: 'Dashboards', collapsed: collapsed),
-                        // _DisabledNavItem(icon: Icons.group_work_outlined, label: 'Catálogo', collapsed: collapsed),
                       ],
                     ),
                   ),
