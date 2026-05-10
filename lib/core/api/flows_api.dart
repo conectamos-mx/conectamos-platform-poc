@@ -70,17 +70,19 @@ class FlowsApi {
     bool? sendProactive,
     String? prerequisiteFlowSlug,
     bool clearPrerequisite = false,
+    List<String>? allowedRoleIds,
   }) async {
     final body = <String, dynamic>{
-      'name':            ?name,
-      'slug':            ?slug,
-      'description':     ?description,
-      'is_active':       ?isActive,
-      'fields':          ?fields,
-      'behavior':        ?behavior,
-      'on_complete':     ?onComplete,
-      'trigger_sources': ?triggerSources,
-      'send_proactive':  ?sendProactive,
+      'name':              ?name,
+      'slug':              ?slug,
+      'description':       ?description,
+      'is_active':         ?isActive,
+      'fields':            ?fields,
+      'behavior':          ?behavior,
+      'on_complete':       ?onComplete,
+      'trigger_sources':   ?triggerSources,
+      'send_proactive':    ?sendProactive,
+      'allowed_role_ids':  ?allowedRoleIds,
     };
     if (clearPrerequisite) {
       body['prerequisite_flow_slug'] = null;

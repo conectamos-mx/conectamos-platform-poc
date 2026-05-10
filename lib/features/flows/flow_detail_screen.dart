@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/flows_api.dart';
+import '../../core/api/operator_roles_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -147,6 +148,10 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
   String? _prerequisiteFlowSlug;
   List<Map<String, dynamic>> _workerFlows = [];
 
+  // Roles autorizados
+  List<String> _allowedRoleIds = [];
+  List<Map<String, dynamic>> _availableRoles = [];
+
   @override
   void initState() {
     super.initState();
@@ -170,10 +175,17 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
       _error = null;
     });
     try {
-      final flow = await FlowsApi.getFlow(
-        flowId: widget.flowId,
-      );
+      final tenantId = ref.read(activeTenantIdProvider);
+      final results = await Future.wait([
+        FlowsApi.getFlow(flowId: widget.flowId),
+        OperatorRolesApi.listRoles(tenantId: tenantId),
+      ]);
       if (!mounted) return;
+      final flow = results[0] as Map<String, dynamic>;
+      final roles = List<Map<String, dynamic>>.from(
+          (results[1] as List)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e)));
       final rawFields = flow['fields'];
       final fields = rawFields is List
           ? List<Map<String, dynamic>>.from(
@@ -204,6 +216,9 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
         _actions = actions;
         _sendProactive = (flow['send_proactive'] as bool?) ?? true;
         _prerequisiteFlowSlug = flow['prerequisite_flow_slug'] as String?;
+        _allowedRoleIds = List<String>.from(
+            (flow['allowed_role_ids'] as List? ?? []).map((e) => e.toString()));
+        _availableRoles = roles;
         _nameCtrl.text = flow['name'] as String? ?? '';
         _descCtrl.text = flow['description'] as String? ?? '';
         _loading = false;
@@ -250,6 +265,7 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
         sendProactive: _sendProactive,
         prerequisiteFlowSlug: _prerequisiteFlowSlug,
         clearPrerequisite: _prerequisiteFlowSlug == null,
+        allowedRoleIds: _allowedRoleIds,
       );
       if (!mounted) return;
       final rawFields = updated['fields'];
@@ -509,8 +525,14 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
             flowId: widget.flowId,
             tenantId: ref.read(activeTenantIdProvider),
             sendProactive: _sendProactive,
+            availableRoles: _availableRoles,
+            allowedRoleIds: _allowedRoleIds,
             onChanged: (updated) {
               setState(() => _conditions = updated);
+              _save(silent: true);
+            },
+            onAllowedRoleIdsChanged: (updated) {
+              setState(() => _allowedRoleIds = updated);
               _save(silent: true);
             },
           ),
@@ -1772,7 +1794,10 @@ class _ComportamientoTab extends StatefulWidget {
     required this.flowId,
     required this.tenantId,
     required this.sendProactive,
+    required this.availableRoles,
+    required this.allowedRoleIds,
     required this.onChanged,
+    required this.onAllowedRoleIdsChanged,
   });
 
   final List<Map<String, dynamic>> conditions;
@@ -1782,7 +1807,10 @@ class _ComportamientoTab extends StatefulWidget {
   final String flowId;
   final String tenantId;
   final bool sendProactive;
+  final List<Map<String, dynamic>> availableRoles;
+  final List<String> allowedRoleIds;
   final ValueChanged<List<Map<String, dynamic>>> onChanged;
+  final ValueChanged<List<String>> onAllowedRoleIdsChanged;
 
   @override
   State<_ComportamientoTab> createState() => _ComportamientoTabState();
@@ -1791,6 +1819,7 @@ class _ComportamientoTab extends StatefulWidget {
 class _ComportamientoTabState extends State<_ComportamientoTab> {
   late List<Map<String, dynamic>> _conditions;
   late bool _sendProactive;
+  late List<String> _allowedRoleIds;
   bool _savingProactive = false;
 
   @override
@@ -1798,6 +1827,7 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
     super.initState();
     _conditions = List.from(widget.conditions);
     _sendProactive = widget.sendProactive;
+    _allowedRoleIds = List.from(widget.allowedRoleIds);
   }
 
   @override
@@ -1808,6 +1838,9 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
     }
     if (old.sendProactive != widget.sendProactive) {
       _sendProactive = widget.sendProactive;
+    }
+    if (old.allowedRoleIds != widget.allowedRoleIds) {
+      _allowedRoleIds = List.from(widget.allowedRoleIds);
     }
     // When conversational is removed from trigger sources, auto-disable
     // send_proactive and persist immediately.
@@ -2041,6 +2074,90 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
             ),
             const SizedBox(height: 24),
           ],
+          // ── Roles autorizados ────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.ctSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.ctBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Roles con acceso',
+                  style: TextStyle(
+                    fontFamily: 'Geist',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ctText,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Solo los operadores con estos roles podrán iniciar este flujo. Si no se selecciona ninguno, todos los roles tienen acceso.',
+                  style: TextStyle(
+                    fontFamily: 'Geist',
+                    fontSize: 12,
+                    color: AppColors.ctText2,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (widget.availableRoles.isEmpty)
+                  const Text(
+                    'No hay roles definidos. Crea roles en Operadores → Roles.',
+                    style: TextStyle(
+                      fontFamily: 'Geist',
+                      fontSize: 12,
+                      color: AppColors.ctText3,
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: widget.availableRoles.map((role) {
+                      final id = role['id'] as String? ?? '';
+                      final label = role['label'] as String? ?? id;
+                      final color = _hexColor(role['color'] as String?);
+                      final selected = _allowedRoleIds.contains(id);
+                      return FilterChip(
+                        label: Text(
+                          label,
+                          style: const TextStyle(
+                            fontFamily: 'Geist',
+                            fontSize: 12,
+                          ),
+                        ),
+                        selected: selected,
+                        selectedColor: color.withValues(alpha: 0.15),
+                        checkmarkColor: color,
+                        backgroundColor: AppColors.ctBg,
+                        side: BorderSide(
+                          color: selected ? color : AppColors.ctBorder,
+                        ),
+                        onSelected: widget.canManage
+                            ? (v) {
+                                setState(() {
+                                  if (v) {
+                                    _allowedRoleIds = [..._allowedRoleIds, id];
+                                  } else {
+                                    _allowedRoleIds = _allowedRoleIds
+                                        .where((r) => r != id)
+                                        .toList();
+                                  }
+                                });
+                                widget.onAllowedRoleIdsChanged(
+                                    List.from(_allowedRoleIds));
+                              }
+                            : null,
+                      );
+                    }).toList(),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );
