@@ -22,6 +22,7 @@ const _kAllPermissions = {
   'users.view', 'users.manage',
   'dashboards.view', 'dashboards.manage',
   'catalogs.view', 'catalogs.manage',
+  'operator_roles.view', 'operator_roles.manage',
 };
 
 // ── Rol del usuario autenticado en el tenant activo ───────────────────────────
@@ -179,6 +180,8 @@ const kPermLabels = <String, String>{
   'dashboards.manage':    'Gestionar dashboards',
   'catalogs.view':        'Ver catálogos',
   'catalogs.manage':      'Gestionar catálogos',
+  'operator_roles.view':   'Ver roles de operadores',
+  'operator_roles.manage': 'Gestionar roles de operadores',
   'webhook_secrets.view': 'Ver webhook secrets',
 };
 
@@ -194,6 +197,7 @@ const _kPrerequisites = <String, String>{
   'settings.manage':      'settings.view',
   'users.manage':         'users.view',
   'catalogs.manage':      'catalogs.view',
+  'operator_roles.manage': 'operator_roles.view',
 };
 
 // ── Estado del editor ─────────────────────────────────────────────────────────

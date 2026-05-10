@@ -16,6 +16,7 @@ const _kPermGroups = [
   (label: 'Usuarios',       keys: ['users.view', 'users.manage']),
   (label: 'Escalaciones',   keys: ['escalations.view', 'escalations.manage']),
   (label: 'Catálogos',     keys: ['catalogs.view', 'catalogs.manage']),
+  (label: 'Roles de operadores', keys: ['operator_roles.view', 'operator_roles.manage']),
   (label: 'Dashboards',     keys: ['dashboards.view', 'dashboards.manage']),
   (label: 'Ejecuciones',    keys: ['flow_executions.view_all', 'flow_executions.execute_dashboard']),
   (label: 'Integraciones',  keys: ['flow_integrations.view', 'flow_integrations.manage']),
