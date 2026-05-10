@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/catalogs_api.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/api/operator_roles_api.dart';
+import '../../core/constants/field_types.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -87,20 +89,12 @@ IconData _fieldIcon(String? type) {
       return Icons.photo_camera_outlined;
     case 'location':
       return Icons.location_on_outlined;
+    case 'asset_ref':
+      return Icons.inventory_2_outlined;
     default:
       return Icons.short_text;
   }
 }
-
-const _kFieldTypes = [
-  ('text', 'Texto'),
-  ('number', 'Número'),
-  ('date', 'Fecha'),
-  ('boolean', 'Sí / No'),
-  ('select', 'Selección'),
-  ('photo', 'Foto'),
-  ('location', 'Ubicación'),
-];
 
 const _kTriggerSources = [
   ('conversational', 'Conversacional'),
@@ -1072,7 +1066,7 @@ class _FieldRow extends StatelessWidget {
     final type = field['type'] as String? ?? 'text';
     final required = field['required'] as bool? ?? false;
 
-    final typeLabel = _kFieldTypes
+    final typeLabel = kFieldTypes
         .where((e) => e.$1 == type)
         .map((e) => e.$2)
         .firstOrNull ?? type;
@@ -1217,7 +1211,13 @@ class _FieldDialogState extends State<_FieldDialog> {
   final _optionCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
 
+  // asset_ref type state
+  String? _catalogSlug;
+  List<Map<String, dynamic>> _availableCatalogs = [];
+  bool _loadingCatalogs = false;
+
   bool get _isEdit => widget.field != null;
+  bool get _assetRefValid => _type != 'asset_ref' || _catalogSlug != null;
 
   String get _fieldKey => _fieldKeyify(_labelCtrl.text.trim());
   bool get _fieldKeyValid => _fieldKey.length >= 2;
@@ -1264,8 +1264,10 @@ class _FieldDialogState extends State<_FieldDialog> {
       }
       if (_staticOptions.isNotEmpty && ds == null) _dataSourceBase = 'static';
     }
+    _catalogSlug = widget.field?['catalog_slug'] as String?;
     _labelCtrl.addListener(_onLabelChanged);
     if (_type == 'select') _loadFlows();
+    if (_type == 'asset_ref') _loadCatalogs();
   }
 
   void _onLabelChanged() => setState(() {});
@@ -1292,6 +1294,21 @@ class _FieldDialogState extends State<_FieldDialog> {
     }
   }
 
+  Future<void> _loadCatalogs() async {
+    if (_loadingCatalogs) return;
+    setState(() => _loadingCatalogs = true);
+    try {
+      final cats = await CatalogsApi.listCatalogs(tenantId: widget.tenantId);
+      if (!mounted) return;
+      setState(() => _availableCatalogs = cats);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _availableCatalogs = []);
+    } finally {
+      if (mounted) setState(() => _loadingCatalogs = false);
+    }
+  }
+
   @override
   void dispose() {
     _labelCtrl.removeListener(_onLabelChanged);
@@ -1312,7 +1329,7 @@ class _FieldDialogState extends State<_FieldDialog> {
 
   void _submit() {
     final label = _labelCtrl.text.trim();
-    if (label.isEmpty || !_fieldKeyValid || !_selectValid) return;
+    if (label.isEmpty || !_fieldKeyValid || !_selectValid || !_assetRefValid) return;
 
     final updated = Map<String, dynamic>.from(widget.field ?? {});
     updated['label'] = label;
@@ -1339,6 +1356,11 @@ class _FieldDialogState extends State<_FieldDialog> {
       updated.remove('data_source');
       updated.remove('fill_strategy');
       updated.remove('options');
+    }
+    if (_type == 'asset_ref') {
+      updated['catalog_slug'] = _catalogSlug;
+    } else {
+      updated.remove('catalog_slug');
     }
     if (!_isEdit || updated['id'] == null) {
       updated['id'] =
@@ -1444,7 +1466,7 @@ class _FieldDialogState extends State<_FieldDialog> {
                   isExpanded: true,
                   underline: const SizedBox.shrink(),
                   dropdownColor: AppColors.ctSurface,
-                  items: _kFieldTypes.map((entry) {
+                  items: kFieldTypes.map((entry) {
                     final (value, label) = entry;
                     return DropdownMenuItem(
                       value: value,
@@ -1463,9 +1485,15 @@ class _FieldDialogState extends State<_FieldDialog> {
                   }).toList(),
                   onChanged: (v) {
                     if (v != null) {
-                      setState(() => _type = v);
+                      setState(() {
+                        _type = v;
+                        if (v != 'asset_ref') _catalogSlug = null;
+                      });
                       if (v == 'select' && _availableFlows.isEmpty) {
                         _loadFlows();
+                      }
+                      if (v == 'asset_ref' && _availableCatalogs.isEmpty) {
+                        _loadCatalogs();
                       }
                     }
                   },
@@ -1711,6 +1739,82 @@ class _FieldDialogState extends State<_FieldDialog> {
                   ),
                 ),
               ],
+              // Catalog selector (asset_ref type only)
+              if (_type == 'asset_ref') ...[
+                const SizedBox(height: 14),
+                const Text(
+                  'Catálogo',
+                  style: AppTextStyles.btnSecondary,
+                ),
+                const SizedBox(height: 6),
+                if (_loadingCatalogs)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 10),
+                      child: CircularProgressIndicator(
+                          color: AppColors.ctTeal, strokeWidth: 2),
+                    ),
+                  )
+                else if (_availableCatalogs.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.ctBorder),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'No hay catálogos configurados. Crea uno en Catálogos.',
+                      style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+                    ),
+                  )
+                else
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.ctSurface2,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _catalogSlug == null && !_assetRefValid
+                            ? AppColors.ctDanger
+                            : AppColors.ctBorder2,
+                      ),
+                    ),
+                    child: DropdownButton<String>(
+                      value: _catalogSlug,
+                      isExpanded: true,
+                      underline: const SizedBox.shrink(),
+                      dropdownColor: AppColors.ctSurface,
+                      hint: const Text(
+                        'Selecciona un catálogo',
+                        style: TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 13,
+                          color: AppColors.ctText2,
+                        ),
+                      ),
+                      items: _availableCatalogs.map((cat) {
+                        final slug = cat['slug'] as String? ?? '';
+                        final name = cat['name'] as String? ?? slug;
+                        return DropdownMenuItem<String>(
+                          value: slug,
+                          child: Text(
+                            name,
+                            style: const TextStyle(
+                              fontFamily: 'Geist',
+                              fontSize: 13,
+                              color: AppColors.ctText,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (v) => setState(() => _catalogSlug = v),
+                    ),
+                  ),
+              ],
+
               const SizedBox(height: 14),
 
               // Required toggle
