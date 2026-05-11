@@ -23,6 +23,7 @@ const _kAllPermissions = {
   'dashboards.view', 'dashboards.manage',
   'catalogs.view', 'catalogs.manage',
   'assignments.view', 'assignments.manage',
+  'assignment_types.view', 'assignment_types.manage',
   'operator_roles.view', 'operator_roles.manage',
 };
 
