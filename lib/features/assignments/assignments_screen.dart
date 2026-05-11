@@ -85,10 +85,16 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       final tenantId = ref.read(activeTenantIdProvider);
-      final data = await AssignmentsApi.getAssignments(
-        tenantId: tenantId,
-        scopeDate: _isoDate(_currentMonday),
-      );
+      final monday = _currentMonday;
+      final futures = List.generate(7, (i) {
+        final day = monday.add(Duration(days: i));
+        return AssignmentsApi.getAssignments(
+          tenantId: tenantId,
+          scopeDate: _isoDate(day),
+        );
+      });
+      final results = await Future.wait(futures);
+      final data = results.expand((list) => list).toList();
       if (!mounted) return;
       setState(() { _assignments = data; _loading = false; });
     } catch (e) {
