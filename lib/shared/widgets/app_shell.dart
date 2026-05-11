@@ -741,6 +741,15 @@ class _Sidebar extends ConsumerWidget {
                             collapsed: collapsed,
                             navigationShell: navigationShell,
                           ),
+                        if (hasPermission(ref, 'assignments', 'view'))
+                          _NavItem(
+                            icon: Icons.calendar_month_outlined,
+                            label: 'Asignaciones',
+                            route: '/assignments',
+                            currentRoute: currentRoute,
+                            collapsed: collapsed,
+                            navigationShell: navigationShell,
+                          ),
                         _NavItem(
                           icon: Icons.chat_bubble_outline_rounded,
                           label: 'Conversaciones',

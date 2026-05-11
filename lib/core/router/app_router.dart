@@ -20,6 +20,9 @@ import '../../features/config/settings_screen.dart';
 import '../../features/settings/operator_fields_screen.dart';
 import '../../features/config/ai_workers_screen.dart';
 import '../../features/config/workflows_screen.dart';
+import '../../features/assignments/assignment_sources_screen.dart';
+import '../../features/assignments/assignment_types_screen.dart';
+import '../../features/assignments/assignments_screen.dart';
 import '../../features/catalogs/catalog_detail_screen.dart';
 import '../../features/catalogs/catalogs_screen.dart';
 import '../../features/flows/all_executions_screen.dart';
@@ -41,6 +44,7 @@ const _kRoutePermissions = {
   '/settings':     'settings.view',
   '/workers':      'settings.manage',
   '/catalogs':     'catalogs.view',
+  '/assignments':  'assignments.view',
   '/broadcast':    'broadcasts.send',
   '/escalaciones': 'escalations.view',
 };
@@ -288,6 +292,23 @@ final routerProvider = Provider<GoRouter>((ref) {
                       child: CatalogDetailScreen(slug: slug),
                     );
                   },
+                ),
+              ],
+            ),
+          ]),
+          // Branch 14 — Assignments
+          StatefulShellBranch(routes: [
+            GoRoute(
+              path: '/assignments',
+              pageBuilder: (c, s) => const NoTransitionPage(child: AssignmentsScreen()),
+              routes: [
+                GoRoute(
+                  path: 'types',
+                  pageBuilder: (c, s) => const NoTransitionPage(child: AssignmentTypesScreen()),
+                ),
+                GoRoute(
+                  path: 'sources',
+                  pageBuilder: (c, s) => const NoTransitionPage(child: AssignmentSourcesScreen()),
                 ),
               ],
             ),
