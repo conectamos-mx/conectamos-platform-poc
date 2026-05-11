@@ -402,7 +402,25 @@ class _FieldsBlockState extends State<_FieldsBlock> {
       fv['value_media_url'] != null ||
       fv['value_jsonb'] != null;
 
-  static dynamic _resolveValue(String type, Map<String, dynamic> fv) {
+  static dynamic _resolveValue(
+    String type,
+    Map<String, dynamic> fv, {
+    Map<String, dynamic>? assetsAttached,
+    String? fieldKey,
+  }) {
+    if (type == 'asset_ref') {
+      if (assetsAttached != null && fieldKey != null) {
+        final asset = assetsAttached[fieldKey];
+        if (asset is Map) {
+          return (asset['display_text'] as String?) ??
+              (asset['item_id'] as String?);
+        }
+      }
+      // Fallback: value_jsonb → item_id, or value_text
+      final jsonb = fv['value_jsonb'];
+      if (jsonb is Map) return jsonb['item_id'] as String?;
+      return fv['value_text'];
+    }
     return switch (type) {
       'number'             => fv['value_numeric'],
       'media' || 'photo'   => _resolveMedia(fv),
@@ -564,6 +582,10 @@ class _FieldsBlockState extends State<_FieldsBlock> {
       return fv != null && _fvHasValue(fv.cast<String, dynamic>());
     }).length;
 
+    // assets_attached keyed by field_key
+    final assetsAttached = (widget.exec['assets_attached'] as Map?)
+        ?.cast<String, dynamic>();
+
     // Resolve values and pending list
     final values = <String, dynamic>{};
     final pending = <String>[];
@@ -574,7 +596,12 @@ class _FieldsBlockState extends State<_FieldsBlock> {
       if (fv == null || !_fvHasValue(fv)) {
         pending.add(key);
       } else {
-        values[key] = _resolveValue(field['type'] as String? ?? 'text', fv);
+        values[key] = _resolveValue(
+          field['type'] as String? ?? 'text',
+          fv,
+          assetsAttached: assetsAttached,
+          fieldKey: key,
+        );
       }
     }
 
@@ -602,7 +629,7 @@ class _FieldsBlockState extends State<_FieldsBlock> {
     const typePriority = <String, int>{
       'text': 0, 'number': 1, 'date': 2,
       'boolean': 3, 'yesno': 3,
-      'select': 4, 'location': 5,
+      'select': 4, 'asset_ref': 5, 'location': 6,
     };
     final visibleFields = (fields
         .where((f) {
@@ -717,6 +744,13 @@ class _FieldsBlockState extends State<_FieldsBlock> {
         if (legacyKeys.isNotEmpty) ...[
           const SizedBox(height: 22),
           _LegacyFieldsCard(slugs: legacyKeys, values: legacyValues),
+        ],
+        if (assetsAttached != null && assetsAttached.isNotEmpty) ...[
+          const SizedBox(height: 22),
+          _AssetsAttachedCard(
+            assetsAttached: assetsAttached,
+            fields: fields,
+          ),
         ],
       ],
     );
@@ -1031,6 +1065,135 @@ class _LegacyFieldsCard extends StatelessWidget {
                   ],
                 ),
               )),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Assets Attached Card ──────────────────────────────────────────────────────
+
+class _AssetsAttachedCard extends StatelessWidget {
+  const _AssetsAttachedCard({
+    required this.assetsAttached,
+    required this.fields,
+  });
+
+  final Map<String, dynamic> assetsAttached;
+  final List<Map<String, dynamic>> fields;
+
+  @override
+  Widget build(BuildContext context) {
+    // Build label lookup from flow fields
+    final labelByKey = <String, String>{
+      for (final f in fields)
+        if (f['key'] is String) f['key'] as String: (f['label'] as String?) ?? f['key'] as String,
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: AppColors.ctBorder),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0A0F172A), offset: Offset(0, 1), blurRadius: 2),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.inventory_2_outlined,
+                  size: 15, color: AppColors.ctTeal),
+              const SizedBox(width: 6),
+              Text(
+                'Assets referenciados',
+                style: AppFonts.geist(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ctNavy,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...assetsAttached.entries.map((entry) {
+            final fieldKey = entry.key;
+            final asset = entry.value is Map
+                ? (entry.value as Map).cast<String, dynamic>()
+                : <String, dynamic>{};
+            final label = labelByKey[fieldKey] ?? fieldKey;
+            final displayText = asset['display_text'] as String? ??
+                asset['item_id'] as String? ??
+                '—';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 160,
+                    child: Text(
+                      label,
+                      style: AppFonts.geist(
+                        fontSize: 12,
+                        color: const Color(0xFF475569),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Ver detalle de catálogo no disponible aún'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.ctTeal.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: AppColors.ctTeal.withValues(alpha: 0.35)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.link_rounded,
+                                  size: 12, color: AppColors.ctTeal),
+                              const SizedBox(width: 5),
+                              Flexible(
+                                child: Text(
+                                  displayText,
+                                  style: AppFonts.geist(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.ctTeal,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );
