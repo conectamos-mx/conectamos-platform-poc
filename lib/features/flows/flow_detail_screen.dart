@@ -362,6 +362,7 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
         field: field,
         tenantId: ref.read(activeTenantIdProvider),
         tenantWorkerId: _flow?['tenant_worker_id'] as String? ?? '',
+        flowFields: _fields.where((f) => f['id'] != field?['id']).toList(),
         onSaved: (updated) {
           setState(() {
             if (index != null) {
@@ -1176,12 +1177,14 @@ class _FieldDialog extends StatefulWidget {
     required this.onSaved,
     required this.tenantId,
     required this.tenantWorkerId,
+    required this.flowFields,
     this.field,
   });
 
   final Map<String, dynamic>? field;
   final String tenantId;
   final String tenantWorkerId;
+  final List<Map<String, dynamic>> flowFields;
   final void Function(Map<String, dynamic>) onSaved;
 
   @override
@@ -1218,6 +1221,11 @@ class _FieldDialogState extends State<_FieldDialog> {
   bool _loadingCatalogs = false;
   String? _selectedItemId;
   String? _selectedItemDisplay;
+
+  // show_if condition state
+  String? _showIfField;
+  String? _showIfOp;
+  final _showIfValueCtrl = TextEditingController();
 
   bool get _isEdit => widget.field != null;
   bool get _assetRefValid => _type != 'asset_ref' || _catalogSlug != null;
@@ -1270,6 +1278,12 @@ class _FieldDialogState extends State<_FieldDialog> {
     _catalogSlug = widget.field?['catalog_slug'] as String?;
     _selectedItemId = widget.field?['item_id'] as String?;
     _selectedItemDisplay = widget.field?['item_display'] as String?;
+    final showIf = widget.field?['show_if'] as Map<String, dynamic>?;
+    if (showIf != null) {
+      _showIfField = showIf['field'] as String?;
+      _showIfOp = showIf['op'] as String?;
+      _showIfValueCtrl.text = showIf['value'] as String? ?? '';
+    }
     _labelCtrl.addListener(_onLabelChanged);
     if (_type == 'select') _loadFlows();
     if (_type == 'asset_ref') _loadCatalogs();
@@ -1320,6 +1334,7 @@ class _FieldDialogState extends State<_FieldDialog> {
     _labelCtrl.dispose();
     _optionCtrl.dispose();
     _descCtrl.dispose();
+    _showIfValueCtrl.dispose();
     super.dispose();
   }
 
@@ -1375,6 +1390,15 @@ class _FieldDialogState extends State<_FieldDialog> {
       updated.remove('catalog_slug');
       updated.remove('item_id');
       updated.remove('item_display');
+    }
+    if (_showIfField != null && _showIfOp != null) {
+      updated['show_if'] = {
+        'field': _showIfField,
+        'op': _showIfOp,
+        'value': _showIfValueCtrl.text.trim(),
+      };
+    } else {
+      updated.remove('show_if');
     }
     if (!_isEdit || updated['id'] == null) {
       updated['id'] =
@@ -1879,6 +1903,218 @@ class _FieldDialogState extends State<_FieldDialog> {
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+
+              // show_if condition
+              if (widget.flowFields.isNotEmpty)
+                Theme(
+                  data: Theme.of(context).copyWith(
+                    dividerColor: Colors.transparent,
+                  ),
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: EdgeInsets.zero,
+                    initiallyExpanded: _showIfField != null,
+                    title: Row(
+                      children: [
+                        const Icon(Icons.visibility_outlined,
+                            size: 14, color: AppColors.ctText2),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'Condición de visibilidad',
+                          style: TextStyle(
+                            fontFamily: 'Geist',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.ctText2,
+                          ),
+                        ),
+                        if (_showIfField != null) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.ctTeal.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'activa',
+                              style: TextStyle(
+                                fontFamily: 'Geist',
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.ctTeal,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    children: [
+                      const SizedBox(height: 8),
+                      // Field selector
+                      const Text(
+                        'Mostrar este campo solo si…',
+                        style: TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 12,
+                          color: AppColors.ctText2,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.ctSurface2,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.ctBorder2),
+                        ),
+                        child: DropdownButton<String>(
+                          value: _showIfField,
+                          isExpanded: true,
+                          underline: const SizedBox.shrink(),
+                          dropdownColor: AppColors.ctSurface,
+                          hint: const Text(
+                            'Selecciona un campo',
+                            style: TextStyle(
+                              fontFamily: 'Geist',
+                              fontSize: 13,
+                              color: AppColors.ctText2,
+                            ),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: null,
+                              child: Text(
+                                '— Sin condición —',
+                                style: TextStyle(
+                                  fontFamily: 'Geist',
+                                  fontSize: 13,
+                                  color: AppColors.ctText2,
+                                ),
+                              ),
+                            ),
+                            ...widget.flowFields.map((f) {
+                              final key = f['key'] as String? ?? '';
+                              final label = f['label'] as String? ?? key;
+                              return DropdownMenuItem<String>(
+                                value: key,
+                                child: Text(
+                                  label,
+                                  style: const TextStyle(
+                                    fontFamily: 'Geist',
+                                    fontSize: 13,
+                                    color: AppColors.ctText,
+                                  ),
+                                ),
+                              );
+                            }),
+                          ],
+                          onChanged: (v) => setState(() {
+                            _showIfField = v;
+                            if (v == null) _showIfOp = null;
+                          }),
+                        ),
+                      ),
+                      if (_showIfField != null) ...[
+                        const SizedBox(height: 8),
+                        // Operator selector
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.ctSurface2,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.ctBorder2),
+                          ),
+                          child: DropdownButton<String>(
+                            value: _showIfOp,
+                            isExpanded: true,
+                            underline: const SizedBox.shrink(),
+                            dropdownColor: AppColors.ctSurface,
+                            hint: const Text(
+                              'Operador',
+                              style: TextStyle(
+                                fontFamily: 'Geist',
+                                fontSize: 13,
+                                color: AppColors.ctText2,
+                              ),
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'eq',
+                                child: Text('es igual a',
+                                    style: TextStyle(
+                                        fontFamily: 'Geist',
+                                        fontSize: 13,
+                                        color: AppColors.ctText)),
+                              ),
+                              DropdownMenuItem(
+                                value: 'neq',
+                                child: Text('es distinto de',
+                                    style: TextStyle(
+                                        fontFamily: 'Geist',
+                                        fontSize: 13,
+                                        color: AppColors.ctText)),
+                              ),
+                              DropdownMenuItem(
+                                value: 'in',
+                                child: Text('está entre (separado por comas)',
+                                    style: TextStyle(
+                                        fontFamily: 'Geist',
+                                        fontSize: 13,
+                                        color: AppColors.ctText)),
+                              ),
+                              DropdownMenuItem(
+                                value: 'not_in',
+                                child: Text('no está entre (separado por comas)',
+                                    style: TextStyle(
+                                        fontFamily: 'Geist',
+                                        fontSize: 13,
+                                        color: AppColors.ctText)),
+                              ),
+                            ],
+                            onChanged: (v) =>
+                                setState(() => _showIfOp = v),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // Value input
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.ctSurface2,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.ctBorder2),
+                          ),
+                          child: TextField(
+                            controller: _showIfValueCtrl,
+                            style: AppTextStyles.body,
+                            decoration: const InputDecoration(
+                              hintText: 'Valor…',
+                              hintStyle: TextStyle(
+                                fontFamily: 'Geist',
+                                fontSize: 13,
+                                color: AppColors.ctText3,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding:
+                                  EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 24),
 
               // Buttons
