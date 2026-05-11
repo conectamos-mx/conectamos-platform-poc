@@ -7,25 +7,32 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/screen_header.dart';
 
-// ── Color tokens por tipo de asignación ───────────────────────────────────────
+// ── Helpers de color/label por tipo (desde API) ───────────────────────────────
 
-const _kTypeColors = <String, Color>{
-  'crum_daily':       AppColors.ctTeal,
-  'vehicle_daily':    Color(0xFFF59E0B),
-  'route_assignment': Color(0xFF8B5CF6),
-};
+Color _hexToColor(String? hex) {
+  if (hex == null || hex.isEmpty) return AppColors.ctText2;
+  final clean = hex.replaceAll('#', '');
+  if (clean.length != 6) return AppColors.ctText2;
+  return Color(int.parse('FF$clean', radix: 16));
+}
 
-const _kTypeLabels = <String, String>{
-  'crum_daily':       'CRUM Diario',
-  'vehicle_daily':    'Vehículo Diario',
-  'route_assignment': 'Ruta',
-};
+Color _typeColor(String? type, List<Map<String, dynamic>> types) {
+  if (type == null) return AppColors.ctText2;
+  final entry = types.firstWhere(
+    (t) => t['slug'] == type,
+    orElse: () => {},
+  );
+  return _hexToColor(entry['color'] as String?);
+}
 
-Color _typeColor(String? type) =>
-    _kTypeColors[type] ?? AppColors.ctText2;
-
-String _typeLabel(String? type) =>
-    _kTypeLabels[type] ?? (type ?? '—');
+String _typeLabel(String? type, List<Map<String, dynamic>> types) {
+  if (type == null) return '—';
+  final entry = types.firstWhere(
+    (t) => t['slug'] == type,
+    orElse: () => {},
+  );
+  return entry['label'] as String? ?? type;
+}
 
 // ── Helpers de fecha ──────────────────────────────────────────────────────────
 
@@ -64,6 +71,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
   String _view = 'calendar'; // 'calendar' | 'table'
   int _weekOffset = 0;
   List<Map<String, dynamic>> _assignments = [];
+  List<Map<String, dynamic>> _assignmentTypes = [];
   bool _loading = true;
   String? _error;
   DateTime? _drawerDay;
@@ -86,17 +94,24 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
     try {
       final tenantId = ref.read(activeTenantIdProvider);
       final monday = _currentMonday;
-      final futures = List.generate(7, (i) {
+      final dayFutures = List.generate(7, (i) {
         final day = monday.add(Duration(days: i));
         return AssignmentsApi.getAssignments(
           tenantId: tenantId,
           scopeDate: _isoDate(day),
         );
       });
-      final results = await Future.wait(futures);
-      final data = results.expand((list) => list).toList();
+      final typesFuture = AssignmentsApi.getAssignmentTypes(tenantId: tenantId);
+      final dayResultsFuture = Future.wait(dayFutures);
+      final types = await typesFuture;
+      final dayResults = await dayResultsFuture;
+      final data = dayResults.expand((list) => list).toList();
       if (!mounted) return;
-      setState(() { _assignments = data; _loading = false; });
+      setState(() {
+        _assignments = data;
+        _assignmentTypes = types;
+        _loading = false;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() { _error = e.toString(); _loading = false; });
@@ -137,6 +152,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
             view: _view,
             weekOffset: _weekOffset,
             currentMonday: _currentMonday,
+            types: _assignmentTypes,
             onViewChanged: (v) => setState(() => _view = v),
             onWeekBack: () {
               setState(() => _weekOffset--);
@@ -164,6 +180,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
                         today: _today,
                         assignments: _assignments,
                         loading: _loading,
+                        types: _assignmentTypes,
                         assignmentsForDay: _assignmentsForDay,
                         onDayTap: (day) =>
                             setState(() => _drawerDay = day),
@@ -172,6 +189,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
                         assignments: _assignments,
                         loading: _loading,
                         canManage: canManage,
+                        types: _assignmentTypes,
                         onDelete: (id) async {
                           final tenantId = ref.read(activeTenantIdProvider);
                           await AssignmentsApi.deleteAssignment(
@@ -188,6 +206,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
           : _DayDrawer(
               day: _drawerDay!,
               assignments: _assignmentsForDay(_drawerDay!),
+              types: _assignmentTypes,
               onClose: () => setState(() => _drawerDay = null),
             ),
       // New assignment modal
@@ -201,6 +220,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
             builder: (_) => _NewAssignmentDialog(
               tenantId: ref.read(activeTenantIdProvider),
               defaultDate: _drawerDay ?? _today,
+              types: _assignmentTypes,
               onSaved: () {
                 setState(() => _showNewModal = false);
                 _loadAssignments();
@@ -229,6 +249,7 @@ class _Toolbar extends StatelessWidget {
     required this.view,
     required this.weekOffset,
     required this.currentMonday,
+    required this.types,
     required this.onViewChanged,
     required this.onWeekBack,
     required this.onWeekForward,
@@ -238,6 +259,7 @@ class _Toolbar extends StatelessWidget {
   final String view;
   final int weekOffset;
   final DateTime currentMonday;
+  final List<Map<String, dynamic>> types;
   final ValueChanged<String> onViewChanged;
   final VoidCallback onWeekBack;
   final VoidCallback onWeekForward;
@@ -309,7 +331,9 @@ class _Toolbar extends StatelessWidget {
           // Legend
           Wrap(
             spacing: 12,
-            children: _kTypeColors.entries.map((e) {
+            children: types.map((t) {
+              final color = _hexToColor(t['color'] as String?);
+              final label = t['label'] as String? ?? t['slug'] as String? ?? '';
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -317,13 +341,13 @@ class _Toolbar extends StatelessWidget {
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: e.value,
+                      color: color,
                       shape: BoxShape.circle,
                     ),
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    _kTypeLabels[e.key] ?? e.key,
+                    label,
                     style: AppFonts.geist(
                         fontSize: 11, color: AppColors.ctText2),
                   ),
@@ -420,6 +444,7 @@ class _AssignmentsCalendar extends StatelessWidget {
     required this.today,
     required this.assignments,
     required this.loading,
+    required this.types,
     required this.assignmentsForDay,
     required this.onDayTap,
   });
@@ -428,6 +453,7 @@ class _AssignmentsCalendar extends StatelessWidget {
   final DateTime today;
   final List<Map<String, dynamic>> assignments;
   final bool loading;
+  final List<Map<String, dynamic>> types;
   final List<Map<String, dynamic>> Function(DateTime) assignmentsForDay;
   final ValueChanged<DateTime> onDayTap;
 
@@ -533,7 +559,7 @@ class _AssignmentsCalendar extends StatelessWidget {
                                     CrossAxisAlignment.start,
                                 children: [
                                   ...visible.map((a) =>
-                                      _AssignmentChip(assignment: a)),
+                                      _AssignmentChip(assignment: a, types: types)),
                                   if (overflow > 0)
                                     Padding(
                                       padding:
@@ -583,13 +609,14 @@ class _CalendarSkeleton extends StatelessWidget {
 // ── Assignment Chip (compact, for calendar) ───────────────────────────────────
 
 class _AssignmentChip extends StatelessWidget {
-  const _AssignmentChip({required this.assignment});
+  const _AssignmentChip({required this.assignment, required this.types});
   final Map<String, dynamic> assignment;
+  final List<Map<String, dynamic>> types;
 
   @override
   Widget build(BuildContext context) {
     final type = assignment['assignment_type'] as String?;
-    final color = _typeColor(type);
+    final color = _typeColor(type, types);
     final name = assignment['operator_name'] as String? ?? '—';
 
     return Container(
@@ -618,8 +645,9 @@ class _AssignmentChip extends StatelessWidget {
 // ── Assignment Chip Full (for drawer) ─────────────────────────────────────────
 
 class _AssignmentChipFull extends StatelessWidget {
-  const _AssignmentChipFull({required this.assignment});
+  const _AssignmentChipFull({required this.assignment, required this.types});
   final Map<String, dynamic> assignment;
+  final List<Map<String, dynamic>> types;
 
   String _initials(String name) {
     final parts = name.trim().split(' ');
@@ -632,7 +660,7 @@ class _AssignmentChipFull extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final type = assignment['assignment_type'] as String?;
-    final color = _typeColor(type);
+    final color = _typeColor(type, types);
     final name = assignment['operator_name'] as String? ?? '—';
     final phone = assignment['operator_phone'] as String?;
     final source = assignment['source'] as String?;
@@ -680,7 +708,7 @@ class _AssignmentChipFull extends StatelessWidget {
                   spacing: 6,
                   runSpacing: 4,
                   children: [
-                    _TypeBadge(type: type, color: color),
+                    _TypeBadge(type: type, color: color, types: types),
                     if (source == 'google_sheets')
                       _SourceBadge(
                           label: 'Sheets',
@@ -709,9 +737,10 @@ class _AssignmentChipFull extends StatelessWidget {
 }
 
 class _TypeBadge extends StatelessWidget {
-  const _TypeBadge({required this.type, required this.color});
+  const _TypeBadge({required this.type, required this.color, required this.types});
   final String? type;
   final Color color;
+  final List<Map<String, dynamic>> types;
 
   @override
   Widget build(BuildContext context) {
@@ -723,7 +752,7 @@ class _TypeBadge extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Text(
-        _typeLabel(type),
+        _typeLabel(type, types),
         style: AppFonts.geist(
             fontSize: 10,
             fontWeight: FontWeight.w600,
@@ -761,11 +790,13 @@ class _DayDrawer extends StatelessWidget {
   const _DayDrawer({
     required this.day,
     required this.assignments,
+    required this.types,
     required this.onClose,
   });
 
   final DateTime day;
   final List<Map<String, dynamic>> assignments;
+  final List<Map<String, dynamic>> types;
   final VoidCallback onClose;
 
   static const _months = [
@@ -828,7 +859,7 @@ class _DayDrawer extends StatelessWidget {
                   : ListView(
                       padding: const EdgeInsets.all(16),
                       children: assignments
-                          .map((a) => _AssignmentChipFull(assignment: a))
+                          .map((a) => _AssignmentChipFull(assignment: a, types: types))
                           .toList(),
                     ),
             ),
@@ -846,12 +877,14 @@ class _AssignmentsTable extends StatelessWidget {
     required this.assignments,
     required this.loading,
     required this.canManage,
+    required this.types,
     required this.onDelete,
   });
 
   final List<Map<String, dynamic>> assignments;
   final bool loading;
   final bool canManage;
+  final List<Map<String, dynamic>> types;
   final void Function(String id) onDelete;
 
   @override
@@ -902,7 +935,7 @@ class _AssignmentsTable extends StatelessWidget {
                             final a = assignments[i];
                             final type =
                                 a['assignment_type'] as String?;
-                            final color = _typeColor(type);
+                            final color = _typeColor(type, types);
                             final name =
                                 a['operator_name'] as String? ?? '—';
                             final date =
@@ -964,7 +997,7 @@ class _AssignmentsTable extends StatelessWidget {
                                   Expanded(
                                     flex: 2,
                                     child: _TypeBadge(
-                                        type: type, color: color),
+                                        type: type, color: color, types: types),
                                   ),
                                   // Data
                                   Expanded(
@@ -1087,12 +1120,14 @@ class _NewAssignmentDialog extends ConsumerStatefulWidget {
   const _NewAssignmentDialog({
     required this.tenantId,
     required this.defaultDate,
+    required this.types,
     required this.onSaved,
     required this.onCancel,
   });
 
   final String tenantId;
   final DateTime defaultDate;
+  final List<Map<String, dynamic>> types;
   final VoidCallback onSaved;
   final VoidCallback onCancel;
 
@@ -1105,7 +1140,7 @@ class _NewAssignmentDialogState
     extends ConsumerState<_NewAssignmentDialog> {
   final _operatorCtrl = TextEditingController();
   final _dataCtrl = TextEditingController();
-  String _assignmentType = 'crum_daily';
+  String _assignmentType = '';
   late DateTime _scopeDate;
   bool _saving = false;
   String? _error;
@@ -1114,6 +1149,9 @@ class _NewAssignmentDialogState
   void initState() {
     super.initState();
     _scopeDate = widget.defaultDate;
+    if (widget.types.isNotEmpty) {
+      _assignmentType = widget.types.first['slug'] as String? ?? '';
+    }
   }
 
   @override
@@ -1177,21 +1215,29 @@ class _NewAssignmentDialogState
               // Type
               _DialogLabel('Tipo de asignación'),
               const SizedBox(height: 6),
-              _Dropdown<String>(
-                value: _assignmentType,
-                items: _kTypeLabels.entries
-                    .map((e) => DropdownMenuItem(
-                          value: e.key,
-                          child: Text(e.value,
+              if (widget.types.isEmpty)
+                Text(
+                  'Sin tipos configurados. Crea tipos en Configuración → Tipos.',
+                  style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2),
+                )
+              else
+                _Dropdown<String>(
+                  value: _assignmentType,
+                  items: widget.types
+                      .map((t) => DropdownMenuItem(
+                            value: t['slug'] as String? ?? '',
+                            child: Text(
+                              t['label'] as String? ?? t['slug'] as String? ?? '',
                               style: AppFonts.geist(
                                   fontSize: 13,
-                                  color: AppColors.ctText)),
-                        ))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setState(() => _assignmentType = v);
-                },
-              ),
+                                  color: AppColors.ctText),
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _assignmentType = v);
+                  },
+                ),
               const SizedBox(height: 14),
               // Date
               _DialogLabel('Fecha (scope_date)'),
