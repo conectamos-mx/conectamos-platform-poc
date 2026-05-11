@@ -10,12 +10,11 @@ import '../../shared/widgets/screen_header.dart';
 // ── Color options ─────────────────────────────────────────────────────────────
 
 const _kColorOptions = [
-  '#59E0CC',
-  '#F59E0B',
-  '#8B5CF6',
-  '#3B82F6',
-  '#EF4444',
-  '#10B981',
+  '#59E0CC', // ctTeal
+  '#F59E0B', // naranja
+  '#8B5CF6', // púrpura
+  '#EF4444', // rojo
+  '#3B82F6', // azul
 ];
 
 Color _hexColor(String hex) {
@@ -35,6 +34,7 @@ final _kInitialTypes = <Map<String, dynamic>>[
       {'key': 'crum', 'label': 'CRUM', 'type': 'text'},
     ],
     'materializes': true,
+    'is_active': true,
   },
   {
     'slug': 'vehicle_daily',
@@ -45,6 +45,7 @@ final _kInitialTypes = <Map<String, dynamic>>[
       {'key': 'vehicle_id', 'label': 'Vehículo', 'type': 'text'},
     ],
     'materializes': false,
+    'is_active': true,
   },
   {
     'slug': 'route_assignment',
@@ -55,6 +56,7 @@ final _kInitialTypes = <Map<String, dynamic>>[
       {'key': 'zone', 'label': 'Zona', 'type': 'text'},
     ],
     'materializes': false,
+    'is_active': true,
   },
 ];
 
@@ -79,6 +81,7 @@ class _AssignmentTypesScreenState
   String _editScope = 'date';
   String _editColor = '#59E0CC';
   List<Map<String, dynamic>> _editFields = [];
+  bool _editIsActive = true;
 
   // Toast
   String? _toast;
@@ -113,6 +116,7 @@ class _AssignmentTypesScreenState
       _editScope = 'date';
       _editColor = '#59E0CC';
       _editFields = [];
+      _editIsActive = true;
     });
   }
 
@@ -126,6 +130,7 @@ class _AssignmentTypesScreenState
       _editFields = ((type['fields'] as List?) ?? [])
           .map((f) => Map<String, dynamic>.from(f as Map))
           .toList();
+      _editIsActive = type['is_active'] as bool? ?? true;
     });
   }
 
@@ -147,6 +152,7 @@ class _AssignmentTypesScreenState
           .where((f) => (f['key'] as String? ?? '').isNotEmpty)
           .toList(),
       'materializes': _editingType?['materializes'] ?? false,
+      'is_active': _editIsActive,
     };
     setState(() {
       if (_isNewType) {
@@ -423,6 +429,32 @@ class _AssignmentTypesScreenState
                       ),
                     ),
                   ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const _FieldLabel('Activo'),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Habilita o deshabilita este tipo de asignación.',
+                              style: AppFonts.geist(
+                                  fontSize: 11,
+                                  color: AppColors.ctText2),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _editIsActive,
+                        onChanged: (v) =>
+                            setState(() => _editIsActive = v),
+                        activeThumbColor: AppColors.ctTeal,
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -481,12 +513,13 @@ class _TypesTable extends StatelessWidget {
             ),
             child: const Row(
               children: [
-                _ColHeader('Slug', flex: 2),
+                _ColHeader('Tipo', flex: 2),
                 _ColHeader('Label', flex: 2),
                 _ColHeader('Scope', flex: 1),
-                _ColHeader('Schema', flex: 3),
+                _ColHeader('Color', flex: 1),
+                _ColHeader('Schema', flex: 2),
                 _ColHeader('Materializa', flex: 1),
-                _ColHeader('', flex: 1),
+                _ColHeader('Acciones', flex: 1),
               ],
             ),
           ),
@@ -540,7 +573,7 @@ class _TypeRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Slug
+          // Tipo (slug chip)
           Expanded(
             flex: 2,
             child: Container(
@@ -558,59 +591,41 @@ class _TypeRow extends StatelessWidget {
               ),
             ),
           ),
-          // Label with color dot
+          // Label (no dot)
           Expanded(
             flex: 2,
-            child: Row(
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: _hexColor(colorHex),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    type['label'] as String? ?? '',
-                    style: AppFonts.geist(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.ctText),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+            child: Text(
+              type['label'] as String? ?? '',
+              style: AppFonts.geist(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ctText),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           // Scope badge
           Expanded(flex: 1, child: _ScopeBadge(scope)),
-          // Schema chips
+          // Color dot
           Expanded(
-            flex: 3,
-            child: Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: fields.map<Widget>((f) {
-                final fMap = f as Map;
-                final key = fMap['key'] as String? ?? '';
-                final ftype = fMap['type'] as String? ?? 'text';
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.ctSurface2,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '$key ($ftype)',
-                    style: AppFonts.geist(
-                        fontSize: 11, color: AppColors.ctText2),
-                  ),
-                );
-              }).toList(),
+            flex: 1,
+            child: Container(
+              width: 14,
+              height: 14,
+              decoration: BoxDecoration(
+                color: _hexColor(colorHex),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+          // Schema count
+          Expanded(
+            flex: 2,
+            child: Text(
+              fields.isEmpty
+                  ? '—'
+                  : '${fields.length} campo${fields.length == 1 ? '' : 's'}',
+              style: AppFonts.geist(
+                  fontSize: 12, color: AppColors.ctText2),
             ),
           ),
           // Materializa
@@ -813,23 +828,16 @@ class _FieldsTable extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     flex: 2,
-                    child: DropdownButtonFormField<String>(
+                    child: TextFormField(
                       initialValue: f['type'] as String? ?? 'text',
-                      isDense: true,
+                      onChanged: (v) =>
+                          onChanged(idx, {...f, 'type': v}),
                       decoration: const InputDecoration(
+                        hintText: 'text',
+                        isDense: true,
                         contentPadding: EdgeInsets.symmetric(
                             horizontal: 8, vertical: 6),
                       ),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'text', child: Text('text')),
-                        DropdownMenuItem(
-                            value: 'number', child: Text('number')),
-                        DropdownMenuItem(
-                            value: 'date', child: Text('date')),
-                      ],
-                      onChanged: (v) =>
-                          onChanged(idx, {...f, 'type': v ?? 'text'}),
                       style: AppFonts.geist(
                           fontSize: 12, color: AppColors.ctText),
                     ),
