@@ -216,40 +216,34 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(color: AppColors.ctTeal),
-        ),
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.ctTeal),
       );
     }
 
     if (_error != null || _catalog == null) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline,
-                  size: 48, color: AppColors.ctDanger),
-              const SizedBox(height: 12),
-              Text(
-                _error ?? 'No se encontró el catálogo',
-                style: AppFonts.geist(fontSize: 14, color: AppColors.ctText2),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              TextButton(onPressed: _load, child: const Text('Reintentar')),
-            ],
-          ),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline,
+                size: 48, color: AppColors.ctDanger),
+            const SizedBox(height: 12),
+            Text(
+              _error ?? 'No se encontró el catálogo',
+              style: AppFonts.geist(fontSize: 14, color: AppColors.ctText2),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            TextButton(onPressed: _load, child: const Text('Reintentar')),
+          ],
         ),
       );
     }
 
     final catalog = _catalog!;
-    return Scaffold(
-      backgroundColor: AppColors.ctBg,
-      body: Column(
-        children: [
+    return Column(
+      children: [
           _CatalogHeader(
             catalog: catalog,
             canManage: _canManage,
@@ -315,8 +309,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
               ],
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }
