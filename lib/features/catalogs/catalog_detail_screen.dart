@@ -44,6 +44,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
   Map<String, dynamic>? _catalog;
   late TabController _tabCtrl;
 
+  int _syncVersion = 0;
   bool _syncing = false;
   bool _saving = false;
   bool _hasChanges = false;
@@ -142,6 +143,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
           content: Text('Sincronización iniciada'),
           duration: Duration(milliseconds: 2000),
         ));
+        setState(() => _syncVersion++);
       }
     } catch (e) {
       if (mounted) {
@@ -248,8 +250,9 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
                   canManage: _canManage,
                 ),
                 _SyncTab(
-                  key: ValueKey(catalog['id']),
+                  key: ValueKey('${catalog['id']}_$_syncVersion'),
                   catalog: catalog,
+                  polling: _syncVersion > 0,
                 ),
                 _UsoTab(catalog: catalog),
               ],
@@ -1802,8 +1805,9 @@ class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
 // ── Tab 3 — SYNC ──────────────────────────────────────────────────────────────
 
 class _SyncTab extends ConsumerStatefulWidget {
-  const _SyncTab({super.key, required this.catalog});
+  const _SyncTab({super.key, required this.catalog, this.polling = false});
   final Map<String, dynamic> catalog;
+  final bool polling;
 
   @override
   ConsumerState<_SyncTab> createState() => _SyncTabState();
@@ -1814,12 +1818,43 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
   bool _loading = true;
   String? _error;
 
+  Timer? _pollTimer;
+  static const _pollInterval = Duration(seconds: 2);
+  static const _pollTimeout  = Duration(seconds: 60);
+  DateTime? _pollStart;
+
   String get _catalogId => widget.catalog['id'] as String? ?? '';
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadLogs());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadLogs();
+      if (widget.polling) {
+        _pollStart = DateTime.now();
+        _startPolling();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(_pollInterval, (_) async {
+      if (!mounted) { _pollTimer?.cancel(); return; }
+      if (DateTime.now().difference(_pollStart!) > _pollTimeout) {
+        _pollTimer?.cancel(); return;
+      }
+      await _loadLogs();
+      if (_logs.isNotEmpty && _logs.first['status'] != 'running') {
+        _pollTimer?.cancel();
+      }
+    });
   }
 
   Future<void> _loadLogs() async {
@@ -1871,11 +1906,42 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
         ),
       );
     }
-    return ListView.separated(
-      padding: const EdgeInsets.all(20),
-      itemCount: _logs.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (_, i) => _SyncLogRow(log: _logs[i]),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_logs.isNotEmpty && _logs.first['status'] == 'running') ...[
+          Container(
+            margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.ctTealLight,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.ctTeal.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctTeal),
+                ),
+                const SizedBox(width: 10),
+                Text('Sincronización en curso...',
+                    style: AppFonts.geist(fontSize: 13, color: AppColors.ctTealDark,
+                        fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.all(20),
+            itemCount: _logs.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (_, i) => _SyncLogRow(log: _logs[i]),
+          ),
+        ),
+      ],
     );
   }
 }
