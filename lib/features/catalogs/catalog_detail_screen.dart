@@ -47,6 +47,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
   int _syncVersion = 0;
   bool _syncing = false;
   bool _saving = false;
+  bool _deleting = false;
   bool _hasChanges = false;
   Map<String, dynamic> _pendingPatch = {};
   bool _canManage = false;
@@ -130,6 +131,57 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
     }
   }
 
+  Future<void> _doDelete() async {
+    final catalog = _catalog;
+    if (catalog == null) return;
+    final label = catalog['label'] as String? ?? catalog['slug'] as String? ?? 'este catálogo';
+    final catalogId = catalog['id'] as String? ?? '';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.ctSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text('Eliminar catálogo',
+            style: AppFonts.onest(fontSize: 16, fontWeight: FontWeight.w700,
+                color: AppColors.ctText)),
+        content: Text(
+          '¿Estás seguro de que quieres eliminar "$label"? '
+          'Esta acción no se puede deshacer.',
+          style: AppFonts.geist(fontSize: 13, color: AppColors.ctText2),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancelar',
+                style: AppFonts.geist(fontSize: 13, color: AppColors.ctText2)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Eliminar',
+                style: AppFonts.geist(fontSize: 13, color: AppColors.ctDanger,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    setState(() => _deleting = true);
+    try {
+      await CatalogsApi.deleteCatalog(catalogId: catalogId);
+      if (mounted) context.go('/catalogs', extra: {'refresh': true});
+    } catch (e) {
+      if (mounted) {
+        setState(() => _deleting = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error al eliminar: $e'),
+          backgroundColor: AppColors.ctDanger,
+        ));
+      }
+    }
+  }
+
   Future<void> _doSync() async {
     if (_syncing) return;
     final catalogId = _catalog?['id'] as String? ?? '';
@@ -203,6 +255,8 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
             hasChanges: _hasChanges,
             onSync: _doSync,
             onSave: _doSave,
+            onDelete: _doDelete,
+            deleting: _deleting,
           ),
           Container(
             decoration: const BoxDecoration(
@@ -275,6 +329,8 @@ class _CatalogHeader extends StatelessWidget {
     required this.hasChanges,
     required this.onSync,
     required this.onSave,
+    required this.onDelete,
+    required this.deleting,
   });
 
   final Map<String, dynamic> catalog;
@@ -284,6 +340,8 @@ class _CatalogHeader extends StatelessWidget {
   final bool hasChanges;
   final VoidCallback onSync;
   final VoidCallback onSave;
+  final VoidCallback onDelete;
+  final bool deleting;
 
   @override
   Widget build(BuildContext context) {
@@ -331,6 +389,23 @@ class _CatalogHeader extends StatelessWidget {
                 ),
               ),
               const Spacer(),
+              if (canManage) ...[
+                IconButton(
+                  icon: deleting
+                      ? const SizedBox(
+                          width: 16, height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.ctDanger))
+                      : const Icon(Icons.delete_outline_rounded,
+                          size: 18, color: AppColors.ctDanger),
+                  tooltip: 'Eliminar catálogo',
+                  onPressed: deleting ? null : onDelete,
+                  style: IconButton.styleFrom(
+                    foregroundColor: AppColors.ctDanger,
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
               if (canManage && isSyncable) ...[
                 _SyncButton(syncing: syncing, onSync: onSync),
                 const SizedBox(width: 8),
@@ -1225,15 +1300,17 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
   }
 
   Future<void> _showAddItem() async {
-    final ok = await showModalBottomSheet<bool>(
+    final ok = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.ctSurface,
-      shape: const RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (ctx) => _AddItemSheet(
-          catalog: widget.catalog, fields: _fields),
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        backgroundColor: AppColors.ctSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: _AddItemSheet(catalog: widget.catalog, fields: _fields),
+        ),
+      ),
     );
     if (ok == true && mounted) {
       setState(() { _page = 1; });
@@ -1331,15 +1408,72 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                         ],
                       ),
                     )
-                  : SingleChildScrollView(
-                      padding:
-                          const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: _ItemsTable(
-                          items: _items,
-                          fields: _fields,
-                          onRowTap: _showItemDetail,
+                  : Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.ctBorder),
+                          borderRadius: BorderRadius.circular(10),
+                          color: AppColors.ctSurface,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Header
+                            Container(
+                              height: 36,
+                              decoration: const BoxDecoration(
+                                color: AppColors.ctSurface2,
+                                borderRadius: BorderRadius.only(
+                                  topLeft: Radius.circular(9),
+                                  topRight: Radius.circular(9),
+                                ),
+                                border: Border(
+                                    bottom: BorderSide(color: AppColors.ctBorder)),
+                              ),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              child: Row(
+                                children: _fields
+                                    .map((col) => Expanded(
+                                          child: Text(
+                                            (col['label'] ?? col['key'] ?? '')
+                                                .toString()
+                                                .toUpperCase(),
+                                            style: AppFonts.geist(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.ctText2,
+                                              letterSpacing: 0.4,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ))
+                                    .toList(),
+                              ),
+                            ),
+                            // Rows
+                            Expanded(
+                              child: ListView.separated(
+                                itemCount: _items.length,
+                                separatorBuilder: (_, __) => const Divider(
+                                    height: 1, color: AppColors.ctBorder),
+                                itemBuilder: (_, i) {
+                                  final item = _items[i];
+                                  final rawData = item['data'] is Map
+                                      ? Map<String, dynamic>.from(
+                                          item['data'] as Map)
+                                      : <String, dynamic>{};
+                                  return _CatalogItemRow(
+                                    item: item,
+                                    rawData: rawData,
+                                    fields: _fields,
+                                    onTap: () => _showItemDetail(item),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -1396,164 +1530,6 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _ItemsTable extends StatelessWidget {
-  const _ItemsTable(
-      {required this.items,
-      required this.fields,
-      this.onRowTap});
-  final List<Map<String, dynamic>> items;
-  final List<Map<String, dynamic>> fields;
-  final void Function(Map<String, dynamic>)? onRowTap;
-
-  static const double _cellWidth = 160;
-  static TextStyle get _headerStyle => AppFonts.geist(
-        fontSize: 10,
-        fontWeight: FontWeight.w600,
-        color: AppColors.ctText2,
-      ).copyWith(letterSpacing: 0.4);
-
-  @override
-  Widget build(BuildContext context) {
-    final columns = fields.isNotEmpty
-        ? fields
-        : items.isNotEmpty
-            ? items.first.keys
-                .map((k) =>
-                    <String, dynamic>{'key': k, 'label': k})
-                .toList()
-            : <Map<String, dynamic>>[];
-
-    if (columns.isEmpty) {
-      return Text('Sin columnas',
-          style:
-              AppFonts.geist(fontSize: 12, color: AppColors.ctText2));
-    }
-
-    final tableWidth = columns.length * _cellWidth;
-
-    return Container(
-      width: tableWidth,
-      decoration: BoxDecoration(
-        color: AppColors.ctSurface,
-        border: Border.all(color: AppColors.ctBorder),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: tableWidth,
-            padding: const EdgeInsets.symmetric(
-                horizontal: 12, vertical: 10),
-            decoration: const BoxDecoration(
-              color: AppColors.ctSurface2,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(9),
-                topRight: Radius.circular(9),
-              ),
-            ),
-            child: Row(
-              children: columns
-                  .map((col) => SizedBox(
-                        width: _cellWidth,
-                        child: Text(
-                          (col['label'] as String? ??
-                                  col['key'] as String? ??
-                                  '')
-                              .toUpperCase(),
-                          style: _headerStyle,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ))
-                  .toList(),
-            ),
-          ),
-          ...items.asMap().entries.map((entry) {
-            final isLast = entry.key == items.length - 1;
-            return Column(
-              children: [
-                _ItemRow(
-                  item: entry.value,
-                  columns: columns,
-                  onTap: onRowTap != null
-                      ? () => onRowTap!(entry.value)
-                      : null,
-                ),
-                if (!isLast)
-                  const Divider(
-                      height: 1, color: AppColors.ctBorder),
-              ],
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-class _ItemRow extends StatefulWidget {
-  const _ItemRow(
-      {required this.item, required this.columns, this.onTap});
-  final Map<String, dynamic> item;
-  final List<Map<String, dynamic>> columns;
-  final VoidCallback? onTap;
-
-  @override
-  State<_ItemRow> createState() => _ItemRowState();
-}
-
-class _ItemRowState extends State<_ItemRow> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: widget.onTap != null
-          ? SystemMouseCursors.click
-          : MouseCursor.defer,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 100),
-          color: _hovered ? AppColors.ctBg : AppColors.ctSurface,
-          padding: const EdgeInsets.symmetric(
-              horizontal: 12, vertical: 10),
-          child: Row(
-            children: widget.columns.map((col) {
-              final key = col['key'] as String? ?? '';
-              final isPrimary =
-                  col['is_primary'] as bool? ?? false;
-              final rawData = widget.item['data'] is Map
-                  ? widget.item['data'] as Map
-                  : null;
-              final value =
-                  widget.item[key] ?? rawData?[key];
-              final text =
-                  value == null ? '—' : value.toString();
-              return SizedBox(
-                width: _ItemsTable._cellWidth,
-                child: Text(
-                  text,
-                  style: AppFonts.geist(
-                    fontSize: 12,
-                    fontWeight: isPrimary
-                        ? FontWeight.w600
-                        : FontWeight.w400,
-                    color: AppColors.ctText,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -1725,15 +1701,12 @@ class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
             Row(
               children: [
                 Text('Agregar item',
@@ -1796,6 +1769,64 @@ class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
               ),
             ),
           ],
+        ),
+    );
+  }
+}
+
+// ── _CatalogItemRow ───────────────────────────────────────────────────────────
+
+class _CatalogItemRow extends StatefulWidget {
+  const _CatalogItemRow({
+    required this.item,
+    required this.rawData,
+    required this.fields,
+    required this.onTap,
+  });
+  final Map<String, dynamic> item;
+  final Map<String, dynamic> rawData;
+  final List<Map<String, dynamic>> fields;
+  final VoidCallback onTap;
+
+  @override
+  State<_CatalogItemRow> createState() => _CatalogItemRowState();
+}
+
+class _CatalogItemRowState extends State<_CatalogItemRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          color: _hovered ? AppColors.ctBg : AppColors.ctSurface,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: widget.fields.map((col) {
+              final key = col['key'] as String? ?? '';
+              final isPrimary = col['is_primary'] as bool? ?? false;
+              final value = widget.rawData[key] ?? widget.item[key];
+              final text = value == null ? '—' : value.toString();
+              return Expanded(
+                child: Text(
+                  text,
+                  style: AppFonts.geist(
+                    fontSize: 13,
+                    fontWeight:
+                        isPrimary ? FontWeight.w600 : FontWeight.w400,
+                    color: AppColors.ctText,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            }).toList(),
+          ),
         ),
       ),
     );
