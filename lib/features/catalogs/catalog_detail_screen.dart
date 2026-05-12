@@ -357,6 +357,7 @@ class _CatalogHeader extends StatelessWidget {
         sourceType == 'google_sheets' || sourceType == 'onedrive_excel';
 
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 10, 16, 12),
       decoration: const BoxDecoration(
         color: AppColors.ctSurface,
