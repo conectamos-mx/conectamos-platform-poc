@@ -419,7 +419,7 @@ class _CatalogRowState extends State<_CatalogRow> {
     final label = cat['label'] as String? ?? cat['name'] as String? ?? '—';
     final slug = cat['slug'] as String? ?? '';
     final sourceType = cat['source_type'] as String? ?? '';
-    final itemsCount = cat['items_count'] as int? ?? 0;
+    final itemsCount = cat['item_count'] as int? ?? 0;
     final lastSyncedAt = cat['last_synced_at'] as String?;
     final syncStatus = cat['sync_status'] as String? ?? 'manual';
 

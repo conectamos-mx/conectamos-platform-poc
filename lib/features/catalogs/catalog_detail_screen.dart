@@ -214,6 +214,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
               unselectedLabelColor: AppColors.ctText2,
               indicatorColor: AppColors.ctTeal,
               indicatorWeight: 2,
+              dividerColor: Colors.transparent,
               labelStyle: AppFonts.geist(
                   fontSize: 12, fontWeight: FontWeight.w600),
               unselectedLabelStyle:
@@ -286,7 +287,7 @@ class _CatalogHeader extends StatelessWidget {
     final sourceType = catalog['source_type'] as String? ?? '';
     final slug = catalog['slug'] as String? ?? '';
     final label = catalog['label'] as String? ?? slug;
-    final itemsCount = catalog['items_count'] as int? ?? 0;
+    final itemsCount = catalog['item_count'] as int? ?? 0;
     final lastSynced = catalog['last_synced_at'] as String?;
     final isSyncable =
         sourceType == 'google_sheets' || sourceType == 'onedrive_excel';
