@@ -79,6 +79,25 @@ class CatalogsApi {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
+  static Future<Map<String, dynamic>> sheetsPreview({
+    required String tenantId,
+    required String sheetUrl,
+    String? sheetName,
+  }) async {
+    final params = <String, dynamic>{
+      'tenant_id': tenantId,
+      'sheet_url': sheetUrl,
+    };
+    if (sheetName != null && sheetName.isNotEmpty) {
+      params['sheet_name'] = sheetName;
+    }
+    final response = await ApiClient.instance.get(
+      '/api/v1/catalogs/sheets-preview',
+      queryParameters: params,
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   static Future<List<Map<String, dynamic>>> listItems({
     required String tenantId,
     required String catalogId,

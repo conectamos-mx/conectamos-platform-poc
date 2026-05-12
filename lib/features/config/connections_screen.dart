@@ -1698,6 +1698,7 @@ class _IntegrationLogo extends StatelessWidget {
   static const _assetPaths = {
     'gdrive':     'assets/logos/drive.png',
     'gcal':       'assets/logos/google_calendar.png',
+    'gsheets':    'assets/logos/google-sheets',
     'onedrive':   'assets/logos/ondrive.svg',
     'outlook':    'assets/logos/outlook.png',
     'dropbox':    'assets/logos/dropbox.svg',

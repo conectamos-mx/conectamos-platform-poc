@@ -1,6 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:go_router/go_router.dart';
+
 import '../../core/api/catalogs_api.dart';
+import '../../core/api/connections_api.dart';
 import '../../core/theme/app_theme.dart';
 
 // ── Wizard principal ──────────────────────────────────────────────────────────
@@ -31,11 +37,20 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
 
   // Step 1 — Fuente
   String _sourceType = 'manual';
-  final _sheetUrlCtrl  = TextEditingController();
-  final _sheetNameCtrl = TextEditingController();
-  final _fileIdCtrl    = TextEditingController();
-  final _apiUrlCtrl    = TextEditingController();
+  final _sheetUrlCtrl   = TextEditingController();
+  final _fileIdCtrl     = TextEditingController();
+  final _sheetNameCtrl  = TextEditingController();
+  final _apiUrlCtrl     = TextEditingController();
   final _authHeaderCtrl = TextEditingController();
+
+  // Step 1 — Google OAuth / preview state
+  bool _checkingOAuth   = false;
+  bool _googleConnected = false;
+  bool _loadingPreview  = false;
+  List<String> _availableSheets = [];
+  String? _selectedSheet;
+  List<String> _previewColumns = [];
+  bool _previewLoaded = false;
 
   // Step 2 — Schema
   final List<Map<String, dynamic>> _fields = [];
@@ -61,8 +76,8 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
       ..dispose();
     _descCtrl.dispose();
     _sheetUrlCtrl.dispose();
-    _sheetNameCtrl.dispose();
     _fileIdCtrl.dispose();
+    _sheetNameCtrl.dispose();
     _apiUrlCtrl.dispose();
     _authHeaderCtrl.dispose();
     super.dispose();
@@ -102,6 +117,9 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
         return _nameCtrl.text.trim().isNotEmpty &&
             _slugCtrl.text.trim().isNotEmpty;
       case 1:
+        if (_sourceType == 'google_sheets') {
+          return _googleConnected && _sheetUrlCtrl.text.trim().isNotEmpty;
+        }
         return true;
       case 2:
         if (_fields.isEmpty) return false;
@@ -134,9 +152,10 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
       case 'google_sheets':
         return {
           'sheet_url': _sheetUrlCtrl.text.trim(),
-          'sheet_name': _sheetNameCtrl.text.trim().isEmpty
-              ? 'Sheet1'
-              : _sheetNameCtrl.text.trim(),
+          'sheet_name': _selectedSheet ??
+              (_sheetNameCtrl.text.trim().isEmpty
+                  ? 'Sheet1'
+                  : _sheetNameCtrl.text.trim()),
         };
       case 'onedrive_excel':
         return {
@@ -156,6 +175,102 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
     }
   }
 
+  // ── Google OAuth check ──────────────────────────────────────────────────────
+
+  Future<void> _checkGoogleOAuth() async {
+    setState(() => _checkingOAuth = true);
+    try {
+      final status = await ConnectionsApi.getGoogleStatus();
+      setState(() => _googleConnected = status['connected'] == true);
+    } catch (_) {
+      setState(() => _googleConnected = false);
+    } finally {
+      if (mounted) setState(() => _checkingOAuth = false);
+    }
+  }
+
+  // ── Sheets preview ──────────────────────────────────────────────────────────
+
+  Future<void> _loadSheetPreview({String? sheetName}) async {
+    if (_sheetUrlCtrl.text.trim().isEmpty) return;
+    setState(() { _loadingPreview = true; _previewLoaded = false; });
+    try {
+      final result = await CatalogsApi.sheetsPreview(
+        tenantId: widget.tenantId,
+        sheetUrl: _sheetUrlCtrl.text.trim(),
+        sheetName: sheetName ?? _selectedSheet,
+      );
+      setState(() {
+        _availableSheets = List<String>.from(result['sheets'] as List? ?? []);
+        _selectedSheet   = result['selected_sheet'] as String?;
+        _previewColumns  = List<String>.from(result['columns'] as List? ?? []);
+        _previewLoaded   = true;
+        _loadingPreview  = false;
+      });
+      await _prepopulateSchemaFromColumns();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingPreview = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error al cargar preview: $e'),
+        backgroundColor: AppColors.ctDanger,
+        duration: const Duration(seconds: 4),
+      ));
+    }
+  }
+
+  Future<void> _prepopulateSchemaFromColumns() async {
+    if (_previewColumns.isEmpty) return;
+
+    if (_fields.length > 1) {
+      final replace = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Reemplazar campos'),
+          content: const Text(
+            '¿Deseas reemplazar los campos existentes con '
+            'las columnas detectadas en la hoja?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Reemplazar'),
+            ),
+          ],
+        ),
+      );
+      if (replace != true) return;
+    }
+
+    final newFields = _previewColumns.map((col) {
+      final key = col
+          .toLowerCase()
+          .replaceAll(' ', '_')
+          .replaceAll(RegExp(r'[^a-z0-9_]'), '');
+      return {
+        'key':        key,
+        'label':      col,
+        'type':       'text',
+        'searchable': false,
+        'is_primary': false,
+        '_uid':       (_uidCounter++).toString(),
+      };
+    }).toList();
+
+    setState(() {
+      _fields
+        ..clear()
+        ..addAll(newFields);
+      if (_primaryKeyField == null && _fields.isNotEmpty) {
+        _primaryKeyField = _fields.first['key'] as String?;
+      }
+    });
+  }
+
   // ── Submit ──────────────────────────────────────────────────────────────────
 
   Future<void> _submit() async {
@@ -164,9 +279,9 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
     try {
       final fieldsSchema = _fields
           .map((f) => {
-                'key': f['key'],
-                'label': f['label'],
-                'type': f['type'],
+                'key':        f['key'],
+                'label':      f['label'],
+                'type':       f['type'],
                 'searchable': f['searchable'],
                 'is_primary': f['key'] == _primaryKeyField,
               })
@@ -174,26 +289,30 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
 
       final body = <String, dynamic>{
         'label': _nameCtrl.text.trim(),
-        'slug': _slugCtrl.text.trim(),
+        'slug':  _slugCtrl.text.trim(),
         if (_descCtrl.text.trim().isNotEmpty)
           'description': _descCtrl.text.trim(),
-        'source_type': _sourceType,
-        'source_config': _buildSourceConfig(),
-        'fields_schema': fieldsSchema,
+        'source_type':    _sourceType,
+        'source_config':  _buildSourceConfig(),
+        'fields_schema':  fieldsSchema,
         'primary_key_field': _primaryKeyField,
-        'display_field': _displayField,
+        'display_field':     _displayField,
         'searchable_fields': _fields
             .where((f) => f['searchable'] == true)
             .map((f) => f['key'] as String)
             .toList(),
-        'sync_strategy':
-            _sourceType == 'manual' ? 'manual' : 'pull_periodic',
+        'sync_strategy': _sourceType == 'manual' ? 'manual' : 'pull_periodic',
         if (_sourceType != 'manual') 'sync_interval_minutes': 60,
         'embed_threshold': 50,
       };
 
-      await CatalogsApi.createCatalog(
+      final created = await CatalogsApi.createCatalog(
           tenantId: widget.tenantId, body: body);
+
+      final createdId = created['id'] as String?;
+      if (createdId != null && _sourceType != 'manual') {
+        unawaited(CatalogsApi.syncCatalog(catalogId: createdId));
+      }
 
       if (mounted) widget.onSuccess(_slugCtrl.text.trim());
     } catch (e) {
@@ -260,14 +379,10 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
 
   Widget _buildStep() {
     switch (_step) {
-      case 0:
-        return _buildStep0();
-      case 1:
-        return _buildStep1();
-      case 2:
-        return _buildStep2();
-      default:
-        return _buildStep3();
+      case 0:  return _buildStep0();
+      case 1:  return _buildStep1();
+      case 2:  return _buildStep2();
+      default: return _buildStep3();
     }
   }
 
@@ -363,11 +478,11 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
   // ── Step 1 — Fuente ───────────────────────────────────────────────────────
 
   static const _sourceOptions = [
-    ('manual',         'Manual',           Icons.edit_note_rounded),
-    ('google_sheets',  'Google Sheets',    Icons.table_chart_outlined),
-    ('onedrive_excel', 'Excel (OneDrive)', Icons.grid_on_outlined),
-    ('webhook_push',   'Webhook Push',     Icons.webhook_outlined),
-    ('api_pull',       'API REST',         Icons.cloud_download_outlined),
+    (value: 'manual',         label: 'Manual',           logoKey: 'manual'),
+    (value: 'google_sheets',  label: 'Google Sheets',    logoKey: 'gsheets'),
+    (value: 'onedrive_excel', label: 'Excel (OneDrive)', logoKey: 'onedrive'),
+    (value: 'webhook_push',   label: 'Webhook Push',     logoKey: 'webhook'),
+    (value: 'api_pull',       label: 'API REST',         logoKey: 'api'),
   ];
 
   Widget _buildStep1() {
@@ -377,24 +492,24 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _WizardLabel('Tipo de fuente'),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: 10,
+            runSpacing: 10,
             children: _sourceOptions.map((opt) {
-              final (value, label, icon) = opt;
-              final active = _sourceType == value;
-              return _SourceChip(
-                label: label,
-                icon: icon,
+              final active = _sourceType == opt.value;
+              return _SourceCard(
+                label: opt.label,
+                logoKey: opt.logoKey,
                 active: active,
-                onTap: () => setState(() {
-                  _sourceType = value;
-                }),
+                onTap: () {
+                  setState(() => _sourceType = opt.value);
+                  if (opt.value == 'google_sheets') _checkGoogleOAuth();
+                },
               );
             }).toList(),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           _buildSourceConfigFields(),
         ],
       ),
@@ -404,32 +519,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
   Widget _buildSourceConfigFields() {
     switch (_sourceType) {
       case 'google_sheets':
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _WizardLabel('URL del Google Sheet'),
-            const SizedBox(height: 6),
-            _WizardTextField(
-              controller: _sheetUrlCtrl,
-              hint: 'https://docs.google.com/spreadsheets/d/…',
-            ),
-            const SizedBox(height: 12),
-            _WizardLabel('Nombre de la hoja'),
-            const SizedBox(height: 6),
-            _WizardTextField(
-              controller: _sheetNameCtrl,
-              hint: 'Sheet1',
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Requiere conexión Google activa en Conexiones.',
-              style: AppFonts.geist(
-                  fontSize: 12,
-                  color: AppColors.ctText2)
-                  .copyWith(fontStyle: FontStyle.italic),
-            ),
-          ],
-        );
+        return _buildGoogleSheetsConfig();
 
       case 'onedrive_excel':
         return Column(
@@ -451,9 +541,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
             const SizedBox(height: 12),
             Text(
               'Requiere conexión Microsoft activa en Conexiones.',
-              style: AppFonts.geist(
-                  fontSize: 12,
-                  color: AppColors.ctText2)
+              style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2)
                   .copyWith(fontStyle: FontStyle.italic),
             ),
           ],
@@ -465,14 +553,12 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
           children: [
             Text(
               'El catálogo recibirá actualizaciones via webhook entrante.',
-              style: AppFonts.geist(
-                  fontSize: 12, color: AppColors.ctText2),
+              style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2),
             ),
             const SizedBox(height: 6),
             Text(
               'El endpoint se configurará después de crear el catálogo.',
-              style: AppFonts.geist(
-                  fontSize: 12, color: AppColors.ctText2),
+              style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2),
             ),
           ],
         );
@@ -505,6 +591,120 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
     }
   }
 
+  Widget _buildGoogleSheetsConfig() {
+    if (_checkingOAuth) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          child: CircularProgressIndicator(
+              strokeWidth: 2, color: AppColors.ctTeal),
+        ),
+      );
+    }
+
+    if (!_googleConnected) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          border: Border.all(color: const Color(0xFFF59E0B)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded,
+                    size: 16, color: Color(0xFFB45309)),
+                const SizedBox(width: 8),
+                Text(
+                  'Tu cuenta de Google no está conectada.',
+                  style: AppFonts.geist(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF92400E)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.ctTeal,
+                foregroundColor: AppColors.ctNavy,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 8),
+                textStyle: AppFonts.geist(
+                    fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              icon: const Icon(Icons.open_in_new_rounded, size: 14),
+              label: const Text('Conectar Google'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                context.go('/connections');
+              },
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.check_circle_rounded,
+                size: 16, color: Color(0xFF16A34A)),
+            const SizedBox(width: 6),
+            Text(
+              'Google conectado',
+              style: AppFonts.geist(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF16A34A)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _WizardLabel('URL del Google Sheet'),
+        const SizedBox(height: 6),
+        _WizardTextField(
+          controller: _sheetUrlCtrl,
+          hint: 'https://docs.google.com/spreadsheets/d/…',
+          onEditingComplete: _loadSheetPreview,
+        ),
+        if (_loadingPreview) ...[
+          const SizedBox(height: 6),
+          const LinearProgressIndicator(color: AppColors.ctTeal),
+        ],
+        if (_previewLoaded && _availableSheets.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _WizardLabel('Hoja'),
+          const SizedBox(height: 6),
+          _SheetDropdown(
+            value: _selectedSheet,
+            sheets: _availableSheets,
+            onChanged: (s) {
+              setState(() => _selectedSheet = s);
+              if (s != null) _loadSheetPreview(sheetName: s);
+            },
+          ),
+          if (_previewColumns.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Se detectaron ${_previewColumns.length} columnas: '
+              '${_previewColumns.take(5).join(', ')}'
+              '${_previewColumns.length > 5 ? '…' : ''}',
+              style: AppFonts.geist(
+                  fontSize: 12, color: AppColors.ctText2),
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+
   // ── Step 2 — Schema ───────────────────────────────────────────────────────
 
   Widget _buildStep2() {
@@ -513,7 +713,6 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
         .where((k) => k.isNotEmpty)
         .toList();
 
-    // Reset selectors if the pointed key no longer exists
     if (_primaryKeyField != null &&
         !fieldKeys.contains(_primaryKeyField)) {
       WidgetsBinding.instance
@@ -526,7 +725,6 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
 
     return Column(
       children: [
-        // Header row
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(
@@ -553,8 +751,26 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
             ],
           ),
         ),
-
-        // Fields list
+        // Column headers
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Row(
+            children: [
+              Expanded(flex: 2, child: _ColHeader('Key')),
+              const SizedBox(width: 6),
+              Expanded(flex: 2, child: _ColHeader('Label')),
+              const SizedBox(width: 6),
+              const SizedBox(width: 90, child: _ColHeaderCenter('Tipo')),
+              const SizedBox(width: 4),
+              Tooltip(
+                message: 'Los operadores podrán buscar items por este campo '
+                    'desde el AI Worker',
+                child: _ColHeaderCenter('Buscable'),
+              ),
+              const SizedBox(width: 28),
+            ],
+          ),
+        ),
         Expanded(
           child: _fields.isEmpty
               ? Center(
@@ -585,30 +801,36 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
                   },
                 ),
         ),
-
-        // Primary key + display field selectors
         if (_fields.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             child: Row(
               children: [
                 Expanded(
-                  child: _KeyDropdown(
-                    label: 'Campo clave (primary key) *',
-                    value: _primaryKeyField,
-                    keys: fieldKeys,
-                    onChanged: (v) =>
-                        setState(() => _primaryKeyField = v),
+                  child: Tooltip(
+                    message: 'Identificador único del item. Se usa para '
+                        'detectar cambios en sincronizaciones',
+                    child: _KeyDropdown(
+                      label: 'Campo clave (PK) *',
+                      value: _primaryKeyField,
+                      keys: fieldKeys,
+                      onChanged: (v) =>
+                          setState(() => _primaryKeyField = v),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _KeyDropdown(
-                    label: 'Campo de display *',
-                    value: _displayField,
-                    keys: fieldKeys,
-                    onChanged: (v) =>
-                        setState(() => _displayField = v),
+                  child: Tooltip(
+                    message: 'Este campo se muestra como nombre del item '
+                        'al seleccionarlo en un flow',
+                    child: _KeyDropdown(
+                      label: 'Campo de display *',
+                      value: _displayField,
+                      keys: fieldKeys,
+                      onChanged: (v) =>
+                          setState(() => _displayField = v),
+                    ),
                   ),
                 ),
               ],
@@ -621,6 +843,17 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
   // ── Step 3 — Confirmar ────────────────────────────────────────────────────
 
   Widget _buildStep3() {
+    final sourceLabel = _sourceOptions
+        .firstWhere(
+          (o) => o.value == _sourceType,
+          orElse: () => (
+            value: _sourceType,
+            label: _sourceType,
+            logoKey: 'api',
+          ),
+        )
+        .label;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -644,16 +877,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
               children: [
                 _SummaryRow('Nombre', _nameCtrl.text.trim()),
                 _SummaryRow('Slug', _slugCtrl.text.trim()),
-                _SummaryRow(
-                  'Fuente',
-                  _sourceOptions
-                          .firstWhere(
-                            (o) => o.$1 == _sourceType,
-                            orElse: () => (_sourceType, _sourceType,
-                                Icons.storage_rounded),
-                          )
-                          .$2,
-                ),
+                _SummaryRow('Fuente', sourceLabel),
                 _SummaryRow(
                     'Campos', '${_fields.length} campos definidos'),
                 _SummaryRow(
@@ -681,6 +905,133 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
   }
 }
 
+// ── _SourceCard ───────────────────────────────────────────────────────────────
+
+class _SourceCard extends StatelessWidget {
+  const _SourceCard({
+    required this.label,
+    required this.logoKey,
+    required this.active,
+    required this.onTap,
+  });
+  final String label;
+  final String logoKey;
+  final bool active;
+  final VoidCallback onTap;
+
+  static const _assetPaths = {
+    'gsheets':  'assets/logos/google-sheets',
+    'onedrive': 'assets/logos/ondrive.svg',
+  };
+
+  Widget _buildLogo() {
+    final path = _assetPaths[logoKey];
+    if (path != null) {
+      final color = active ? AppColors.ctTeal : AppColors.ctText2;
+      if (path.endsWith('.svg')) {
+        return SvgPicture.asset(
+          path,
+          width: 40,
+          height: 40,
+          colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+        );
+      }
+      return Image.asset(path, width: 40, height: 40);
+    }
+    final icon = switch (logoKey) {
+      'manual'  => Icons.edit_note_rounded,
+      'webhook' => Icons.webhook_rounded,
+      _         => Icons.cloud_download_outlined,
+    };
+    return Icon(icon,
+        size: 40,
+        color: active ? AppColors.ctTeal : AppColors.ctText2);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          width: 160,
+          height: 110,
+          decoration: BoxDecoration(
+            color: active
+                ? AppColors.ctTeal.withValues(alpha: 0.05)
+                : AppColors.ctSurface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: active ? AppColors.ctTeal : AppColors.ctBorder2,
+              width: active ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildLogo(),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                style: AppFonts.geist(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: active ? AppColors.ctTeal : AppColors.ctText2,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── _SheetDropdown ────────────────────────────────────────────────────────────
+
+class _SheetDropdown extends StatelessWidget {
+  const _SheetDropdown({
+    required this.value,
+    required this.sheets,
+    required this.onChanged,
+  });
+  final String? value;
+  final List<String> sheets;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: AppColors.ctSurface,
+        border: Border.all(color: AppColors.ctBorder2),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: (value != null && sheets.contains(value)) ? value : null,
+          hint: Text('Seleccionar hoja',
+              style: AppFonts.geist(fontSize: 12, color: AppColors.ctText3)),
+          isDense: true,
+          isExpanded: true,
+          style: AppFonts.geist(fontSize: 12, color: AppColors.ctText),
+          icon: const Icon(Icons.keyboard_arrow_down_rounded,
+              size: 15, color: AppColors.ctText3),
+          items: sheets
+              .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+              .toList(),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
+
 // ── _StepIndicator ────────────────────────────────────────────────────────────
 
 class _StepIndicator extends StatelessWidget {
@@ -696,7 +1047,6 @@ class _StepIndicator extends StatelessWidget {
       child: Row(
         children: List.generate(_labels.length * 2 - 1, (i) {
           if (i.isOdd) {
-            // Connector line
             final leftDone = (i ~/ 2) < step;
             return Expanded(
               child: Container(
@@ -706,7 +1056,7 @@ class _StepIndicator extends StatelessWidget {
             );
           }
           final idx = i ~/ 2;
-          final isDone = idx < step;
+          final isDone   = idx < step;
           final isActive = idx == step;
           return _StepCircle(
             number: idx + 1,
@@ -758,8 +1108,7 @@ class _StepCircle extends StatelessWidget {
                       fontFamily: 'Geist',
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color:
-                          isActive ? Colors.white : AppColors.ctText2,
+                      color: isActive ? Colors.white : AppColors.ctText2,
                     ),
                   ),
           ),
@@ -805,12 +1154,10 @@ class _FieldRowState extends State<_FieldRow> {
   @override
   void initState() {
     super.initState();
-    _keyCtrl = TextEditingController(
-        text: widget.field['key'] as String? ?? '');
-    _labelCtrl = TextEditingController(
-        text: widget.field['label'] as String? ?? '');
-    _type = widget.field['type'] as String? ?? 'text';
-    _searchable = widget.field['searchable'] as bool? ?? false;
+    _keyCtrl   = TextEditingController(text: widget.field['key']   as String? ?? '');
+    _labelCtrl = TextEditingController(text: widget.field['label'] as String? ?? '');
+    _type       = widget.field['type']       as String? ?? 'text';
+    _searchable = widget.field['searchable'] as bool?   ?? false;
 
     _keyCtrl.addListener(_notify);
     _labelCtrl.addListener(_notify);
@@ -830,9 +1177,9 @@ class _FieldRowState extends State<_FieldRow> {
   void _notify() {
     widget.onChange({
       ...widget.field,
-      'key': _keyCtrl.text,
-      'label': _labelCtrl.text,
-      'type': _type,
+      'key':        _keyCtrl.text,
+      'label':      _labelCtrl.text,
+      'type':       _type,
       'searchable': _searchable,
     });
   }
@@ -850,7 +1197,6 @@ class _FieldRowState extends State<_FieldRow> {
       ),
       child: Row(
         children: [
-          // key
           Expanded(
             flex: 2,
             child: _MiniTextField(
@@ -860,7 +1206,6 @@ class _FieldRowState extends State<_FieldRow> {
             ),
           ),
           const SizedBox(width: 6),
-          // label
           Expanded(
             flex: 2,
             child: _MiniTextField(
@@ -869,7 +1214,6 @@ class _FieldRowState extends State<_FieldRow> {
             ),
           ),
           const SizedBox(width: 6),
-          // type dropdown
           SizedBox(
             width: 90,
             height: 34,
@@ -892,8 +1236,8 @@ class _FieldRowState extends State<_FieldRow> {
                       size: 13,
                       color: AppColors.ctText3),
                   items: _typeOptions
-                      .map((t) => DropdownMenuItem(
-                          value: t, child: Text(t)))
+                      .map((t) =>
+                          DropdownMenuItem(value: t, child: Text(t)))
                       .toList(),
                   onChanged: (v) {
                     if (v == null) return;
@@ -905,9 +1249,9 @@ class _FieldRowState extends State<_FieldRow> {
             ),
           ),
           const SizedBox(width: 4),
-          // searchable checkbox
           Tooltip(
-            message: 'Buscable',
+            message: 'Los operadores podrán buscar items por este campo '
+                'desde el AI Worker',
             child: Checkbox(
               value: _searchable,
               activeColor: AppColors.ctTeal,
@@ -918,7 +1262,6 @@ class _FieldRowState extends State<_FieldRow> {
               },
             ),
           ),
-          // delete
           IconButton(
             icon: const Icon(Icons.delete_outline_rounded,
                 size: 16, color: AppColors.ctText2),
@@ -934,6 +1277,35 @@ class _FieldRowState extends State<_FieldRow> {
 }
 
 // ── Shared sub-widgets ────────────────────────────────────────────────────────
+
+class _ColHeader extends StatelessWidget {
+  const _ColHeader(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(
+        text,
+        style: AppFonts.geist(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: AppColors.ctText3),
+      );
+}
+
+class _ColHeaderCenter extends StatelessWidget {
+  const _ColHeaderCenter(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(
+        text,
+        textAlign: TextAlign.center,
+        style: AppFonts.geist(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: AppColors.ctText3),
+      );
+}
 
 class _WizardLabel extends StatelessWidget {
   const _WizardLabel(this.text);
@@ -958,12 +1330,14 @@ class _WizardTextField extends StatelessWidget {
     this.helperText,
     this.maxLines = 1,
     this.inputFormatters,
+    this.onEditingComplete,
   });
   final TextEditingController controller;
   final String hint;
   final String? helperText;
   final int maxLines;
   final List<TextInputFormatter>? inputFormatters;
+  final VoidCallback? onEditingComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -971,6 +1345,7 @@ class _WizardTextField extends StatelessWidget {
       controller: controller,
       maxLines: maxLines,
       inputFormatters: inputFormatters,
+      onEditingComplete: onEditingComplete,
       style: AppFonts.geist(fontSize: 13, color: AppColors.ctText),
       decoration: InputDecoration(
         hintText: hint,
@@ -1047,64 +1422,6 @@ class _MiniTextField extends StatelessWidget {
   }
 }
 
-class _SourceChip extends StatelessWidget {
-  const _SourceChip({
-    required this.label,
-    required this.icon,
-    required this.active,
-    required this.onTap,
-  });
-  final String label;
-  final IconData icon;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 100),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color:
-                active ? AppColors.ctTealLight : AppColors.ctSurface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color:
-                  active ? AppColors.ctTeal : AppColors.ctBorder2,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon,
-                  size: 15,
-                  color: active
-                      ? AppColors.ctTealDark
-                      : AppColors.ctText2),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: AppFonts.geist(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: active
-                      ? AppColors.ctTealDark
-                      : AppColors.ctText2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _KeyDropdown extends StatelessWidget {
   const _KeyDropdown({
     required this.label,
@@ -1139,9 +1456,7 @@ class _KeyDropdown extends StatelessWidget {
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
-              value: (value != null && keys.contains(value))
-                  ? value
-                  : null,
+              value: (value != null && keys.contains(value)) ? value : null,
               hint: Text('Seleccionar',
                   style: AppFonts.geist(
                       fontSize: 12, color: AppColors.ctText3)),
