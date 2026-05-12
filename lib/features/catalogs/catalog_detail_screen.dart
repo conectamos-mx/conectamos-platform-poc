@@ -1,10 +1,13 @@
 import 'dart:async';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/catalogs_api.dart';
+import '../../core/api/connections_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -1071,10 +1074,26 @@ class _FieldSchemaCard extends StatelessWidget {
 
 // ── Tab 1 — FUENTE ────────────────────────────────────────────────────────────
 
-class _SourceTab extends StatelessWidget {
+class _SourceTab extends ConsumerStatefulWidget {
   const _SourceTab({required this.catalog, required this.canManage});
   final Map<String, dynamic> catalog;
   final bool canManage;
+
+  @override
+  ConsumerState<_SourceTab> createState() => _SourceTabState();
+}
+
+class _SourceTabState extends ConsumerState<_SourceTab> {
+  bool _loadingOAuth = false;
+  Map<String, dynamic>? _oauthStatus;
+  bool _reconnecting = false;
+  StreamSubscription<html.MessageEvent>? _oauthSub;
+  Timer? _oauthTimer;
+
+  String get _sourceType => widget.catalog['source_type'] as String? ?? '';
+  bool get _isOAuth =>
+      _sourceType == 'google_sheets' || _sourceType == 'onedrive_excel';
+  bool get _isGoogle => _sourceType == 'google_sheets';
 
   bool _isSensitive(String k) {
     final lower = k.toLowerCase();
@@ -1084,14 +1103,132 @@ class _SourceTab extends StatelessWidget {
   }
 
   @override
+  void initState() {
+    super.initState();
+    if (_isOAuth) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadOAuthStatus());
+    }
+  }
+
+  @override
+  void dispose() {
+    _oauthSub?.cancel();
+    _oauthTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadOAuthStatus() async {
+    if (!mounted) return;
+    final tenantId = ref.read(activeTenantIdProvider);
+    setState(() => _loadingOAuth = true);
+    try {
+      Map<String, dynamic> status;
+      if (_isGoogle) {
+        status = await ConnectionsApi.getGoogleStatus();
+      } else {
+        final raw =
+            await ConnectionsApi.getMicrosoftStatus(tenantId: tenantId);
+        final connections = raw['connections'] as List? ?? [];
+        final ms = connections.firstWhere(
+          (c) => c['provider'] == 'microsoft' && c['status'] == 'active',
+          orElse: () => <String, dynamic>{},
+        );
+        status = (ms as Map).isEmpty
+            ? {'connected': false}
+            : {
+                'connected': true,
+                'email': ms['email'],
+                'connected_at': ms['connected_at'],
+                'token_expiry': ms['token_expiry'],
+              };
+      }
+      if (mounted) {
+        setState(() {
+          _oauthStatus = status;
+          _loadingOAuth = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _oauthStatus = {'connected': false};
+          _loadingOAuth = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _reconnect() async {
+    if (_reconnecting) return;
+    final tenantId = ref.read(activeTenantIdProvider);
+    setState(() => _reconnecting = true);
+    try {
+      final String authUrl;
+      final String successMsg;
+      if (_isGoogle) {
+        authUrl = await ConnectionsApi.getGoogleAuthUrl();
+        successMsg = 'google=success';
+      } else {
+        authUrl =
+            await ConnectionsApi.getMicrosoftAuthUrl(tenantId: tenantId);
+        successMsg = 'microsoft=success';
+      }
+      html.window.open(
+          authUrl, '_blank', 'width=520,height=620,toolbar=0,menubar=0,location=0');
+      _oauthSub?.cancel();
+      _oauthTimer?.cancel();
+      _oauthSub = html.window.onMessage.listen((event) {
+        final data = event.data?.toString() ?? '';
+        final errMsg = _isGoogle ? 'google=error' : 'microsoft=error';
+        if (data != successMsg && data != errMsg) return;
+        _oauthSub?.cancel();
+        _oauthTimer?.cancel();
+        if (mounted) {
+          setState(() => _reconnecting = false);
+          _loadOAuthStatus();
+          if (data == successMsg) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Conexión renovada correctamente'),
+              duration: Duration(seconds: 2),
+            ));
+          }
+        }
+      });
+      _oauthTimer = Timer(const Duration(minutes: 5), () {
+        _oauthSub?.cancel();
+        if (mounted) setState(() => _reconnecting = false);
+      });
+    } catch (e) {
+      if (mounted) setState(() => _reconnecting = false);
+    }
+  }
+
+  _OAuthState get _oauthState {
+    if (!_isOAuth) return _OAuthState.notApplicable;
+    if (_loadingOAuth) return _OAuthState.loading;
+    final status = _oauthStatus;
+    if (status == null) return _OAuthState.unknown;
+    if (status['connected'] != true) return _OAuthState.disconnected;
+    final expiry = status['token_expiry'] as String?;
+    if (expiry != null) {
+      try {
+        final exp = DateTime.parse(expiry);
+        if (exp.isBefore(DateTime.now())) return _OAuthState.expired;
+      } catch (_) {}
+    }
+    return _OAuthState.connected;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final sourceType = catalog['source_type'] as String? ?? '';
-    final rawConfig = catalog['source_config'];
+    final sourceType = widget.catalog['source_type'] as String? ?? '';
+    final rawConfig = widget.catalog['source_config'];
     final sourceConfig = rawConfig is Map
         ? Map<String, dynamic>.from(rawConfig.cast<String, dynamic>())
         : <String, dynamic>{};
-    final syncInterval = catalog['sync_interval_minutes'] as int?;
-    final lastSynced = catalog['last_synced_at'] as String?;
+    final syncInterval = widget.catalog['sync_interval_minutes'] as int?;
+    final lastSynced = widget.catalog['last_synced_at'] as String?;
+    final oauthSt = _oauthState;
 
     final (icon, sourceLabel) = switch (sourceType) {
       'manual'         => (Icons.edit_note_rounded, 'Manual'),
@@ -1103,15 +1240,101 @@ class _SourceTab extends StatelessWidget {
           sourceType.isEmpty ? 'Sin fuente' : sourceType),
     };
 
-    final showOAuth =
-        sourceType == 'google_sheets' || sourceType == 'onedrive_excel';
-    final connected = sourceConfig['connected'] as bool?;
+    final sheetUrl = sourceConfig['sheet_url'] as String? ?? '';
+    final fileName = sourceConfig['file_name'] as String? ?? '';
+    final configIncomplete =
+        (sourceType == 'google_sheets' && sheetUrl.isEmpty) ||
+            (sourceType == 'onedrive_excel' && fileName.isEmpty);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Banner config incompleta
+          if (configIncomplete) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: AppColors.ctWarnBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: AppColors.ctWarn.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded,
+                      size: 16, color: AppColors.ctWarn),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'La configuración de la fuente está incompleta. Este catálogo no puede sincronizarse.',
+                      style: AppFonts.geist(
+                          fontSize: 12, color: AppColors.ctWarnText),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Banner OAuth problema
+          if (_isOAuth &&
+              (oauthSt == _OAuthState.expired ||
+                  oauthSt == _OAuthState.disconnected)) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: AppColors.ctRedBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: AppColors.ctDanger.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.link_off_rounded,
+                      size: 16, color: AppColors.ctDanger),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      oauthSt == _OAuthState.expired
+                          ? 'El token de acceso ha expirado. Reconecta para continuar sincronizando.'
+                          : 'La cuenta no está conectada. Conecta para habilitar la sincronización.',
+                      style: AppFonts.geist(
+                          fontSize: 12, color: AppColors.ctDanger),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: _reconnecting ? null : _reconnect,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.ctDanger,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                    ),
+                    child: _reconnecting
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.ctDanger))
+                        : Text('Reconectar',
+                            style: AppFonts.geist(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.ctDanger)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Card fuente principal
           _SectionCard(
             title: 'Fuente de datos',
             child: Column(
@@ -1121,78 +1344,237 @@ class _SourceTab extends StatelessWidget {
                   children: [
                     Icon(icon, size: 20, color: AppColors.ctText2),
                     const SizedBox(width: 8),
-                    Text(
-                      sourceLabel,
-                      style: AppFonts.onest(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ctText),
-                    ),
-                    if (showOAuth) ...[
+                    Text(sourceLabel,
+                        style: AppFonts.onest(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.ctText)),
+                    if (_isOAuth) ...[
                       const SizedBox(width: 10),
-                      _OAuthBadge(connected: connected),
+                      _OAuthStateBadge(
+                          state: oauthSt, loading: _loadingOAuth),
+                    ],
+                    const Spacer(),
+                    if (_isOAuth && oauthSt == _OAuthState.connected) ...[
+                      TextButton.icon(
+                        onPressed: _reconnecting ? null : _reconnect,
+                        icon: const Icon(Icons.refresh_rounded, size: 14),
+                        label: Text('Renovar',
+                            style: AppFonts.geist(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.ctTeal,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                        ),
+                      ),
                     ],
                   ],
                 ),
+                if (_oauthStatus?['email'] != null) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.account_circle_outlined,
+                          size: 14, color: AppColors.ctText3),
+                      const SizedBox(width: 6),
+                      Text(_oauthStatus!['email'] as String,
+                          style: AppFonts.geist(
+                              fontSize: 12, color: AppColors.ctText2)),
+                    ],
+                  ),
+                ],
                 if (syncInterval != null) ...[
                   const SizedBox(height: 8),
-                  Text(
-                    'Se sincroniza cada $syncInterval min',
-                    style: AppFonts.geist(
-                        fontSize: 12, color: AppColors.ctText2),
+                  Row(
+                    children: [
+                      const Icon(Icons.schedule_rounded,
+                          size: 14, color: AppColors.ctText3),
+                      const SizedBox(width: 6),
+                      Text('Se sincroniza cada $syncInterval min',
+                          style: AppFonts.geist(
+                              fontSize: 12, color: AppColors.ctText2)),
+                    ],
                   ),
                 ],
-                if (lastSynced != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Último sync: ${_fmtSync(lastSynced)}',
-                    style: AppFonts.geist(
-                        fontSize: 12, color: AppColors.ctText2),
-                  ),
-                ],
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(
+                      lastSynced != null
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      size: 14,
+                      color: lastSynced != null
+                          ? AppColors.ctOkText
+                          : AppColors.ctText3,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      lastSynced != null
+                          ? 'Último sync: ${_fmtSync(lastSynced)}'
+                          : 'Nunca sincronizado',
+                      style: AppFonts.geist(
+                          fontSize: 12,
+                          color: lastSynced != null
+                              ? AppColors.ctText2
+                              : AppColors.ctText3),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-          if (sourceConfig.isNotEmpty) ...[
+
+          // Card archivo / sheet
+          if (sourceConfig.isNotEmpty && sourceType != 'manual') ...[
             const SizedBox(height: 16),
             _SectionCard(
-              title: 'Configuración',
+              title: 'Archivo de datos',
               child: Column(
-                children: sourceConfig.entries
-                    .map((e) => Padding(
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 180,
-                                child: Text(
-                                  e.key,
-                                  style: AppFonts.geist(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.ctText2),
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  _isSensitive(e.key)
-                                      ? '••••••'
-                                      : e.value.toString(),
-                                  style: AppFonts.geist(
-                                      fontSize: 12,
-                                      color: AppColors.ctText),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ))
-                    .toList(),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (sourceType == 'google_sheets') ...[
+                    _ConfigRow(
+                      label: 'Hoja de cálculo',
+                      value: sheetUrl.isNotEmpty ? sheetUrl : '—',
+                      isUrl: sheetUrl.isNotEmpty,
+                    ),
+                    if ((sourceConfig['sheet_name'] as String? ?? '')
+                        .isNotEmpty)
+                      _ConfigRow(
+                        label: 'Pestaña',
+                        value: sourceConfig['sheet_name'] as String,
+                      ),
+                  ] else if (sourceType == 'onedrive_excel') ...[
+                    _ConfigRow(
+                      label: 'Archivo',
+                      value: fileName.isNotEmpty ? fileName : '—',
+                    ),
+                    if ((sourceConfig['sheet_name'] as String? ?? '')
+                        .isNotEmpty)
+                      _ConfigRow(
+                        label: 'Hoja',
+                        value: sourceConfig['sheet_name'] as String,
+                      ),
+                  ] else ...[
+                    ...sourceConfig.entries
+                        .where((e) => !_isSensitive(e.key))
+                        .map((e) =>
+                            _ConfigRow(label: e.key, value: e.value.toString())),
+                  ],
+                ],
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+// Estado OAuth enum
+enum _OAuthState { notApplicable, loading, unknown, connected, expired, disconnected }
+
+// Badge de estado OAuth
+class _OAuthStateBadge extends StatelessWidget {
+  const _OAuthStateBadge({required this.state, required this.loading});
+  final _OAuthState state;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(
+              strokeWidth: 2, color: AppColors.ctTeal));
+    }
+    final (bg, fg, label, icon) = switch (state) {
+      _OAuthState.connected => (
+          AppColors.ctOkBg,
+          AppColors.ctOkText,
+          'Conectado',
+          Icons.check_circle_rounded
+        ),
+      _OAuthState.expired => (
+          AppColors.ctWarnBg,
+          AppColors.ctWarn,
+          'Token expirado',
+          Icons.warning_rounded
+        ),
+      _OAuthState.disconnected => (
+          AppColors.ctRedBg,
+          AppColors.ctRedText,
+          'Desconectado',
+          Icons.link_off_rounded
+        ),
+      _ => (
+          AppColors.ctSurface2,
+          AppColors.ctText2,
+          'Verificando...',
+          Icons.help_outline_rounded
+        ),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration:
+          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: fg),
+          const SizedBox(width: 4),
+          Text(label,
+              style: AppFonts.geist(
+                  fontSize: 10, fontWeight: FontWeight.w600, color: fg)),
+        ],
+      ),
+    );
+  }
+}
+
+// Fila de configuración legible
+class _ConfigRow extends StatelessWidget {
+  const _ConfigRow(
+      {required this.label, required this.value, this.isUrl = false});
+  final String label;
+  final String value;
+  final bool isUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(label,
+                style: AppFonts.geist(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ctText2)),
+          ),
+          Expanded(
+            child: isUrl
+                ? InkWell(
+                    onTap: () => html.window.open(value, '_blank'),
+                    child: Text(value,
+                        style: AppFonts.geist(
+                                fontSize: 12, color: AppColors.ctTeal)
+                            .copyWith(
+                                decoration: TextDecoration.underline),
+                        overflow: TextOverflow.ellipsis),
+                  )
+                : Text(value,
+                    style:
+                        AppFonts.geist(fontSize: 12, color: AppColors.ctText),
+                    overflow: TextOverflow.ellipsis),
+          ),
         ],
       ),
     );
@@ -2270,45 +2652,6 @@ class _FieldTypeBadge extends StatelessWidget {
               fontSize: 10,
               fontWeight: FontWeight.w600,
               color: fg)),
-    );
-  }
-}
-
-class _OAuthBadge extends StatelessWidget {
-  const _OAuthBadge({required this.connected});
-  final bool? connected;
-
-  @override
-  Widget build(BuildContext context) {
-    if (connected == null) {
-      return Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-        decoration: BoxDecoration(
-            color: AppColors.ctSurface2,
-            borderRadius: BorderRadius.circular(10)),
-        child: Text('No verificado',
-            style: AppFonts.geist(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: AppColors.ctText2)),
-      );
-    }
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: connected! ? AppColors.ctOkBg : AppColors.ctRedBg,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        connected! ? 'Conectado' : 'Desconectado',
-        style: AppFonts.geist(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: connected! ? AppColors.ctOkText : AppColors.ctRedText,
-        ),
-      ),
     );
   }
 }
