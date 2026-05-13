@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/assignments_api.dart';
+import '../../core/api/operators_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -1144,8 +1145,9 @@ class _NewAssignmentDialog extends ConsumerStatefulWidget {
 
 class _NewAssignmentDialogState
     extends ConsumerState<_NewAssignmentDialog> {
-  final _operatorCtrl = TextEditingController();
-  final _dataCtrl = TextEditingController();
+  String? _selectedOperatorId;
+  List<Map<String, dynamic>> _operators = [];
+  bool _loadingOperators = true;
   String _assignmentType = '';
   late DateTime _scopeDate;
   bool _saving = false;
@@ -1158,26 +1160,29 @@ class _NewAssignmentDialogState
     if (widget.types.isNotEmpty) {
       _assignmentType = widget.types.first['slug'] as String? ?? '';
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadOperators());
   }
 
-  @override
-  void dispose() {
-    _operatorCtrl.dispose();
-    _dataCtrl.dispose();
-    super.dispose();
+  Future<void> _loadOperators() async {
+    try {
+      final ops = await OperatorsApi.listOperators();
+      if (mounted) setState(() { _operators = ops; _loadingOperators = false; });
+    } catch (_) {
+      if (mounted) setState(() { _loadingOperators = false; });
+    }
   }
 
   Future<void> _submit() async {
-    if (_operatorCtrl.text.trim().isEmpty) return;
+    if (_selectedOperatorId == null) return;
     setState(() { _saving = true; _error = null; });
     try {
       await AssignmentsApi.createAssignment(
         tenantId: widget.tenantId,
         body: {
-          'operator_id': _operatorCtrl.text.trim(),
+          'operator_id': _selectedOperatorId!,
           'assignment_type': _assignmentType,
           'scope_date': _isoDate(_scopeDate),
-          'data': {'notes': _dataCtrl.text.trim()},
+          'data': <String, dynamic>{},
           'source': 'manual',
         },
       );
@@ -1211,12 +1216,43 @@ class _NewAssignmentDialogState
                       fontWeight: FontWeight.w700,
                       color: AppColors.ctText)),
               const SizedBox(height: 20),
-              // Operator ID
-              _DialogField(
-                label: 'ID del operador',
-                controller: _operatorCtrl,
-                placeholder: 'UUID del operador',
-              ),
+              // Operator selector
+              _DialogLabel('Operador'),
+              const SizedBox(height: 6),
+              _loadingOperators
+                  ? const SizedBox(
+                      height: 40,
+                      child: Center(
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.ctTeal),
+                        ),
+                      ),
+                    )
+                  : _Dropdown<String?>(
+                      value: _selectedOperatorId,
+                      items: [
+                        DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text(
+                            'Seleccionar operador',
+                            style: AppFonts.geist(
+                                fontSize: 13, color: AppColors.ctText3),
+                          ),
+                        ),
+                        ..._operators.map((op) => DropdownMenuItem<String?>(
+                              value: op['id'] as String? ?? '',
+                              child: Text(
+                                op['display_name'] as String? ?? op['name'] as String? ?? '',
+                                style: AppFonts.geist(
+                                    fontSize: 13, color: AppColors.ctText),
+                              ),
+                            )),
+                      ],
+                      onChanged: (v) => setState(() => _selectedOperatorId = v),
+                    ),
               const SizedBox(height: 14),
               // Type
               _DialogLabel('Tipo de asignación'),
@@ -1283,13 +1319,6 @@ class _NewAssignmentDialogState
                   ),
                 ),
               ),
-              const SizedBox(height: 14),
-              // Data / notes
-              _DialogField(
-                label: 'Datos adicionales',
-                controller: _dataCtrl,
-                placeholder: 'Ej: Granjas, zona norte…',
-              ),
               if (_error != null) ...[
                 const SizedBox(height: 10),
                 Text(_error!,
@@ -1335,50 +1364,6 @@ class _DialogLabel extends StatelessWidget {
             fontSize: 12,
             fontWeight: FontWeight.w500,
             color: AppColors.ctText2));
-  }
-}
-
-class _DialogField extends StatelessWidget {
-  const _DialogField({
-    required this.label,
-    required this.controller,
-    this.placeholder,
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final String? placeholder;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _DialogLabel(label),
-        const SizedBox(height: 6),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          decoration: BoxDecoration(
-            color: AppColors.ctSurface2,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.ctBorder2),
-          ),
-          child: TextField(
-            controller: controller,
-            style: AppFonts.geist(fontSize: 13, color: AppColors.ctText),
-            decoration: InputDecoration(
-              hintText: placeholder,
-              hintStyle: AppFonts.geist(
-                  fontSize: 13, color: AppColors.ctText3),
-              border: InputBorder.none,
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 }
 

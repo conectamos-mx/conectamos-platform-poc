@@ -78,10 +78,7 @@ class AssignmentsApi {
   static Future<List<Map<String, dynamic>>> getAssignmentTypes({
     required String tenantId,
   }) async {
-    final response = await ApiClient.instance.get(
-      '/api/v1/assignment-types',
-      queryParameters: {'tenant_id': tenantId},
-    );
+    final response = await ApiClient.instance.get('/api/v1/assignment-types');
     final raw = response.data;
     final list = raw is List
         ? raw
