@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/api/assignments_api.dart';
 import '../../core/providers/permissions_provider.dart';
@@ -136,6 +137,11 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
             title: 'Asignaciones',
             subtitle: 'Asigna recursos a operadores con horario.',
             actions: [
+              _SecondaryButton(
+                label: 'Tipos',
+                icon: Icons.tune_outlined,
+                onTap: () => context.go('/assignments/types'),
+              ),
               _SecondaryButton(
                 label: 'Importar CSV',
                 icon: Icons.upload_file_outlined,
