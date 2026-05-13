@@ -4900,7 +4900,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                   else
                     ...widget.availableRoles.map((role) {
                       final id = role['id'] as String? ?? '';
-                      final name = role['name'] as String? ?? id;
+                      final name = role['label'] as String? ?? role['name'] as String? ?? id;
                       return CheckboxListTile(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
