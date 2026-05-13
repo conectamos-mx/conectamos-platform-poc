@@ -4,15 +4,12 @@ class OperatorRolesApi {
   static Future<List<Map<String, dynamic>>> listRoles({
     required String tenantId,
   }) async {
-    final res = await ApiClient.instance.get(
-      '/api/v1/operator-roles',
-      queryParameters: {'tenant_id': tenantId},
-    );
+    final res = await ApiClient.instance.get('/api/v1/operator-roles');
     final raw = res.data;
     final list = raw is List
         ? raw
         : (raw is Map
-            ? (raw['items'] ?? raw['roles'] ?? raw['data'] ?? [])
+            ? (raw['operator_roles'] ?? raw['items'] ?? raw['roles'] ?? raw['data'] ?? [])
             : []);
     return List<Map<String, dynamic>>.from(
         (list as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
