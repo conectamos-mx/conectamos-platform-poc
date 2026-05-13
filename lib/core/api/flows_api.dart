@@ -71,6 +71,7 @@ class FlowsApi {
     String? prerequisiteFlowSlug,
     bool clearPrerequisite = false,
     List<String>? allowedRoleIds,
+    List<Map<String, dynamic>>? preconditions,
   }) async {
     final body = <String, dynamic>{
       'name':              ?name,
@@ -83,6 +84,7 @@ class FlowsApi {
       'trigger_sources':   ?triggerSources,
       'send_proactive':    ?sendProactive,
       'allowed_role_ids':  ?allowedRoleIds,
+      'preconditions':     ?preconditions,
     };
     if (clearPrerequisite) {
       body['prerequisite_flow_slug'] = null;

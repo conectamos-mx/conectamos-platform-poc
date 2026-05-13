@@ -139,6 +139,9 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
   // Al cerrar tab state
   List<Map<String, dynamic>> _actions = [];
 
+  // Precondiciones tab state
+  List<Map<String, dynamic>> _precondiciones = [];
+
   // Prerequisito
   String? _prerequisiteFlowSlug;
   List<Map<String, dynamic>> _workerFlows = [];
@@ -150,7 +153,7 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 4, vsync: this);
+    _tabCtrl = TabController(length: 5, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -202,6 +205,11 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
           (rawOnComplete['actions'] as List? ?? [])
               .whereType<Map>()
               .map((e) => Map<String, dynamic>.from(e)));
+      final rawPrec = flow['preconditions'];
+      final precondiciones = rawPrec is List
+          ? List<Map<String, dynamic>>.from(
+              rawPrec.whereType<Map>().map((e) => Map<String, dynamic>.from(e)))
+          : <Map<String, dynamic>>[];
 
       setState(() {
         _flow = flow;
@@ -209,6 +217,7 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
         _triggerSources = sources;
         _conditions = conditions;
         _actions = actions;
+        _precondiciones = precondiciones;
         _sendProactive = (flow['send_proactive'] as bool?) ?? true;
         _prerequisiteFlowSlug = flow['prerequisite_flow_slug'] as String?;
         _allowedRoleIds = List<String>.from(
@@ -261,6 +270,7 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
         prerequisiteFlowSlug: _prerequisiteFlowSlug,
         clearPrerequisite: _prerequisiteFlowSlug == null,
         allowedRoleIds: _allowedRoleIds,
+        preconditions: _precondiciones,
       );
       if (!mounted) return;
       final rawFields = updated['fields'];
@@ -278,11 +288,17 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
           (rawOC['actions'] as List? ?? [])
               .whereType<Map>()
               .map((e) => Map<String, dynamic>.from(e)));
+      final rawUpdPrec = updated['preconditions'];
+      final updatedPrecondiciones = rawUpdPrec is List
+          ? List<Map<String, dynamic>>.from(
+              rawUpdPrec.whereType<Map>().map((e) => Map<String, dynamic>.from(e)))
+          : _precondiciones;
       setState(() {
         _flow = updated;
         _fields = fields;
         _conditions = updatedConditions;
         _actions = updatedActions;
+        _precondiciones = updatedPrecondiciones;
         _saving = false;
       });
       if (!silent) {
@@ -532,6 +548,15 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
               _save(silent: true);
             },
           ),
+          _PrecondicionesTab(
+            rules: _precondiciones,
+            canManage: canManage,
+            availableRoles: _availableRoles,
+            onChanged: (updated) {
+              setState(() => _precondiciones = updated);
+              _save(silent: true);
+            },
+          ),
           _AlCerrarTab(
             actions: _actions,
             canManage: canManage,
@@ -615,6 +640,7 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
           Tab(text: 'INFO'),
           Tab(text: 'CAMPOS'),
           Tab(text: 'COMPORTAMIENTO'),
+          Tab(text: 'PRECONDICIONES'),
           Tab(text: 'AL CERRAR'),
         ],
       ),
@@ -4302,6 +4328,636 @@ class _GhostButton extends StatelessWidget {
             fontSize: 13,
             fontWeight: FontWeight.w500,
             color: AppColors.ctText2,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Precondiciones ────────────────────────────────────────────────────────────
+
+const _kPreconditionTypes = [
+  ('no_active_execution',       'Sin ejecución activa'),
+  ('requires_active_execution', 'Requiere ejecución activa'),
+  ('no_concurrent_execution',   'Sin ejecución concurrente'),
+  ('field_unique_in_window',    'Campo único en ventana de tiempo'),
+  ('operator_role_in',          'Requiere rol de operador'),
+];
+
+class _PrecondicionesTab extends StatefulWidget {
+  const _PrecondicionesTab({
+    required this.rules,
+    required this.canManage,
+    required this.availableRoles,
+    required this.onChanged,
+  });
+  final List<Map<String, dynamic>> rules;
+  final bool canManage;
+  final List<Map<String, dynamic>> availableRoles;
+  final ValueChanged<List<Map<String, dynamic>>> onChanged;
+
+  @override
+  State<_PrecondicionesTab> createState() => _PrecondicionesTabState();
+}
+
+class _PrecondicionesTabState extends State<_PrecondicionesTab> {
+  late List<Map<String, dynamic>> _rules;
+
+  @override
+  void initState() {
+    super.initState();
+    _rules = List.from(widget.rules);
+  }
+
+  @override
+  void didUpdateWidget(_PrecondicionesTab old) {
+    super.didUpdateWidget(old);
+    if (old.rules != widget.rules) {
+      _rules = List.from(widget.rules);
+    }
+  }
+
+  String _typeLabel(String type) {
+    for (final (slug, label) in _kPreconditionTypes) {
+      if (slug == type) return label;
+    }
+    return type;
+  }
+
+  void _openRuleDialog(Map<String, dynamic>? rule) {
+    showDialog(
+      context: context,
+      builder: (_) => _AddRuleDialog(
+        rule: rule,
+        availableRoles: widget.availableRoles,
+        onSaved: (updated) {
+          setState(() {
+            if (rule != null) {
+              final idx = _rules.indexWhere((r) => r['id'] == rule['id']);
+              if (idx >= 0) {
+                _rules[idx] = updated;
+              } else {
+                _rules.add(updated);
+              }
+            } else {
+              _rules.add(updated);
+            }
+          });
+          widget.onChanged(List.from(_rules));
+        },
+      ),
+    );
+  }
+
+  void _deleteRule(Map<String, dynamic> rule) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.ctSurface,
+        title: const Text('Eliminar regla',
+            style: TextStyle(
+                fontFamily: 'Geist',
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.ctText)),
+        content: const Text('¿Eliminar esta regla de inicio?',
+            style: TextStyle(
+                fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText2)),
+        actions: [
+          _GhostButton(label: 'Cancelar', onTap: () => Navigator.pop(ctx)),
+          const SizedBox(width: 8),
+          _PrimaryButton(
+            label: 'Eliminar',
+            onTap: () {
+              Navigator.pop(ctx);
+              setState(() {
+                _rules.removeWhere((r) => r['id'] == rule['id']);
+              });
+              widget.onChanged(List.from(_rules));
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Reglas de inicio',
+                style: TextStyle(
+                    fontFamily: 'Onest',
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.ctText),
+              ),
+              const Spacer(),
+              if (widget.canManage)
+                TextButton(
+                  onPressed: () => _openRuleDialog(null),
+                  style:
+                      TextButton.styleFrom(foregroundColor: AppColors.ctTeal),
+                  child: const Text(
+                    '+ Agregar regla',
+                    style: TextStyle(
+                        fontFamily: 'Geist',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Se verifican antes de iniciar el flujo. Si alguna falla, el flow no se ejecuta.',
+            style: TextStyle(
+                fontFamily: 'Geist', fontSize: 12, color: AppColors.ctText2),
+          ),
+          const SizedBox(height: 16),
+          if (_rules.isEmpty)
+            const SizedBox(
+              height: 200,
+              child: _EmptyState(
+                icon: Icons.rule_outlined,
+                message:
+                    'Este flow no tiene reglas de inicio configuradas.',
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _rules.length,
+              separatorBuilder: (context2, i2) => const SizedBox(height: 8),
+              itemBuilder: (_, i) => _RuleCard(
+                rule: _rules[i],
+                typeLabel: _typeLabel(_rules[i]['type'] as String? ?? ''),
+                canManage: widget.canManage,
+                onEdit: () => _openRuleDialog(_rules[i]),
+                onDelete: () => _deleteRule(_rules[i]),
+              ),
+            ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+class _RuleCard extends StatelessWidget {
+  const _RuleCard({
+    required this.rule,
+    required this.typeLabel,
+    required this.canManage,
+    required this.onEdit,
+    required this.onDelete,
+  });
+  final Map<String, dynamic> rule;
+  final String typeLabel;
+  final bool canManage;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final message = rule['message'] as String? ?? '';
+    return InkWell(
+      onTap: canManage ? onEdit : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.ctSurface,
+          border: Border.all(color: AppColors.ctBorder),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.ctInfoBg,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                typeLabel,
+                style: const TextStyle(
+                    fontFamily: 'Geist',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ctInfoText),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message.isEmpty ? '—' : message,
+                style: const TextStyle(
+                    fontFamily: 'Geist',
+                    fontSize: 12,
+                    color: AppColors.ctText2),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (canManage) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded,
+                    size: 16, color: AppColors.ctDanger),
+                onPressed: onDelete,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: 'Eliminar regla',
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AddRuleDialog extends StatefulWidget {
+  const _AddRuleDialog({
+    required this.rule,
+    required this.availableRoles,
+    required this.onSaved,
+  });
+  final Map<String, dynamic>? rule;
+  final List<Map<String, dynamic>> availableRoles;
+  final ValueChanged<Map<String, dynamic>> onSaved;
+
+  @override
+  State<_AddRuleDialog> createState() => _AddRuleDialogState();
+}
+
+class _AddRuleDialogState extends State<_AddRuleDialog> {
+  String? _type;
+  final _slugCtrl = TextEditingController();
+  String _scope = 'operator';
+  String _window = '24h';
+  final _fieldCtrl = TextEditingController();
+  List<String> _selectedRoleIds = [];
+  final _messageCtrl = TextEditingController();
+
+  bool get _isEdit => widget.rule != null;
+  bool get _hasSlugScope =>
+      _type == 'no_active_execution' || _type == 'requires_active_execution';
+  bool get _hasConcurrentScope => _type == 'no_concurrent_execution';
+  bool get _isFieldUnique => _type == 'field_unique_in_window';
+  bool get _isRoleIn => _type == 'operator_role_in';
+
+  static const _scopeOptions = [
+    ('operator', 'Operador'),
+    ('operator+day', 'Operador + día'),
+  ];
+  static const _scopeConcurrentOptions = [
+    ('operator', 'Operador'),
+  ];
+  static const _scopeFieldOptions = [
+    ('tenant+day', 'Tenant + día'),
+  ];
+  static const _windowOptions = [
+    ('24h', '24 horas'),
+    ('48h', '48 horas'),
+    ('7d', '7 días'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final rule = widget.rule;
+    if (rule != null) {
+      _type = rule['type'] as String?;
+      _messageCtrl.text = rule['message'] as String? ?? '';
+      final config = (rule['config'] as Map?)?.cast<String, dynamic>() ?? {};
+      _slugCtrl.text = config['slug'] as String? ?? '';
+      _scope = config['scope'] as String? ?? 'operator';
+      _window = config['window'] as String? ?? '24h';
+      _fieldCtrl.text = config['field'] as String? ?? '';
+      _selectedRoleIds =
+          List<String>.from((config['role_ids'] as List? ?? []).map((e) => e.toString()));
+    }
+  }
+
+  @override
+  void dispose() {
+    _slugCtrl.dispose();
+    _fieldCtrl.dispose();
+    _messageCtrl.dispose();
+    super.dispose();
+  }
+
+  Map<String, dynamic> _buildConfig() {
+    if (_hasSlugScope || _hasConcurrentScope) {
+      return {'slug': _slugCtrl.text.trim(), 'scope': _scope};
+    } else if (_isFieldUnique) {
+      return {
+        'field': _fieldCtrl.text.trim(),
+        'scope': _scope,
+        'window': _window,
+      };
+    } else if (_isRoleIn) {
+      return {'role_ids': List<String>.from(_selectedRoleIds)};
+    }
+    return {};
+  }
+
+  void _submit() {
+    if (_type == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Selecciona un tipo de regla')));
+      return;
+    }
+    if (_messageCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('El mensaje es requerido')));
+      return;
+    }
+    final updated = <String, dynamic>{
+      if (_isEdit && widget.rule!['id'] != null) 'id': widget.rule!['id'],
+      'type': _type,
+      'config': _buildConfig(),
+      'message': _messageCtrl.text.trim(),
+    };
+    if (!_isEdit || updated['id'] == null) {
+      updated['id'] = DateTime.now().millisecondsSinceEpoch.toString();
+    }
+    Navigator.of(context).pop();
+    widget.onSaved(updated);
+  }
+
+  InputDecoration get _inputDecoration => InputDecoration(
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: AppColors.ctBorder)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: AppColors.ctBorder)),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.ctSurface,
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _isEdit ? 'Editar regla' : 'Agregar regla de inicio',
+                style: AppFonts.onest(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ctText),
+              ),
+              const SizedBox(height: 20),
+
+              // Tipo
+              const Text('Tipo de regla',
+                  style: TextStyle(
+                      fontFamily: 'Geist',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.ctText2)),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                value: _type,
+                decoration: _inputDecoration,
+                hint: const Text('Seleccionar tipo',
+                    style: TextStyle(
+                        fontFamily: 'Geist',
+                        fontSize: 13,
+                        color: AppColors.ctText3)),
+                items: _kPreconditionTypes
+                    .map((t) => DropdownMenuItem(
+                          value: t.$1,
+                          child: Text(t.$2,
+                              style: const TextStyle(
+                                  fontFamily: 'Geist',
+                                  fontSize: 13,
+                                  color: AppColors.ctText)),
+                        ))
+                    .toList(),
+                onChanged: (val) => setState(() {
+                  _type = val;
+                  if (val == 'no_concurrent_execution') _scope = 'operator';
+                  if (val == 'field_unique_in_window') _scope = 'tenant+day';
+                  if (val == 'no_active_execution' ||
+                      val == 'requires_active_execution') {
+                    if (_scope != 'operator' && _scope != 'operator+day') {
+                      _scope = 'operator';
+                    }
+                  }
+                }),
+              ),
+
+              if (_type != null) ...[
+                const SizedBox(height: 16),
+
+                // Slug + scope (no_active, requires_active, no_concurrent)
+                if (_hasSlugScope || _hasConcurrentScope) ...[
+                  const Text('Slug del flow',
+                      style: TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.ctText2)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _slugCtrl,
+                    style: const TextStyle(
+                        fontFamily: 'Geist', fontSize: 13),
+                    decoration: _inputDecoration.copyWith(
+                        hintText: 'ej: turno-matutino',
+                        hintStyle: const TextStyle(
+                            fontFamily: 'Geist',
+                            color: AppColors.ctText3)),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Alcance',
+                      style: TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.ctText2)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    value: _scope,
+                    decoration: _inputDecoration,
+                    items: (_hasConcurrentScope
+                            ? _scopeConcurrentOptions
+                            : _scopeOptions)
+                        .map((o) => DropdownMenuItem(
+                              value: o.$1,
+                              child: Text(o.$2,
+                                  style: const TextStyle(
+                                      fontFamily: 'Geist', fontSize: 13)),
+                            ))
+                        .toList(),
+                    onChanged: (val) =>
+                        setState(() => _scope = val ?? _scope),
+                  ),
+                ],
+
+                // Field + scope + window (field_unique_in_window)
+                if (_isFieldUnique) ...[
+                  const Text('Campo (field_key)',
+                      style: TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.ctText2)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _fieldCtrl,
+                    style: const TextStyle(
+                        fontFamily: 'Geist', fontSize: 13),
+                    decoration: _inputDecoration.copyWith(
+                        hintText: 'ej: numero_pedido',
+                        hintStyle: const TextStyle(
+                            fontFamily: 'Geist',
+                            color: AppColors.ctText3)),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Alcance',
+                      style: TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.ctText2)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    value: _scope,
+                    decoration: _inputDecoration,
+                    items: _scopeFieldOptions
+                        .map((o) => DropdownMenuItem(
+                              value: o.$1,
+                              child: Text(o.$2,
+                                  style: const TextStyle(
+                                      fontFamily: 'Geist', fontSize: 13)),
+                            ))
+                        .toList(),
+                    onChanged: (val) =>
+                        setState(() => _scope = val ?? _scope),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Ventana de tiempo',
+                      style: TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.ctText2)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    value: _window,
+                    decoration: _inputDecoration,
+                    items: _windowOptions
+                        .map((o) => DropdownMenuItem(
+                              value: o.$1,
+                              child: Text(o.$2,
+                                  style: const TextStyle(
+                                      fontFamily: 'Geist', fontSize: 13)),
+                            ))
+                        .toList(),
+                    onChanged: (val) =>
+                        setState(() => _window = val ?? _window),
+                  ),
+                ],
+
+                // Roles (operator_role_in)
+                if (_isRoleIn) ...[
+                  const Text('Roles requeridos',
+                      style: TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.ctText2)),
+                  const SizedBox(height: 6),
+                  if (widget.availableRoles.isEmpty)
+                    const Text('No hay roles disponibles',
+                        style: TextStyle(
+                            fontFamily: 'Geist',
+                            fontSize: 12,
+                            color: AppColors.ctText3))
+                  else
+                    ...widget.availableRoles.map((role) {
+                      final id = role['id'] as String? ?? '';
+                      final name = role['name'] as String? ?? id;
+                      return CheckboxListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        value: _selectedRoleIds.contains(id),
+                        activeColor: AppColors.ctTeal,
+                        title: Text(name,
+                            style: const TextStyle(
+                                fontFamily: 'Geist',
+                                fontSize: 13,
+                                color: AppColors.ctText)),
+                        onChanged: (val) => setState(() {
+                          if (val == true) {
+                            if (!_selectedRoleIds.contains(id)) {
+                              _selectedRoleIds.add(id);
+                            }
+                          } else {
+                            _selectedRoleIds.remove(id);
+                          }
+                        }),
+                      );
+                    }),
+                ],
+              ],
+
+              const SizedBox(height: 16),
+              const Text('Mensaje al operador si falla',
+                  style: TextStyle(
+                      fontFamily: 'Geist',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.ctText2)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _messageCtrl,
+                style:
+                    const TextStyle(fontFamily: 'Geist', fontSize: 13),
+                maxLines: 2,
+                decoration: _inputDecoration.copyWith(
+                    hintText:
+                        'Ej: Ya iniciaste turno hoy. Espera mañana para iniciar de nuevo.',
+                    hintStyle: const TextStyle(
+                        fontFamily: 'Geist', color: AppColors.ctText3)),
+              ),
+
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _GhostButton(
+                      label: 'Cancelar',
+                      onTap: () => Navigator.of(context).pop()),
+                  const SizedBox(width: 8),
+                  _PrimaryButton(
+                      label: 'Guardar regla', onTap: _submit),
+                ],
+              ),
+            ],
           ),
         ),
       ),
