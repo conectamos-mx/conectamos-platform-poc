@@ -8,8 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../core/api/flows_api.dart';
 import '../../../core/api/operator_fields_api.dart';
+import '../../../core/api/operator_roles_api.dart';
 import '../../../core/api/operators_api.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/utils/identity_config.dart';
@@ -70,7 +70,7 @@ class OperatorFormDialog extends ConsumerStatefulWidget {
     this.operatorId,
     this.initialName,
     this.initialPhone,
-    this.initialFlows,
+    this.initialRoleIds,
     this.initialTelegramChatId,
     this.initialMetadata,
     this.initialEmail,
@@ -85,7 +85,7 @@ class OperatorFormDialog extends ConsumerStatefulWidget {
   final String? operatorId;
   final String? initialName;
   final String? initialPhone;
-  final List<String>? initialFlows;
+  final List<String>? initialRoleIds;
   final String? initialTelegramChatId;
   final Map<String, dynamic>? initialMetadata;
   final String? initialEmail;
@@ -145,10 +145,10 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
   // Realtime subscription
   RealtimeChannel? _realtimeChannel;
 
-  // Flows
-  List<Map<String, dynamic>> _availableFlows = [];
-  bool _flowsLoading = true;
-  Set<String> _selectedFlowIds = {};
+  // Roles
+  String? _selectedRoleId;
+  List<Map<String, dynamic>> _availableRoles = [];
+  bool _rolesLoading = false;
 
   // Custom fields
   List<Map<String, dynamic>> _customFieldDefs = [];
@@ -171,7 +171,9 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
     );
     _telegramCtrl =
         TextEditingController(text: widget.initialTelegramChatId ?? '');
-    _selectedFlowIds = Set<String>.from(widget.initialFlows ?? []);
+    _selectedRoleId = widget.initialRoleIds?.isNotEmpty == true
+        ? widget.initialRoleIds!.first
+        : null;
 
     // Parse initial phone
     final rawPhone = widget.initialPhone ?? '';
@@ -200,7 +202,7 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
         .toList();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadFlows();
+      _loadRoles();
       _loadCustomFields();
     });
 
@@ -265,42 +267,21 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
     widget.onOperatorMetadataUpdated?.call(widget.operatorId!, meta);
   }
 
-  // ── Flows ─────────────────────────────────────────────────────────────────
+  // ── Roles ─────────────────────────────────────────────────────────────────
 
-  Future<void> _loadFlows() async {
+  Future<void> _loadRoles() async {
+    if (!mounted) return;
+    setState(() => _rolesLoading = true);
     try {
-      final flows = await FlowsApi.listFlows(
-        triggerSource: 'conversational',
-      );
+      final roles = await OperatorRolesApi.listRoles(tenantId: '');
       if (mounted) {
         setState(() {
-          _availableFlows = flows;
-          _flowsLoading = false;
+          _availableRoles = roles;
+          _rolesLoading = false;
         });
-        _fetchTelegramChannels();
       }
     } catch (_) {
-      if (mounted) setState(() => _flowsLoading = false);
-    }
-  }
-
-  Future<void> _fetchTelegramChannels() async {
-    final flowIds = _selectedFlowIds.toList();
-    if (flowIds.isEmpty) {
-      if (mounted) setState(() => _telegramChannelId = null);
-      return;
-    }
-    try {
-      final channels =
-          await OperatorsApi.getTelegramChannels(flowIds: flowIds);
-      if (!mounted) return;
-      setState(() {
-        _telegramChannelId = channels.isNotEmpty
-            ? channels.first['channel_id'] as String?
-            : null;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _telegramChannelId = null);
+      if (mounted) setState(() => _rolesLoading = false);
     }
   }
 
@@ -884,26 +865,10 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
       return;
     }
 
-    // Non-blocking Telegram warning
-    final hasTelegramFlow = _availableFlows
-        .where((f) => _selectedFlowIds.contains(f['id']))
-        .any((f) {
-      final types = f['channel_types'];
-      return types is List && types.contains('telegram');
-    });
-    if (hasTelegramFlow && _telegramCtrl.text.trim().isEmpty) {
-      setState(() {
-        _errorMsg =
-            'Este operador tiene flujos Telegram asignados. '
-            'Ingresa su Telegram Chat ID o usa "Vincular vía Telegram".';
-      });
-      // Warning only — do not block save
-    }
-
     setState(() => _saving = true);
 
     try {
-      final flows = _selectedFlowIds.toList();
+      final roleIds = _selectedRoleId != null ? [_selectedRoleId!] : <String>[];
       final tgId = _telegramCtrl.text.trim();
       final metadata = <String, dynamic>{};
       if (_phoneSecondary.isNotEmpty) {
@@ -951,7 +916,7 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
           id: widget.operatorId!,
           displayName: name,
           phone: phone,
-          flows: flows,
+          roleIds: roleIds,
           telegramChatId: tgId,
           email: email.isNotEmpty ? email : null,
           nationality:
@@ -968,7 +933,7 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
         await OperatorsApi.createOperator(
           displayName: name,
           phone: phone,
-          flows: flows,
+          roleIds: roleIds,
           telegramChatId: tgId.isNotEmpty ? tgId : null,
           email: email.isNotEmpty ? email : null,
           nationality:
@@ -1386,10 +1351,10 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
 
                     const SizedBox(height: 20),
 
-                    // ── SECCIÓN 4: Flujos asignados ───────────────────────
-                    _SectionHeader(label: 'Flujos asignados'),
+                    // ── SECCIÓN 4: Rol de operador ────────────────────────
+                    _SectionHeader(label: 'Rol de operador'),
                     const SizedBox(height: 10),
-                    if (_flowsLoading)
+                    if (_rolesLoading)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 16),
                         child: Center(
@@ -1402,170 +1367,73 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
                           ),
                         ),
                       )
-                    else if (_availableFlows.isEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: AppColors.ctBorder),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'No hay flujos disponibles en este tenant.',
-                          style: TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 12,
-                              color: AppColors.ctText2),
-                        ),
-                      )
                     else
-                      Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: AppColors.ctBorder),
-                          borderRadius: BorderRadius.circular(8),
+                      DropdownButtonFormField<String>(
+                        initialValue: _availableRoles.any(
+                                (r) => r['id'] == _selectedRoleId)
+                            ? _selectedRoleId
+                            : null,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: AppColors.ctSurface2,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                                color: AppColors.ctBorder),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                                color: AppColors.ctBorder),
+                          ),
                         ),
-                        child: Column(
-                          children:
-                              _availableFlows.asMap().entries.map((entry) {
-                            final idx = entry.key;
-                            final flow = entry.value;
-                            final flowId =
-                                flow['id'] as String? ?? '';
-                            final flowName =
-                                flow['name'] as String? ?? flowId;
-                            final workerName =
-                                flow['worker_name'] as String? ??
-                                    flow['tenant_worker_name']
-                                        as String? ??
-                                    '';
-                            final isFlowActive =
-                                flow['is_active'] as bool? ?? true;
-                            final isSelected =
-                                _selectedFlowIds.contains(flowId);
-                            final isLast = idx ==
-                                _availableFlows.length - 1;
-                            return Column(
-                              children: [
-                                InkWell(
-                                  borderRadius: isLast
-                                      ? const BorderRadius.only(
-                                          bottomLeft:
-                                              Radius.circular(7),
-                                          bottomRight:
-                                              Radius.circular(7))
-                                      : BorderRadius.zero,
-                                  onTap: () {
-                                    setState(() {
-                                      if (isSelected) {
-                                        _selectedFlowIds
-                                            .remove(flowId);
-                                      } else {
-                                        _selectedFlowIds.add(flowId);
-                                      }
-                                    });
-                                    _fetchTelegramChannels();
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 10),
-                                    child: Row(
-                                      children: [
-                                        SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: Checkbox(
-                                            value: isSelected,
-                                            onChanged: (v) {
-                                              setState(() {
-                                                if (v == true) {
-                                                  _selectedFlowIds
-                                                      .add(flowId);
-                                                } else {
-                                                  _selectedFlowIds
-                                                      .remove(flowId);
-                                                }
-                                              });
-                                              _fetchTelegramChannels();
-                                            },
-                                            activeColor:
-                                                AppColors.ctTeal,
-                                            checkColor:
-                                                AppColors.ctNavy,
-                                            materialTapTargetSize:
-                                                MaterialTapTargetSize
-                                                    .shrinkWrap,
-                                            side: const BorderSide(
-                                                color:
-                                                    AppColors.ctBorder2),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment
-                                                    .start,
-                                            mainAxisSize:
-                                                MainAxisSize.min,
-                                            children: [
-                                              Text(flowName,
-                                                  style: const TextStyle(
-                                                      fontFamily:
-                                                          'Geist',
-                                                      fontSize: 13,
-                                                      color: AppColors
-                                                          .ctText)),
-                                              if (workerName.isNotEmpty)
-                                                Text(workerName,
-                                                    style: const TextStyle(
-                                                        fontFamily:
-                                                            'Geist',
-                                                        fontSize: 11,
-                                                        color: AppColors
-                                                            .ctText2)),
-                                            ],
-                                          ),
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets
-                                              .symmetric(
-                                              horizontal: 7,
-                                              vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: isFlowActive
-                                                ? AppColors.ctOkBg
-                                                : AppColors.ctSurface2,
-                                            borderRadius:
-                                                BorderRadius.circular(
-                                                    20),
-                                          ),
-                                          child: Text(
-                                            isFlowActive
-                                                ? 'Activo'
-                                                : 'Inactivo',
-                                            style: TextStyle(
-                                              fontFamily: 'Geist',
-                                              fontSize: 10,
-                                              fontWeight:
-                                                  FontWeight.w600,
-                                              color: isFlowActive
-                                                  ? AppColors.ctOkText
-                                                  : AppColors.ctText2,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                if (!isLast)
-                                  const Divider(
-                                      height: 1,
-                                      color: AppColors.ctBorder),
-                              ],
+                        hint: const Text('Sin rol asignado',
+                            style: TextStyle(
+                                fontFamily: 'Geist',
+                                fontSize: 13,
+                                color: AppColors.ctText2)),
+                        items: [
+                          const DropdownMenuItem<String>(
+                            value: null,
+                            child: Text('Sin rol asignado',
+                                style: TextStyle(
+                                    fontFamily: 'Geist',
+                                    fontSize: 13,
+                                    color: AppColors.ctText2)),
+                          ),
+                          ..._availableRoles.map((role) {
+                            final id = role['id'] as String? ?? '';
+                            final label =
+                                role['label'] as String? ?? id;
+                            final slug =
+                                role['slug'] as String? ?? '';
+                            return DropdownMenuItem<String>(
+                              value: id,
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(label,
+                                      style: const TextStyle(
+                                          fontFamily: 'Geist',
+                                          fontSize: 13,
+                                          color: AppColors.ctText)),
+                                  if (slug.isNotEmpty)
+                                    Text(slug,
+                                        style: const TextStyle(
+                                            fontFamily: 'Geist',
+                                            fontSize: 11,
+                                            color: AppColors.ctText2)),
+                                ],
+                              ),
                             );
-                          }).toList(),
-                        ),
+                          }),
+                        ],
+                        onChanged: (val) =>
+                            setState(() => _selectedRoleId = val),
                       ),
 
                     // ── SECCIÓN 5: Telegram Chat ID ───────────────────────

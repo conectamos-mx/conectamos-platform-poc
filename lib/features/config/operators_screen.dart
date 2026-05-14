@@ -352,10 +352,6 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
                         flex: 2,
                         child: Text('ROL', style: _headerStyle)),
                     Expanded(
-                        flex: 3,
-                        child: Text('FLUJOS ASIGNADOS',
-                            style: _headerStyle)),
-                    Expanded(
                         flex: 2,
                         child: Text('ÚLTIMO ACCESO',
                             style: _headerStyle)),
@@ -646,18 +642,6 @@ class _OperatorRowState extends State<_OperatorRow> {
               }(),
             ),
 
-            // Flujos asignados
-            Expanded(
-              flex: 3,
-              child: Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: flows
-                    .map((f) => _FlowBadge(flow: f))
-                    .toList(),
-              ),
-            ),
-
             // Último acceso
             Expanded(
               flex: 2,
@@ -684,7 +668,7 @@ class _OperatorRowState extends State<_OperatorRow> {
                                 operatorId: id,
                                 initialName: name,
                                 initialPhone: phone,
-                                initialFlows: flows.map((f) => f['id'] as String? ?? '').where((s) => s.isNotEmpty).toList(),
+                                initialRoleIds: (op['role_ids'] as List?)?.cast<String>() ?? [],
                                 initialTelegramChatId: metadata['telegram_chat_id'] as String?,
                                 initialMetadata: metadata,
                                 initialEmail: email,
@@ -886,36 +870,6 @@ class _TelegramBadge extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w600,
           color: fg,
-        ),
-      ),
-    );
-  }
-}
-
-class _FlowBadge extends StatelessWidget {
-  const _FlowBadge({required this.flow});
-  final Map<String, dynamic> flow;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = flow['name'] as String? ?? flow['id'] as String? ?? '—';
-    final isActive = flow['is_active'] as bool? ?? true;
-    return Opacity(
-      opacity: isActive ? 1.0 : 0.45,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: AppColors.ctInfoBg,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: AppColors.ctInfoText,
-          ),
         ),
       ),
     );

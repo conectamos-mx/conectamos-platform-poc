@@ -14,7 +14,7 @@ class OperatorsApi {
   static Future<Map<String, dynamic>> createOperator({
     required String displayName,
     required String phone,
-    required List<String> flows,
+    List<String> roleIds = const [],
     String? telegramChatId,
     String? email,
     String? nationality,
@@ -37,7 +37,7 @@ class OperatorsApi {
       data: {
         'display_name': displayName,
         'phone': phone,
-        'flows': flows,
+        'role_ids': roleIds,
         if (email != null && email.isNotEmpty) 'email': email,
         if (nationality != null && nationality.isNotEmpty)
           'nationality': nationality,
@@ -58,7 +58,7 @@ class OperatorsApi {
     required String id,
     required String displayName,
     required String phone,
-    required List<String> flows,
+    List<String> roleIds = const [],
     String? telegramChatId,
     String? email,
     String? nationality,
@@ -78,7 +78,7 @@ class OperatorsApi {
       data: {
         'display_name': displayName,
         'phone': phone,
-        'flows': flows,
+        'role_ids': roleIds,
         'telegram_chat_id': telegramChatId ?? '',
         'email':                ?email,
         'nationality':          ?nationality,

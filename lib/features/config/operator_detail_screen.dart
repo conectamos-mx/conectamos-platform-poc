@@ -214,10 +214,6 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
   Future<void> _openEdit() async {
     final op = _op!;
     final meta = op['metadata'] as Map<String, dynamic>? ?? {};
-    final flows = (op['flows'] as List? ?? []).map((f) {
-      if (f is Map) return Map<String, dynamic>.from(f);
-      return <String, dynamic>{'id': f.toString()};
-    }).toList();
 
     await showDialog(
       context: context,
@@ -226,10 +222,7 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
         initialName:
             op['display_name'] as String? ?? op['name'] as String? ?? '',
         initialPhone: op['phone'] as String? ?? '',
-        initialFlows: flows
-            .map((f) => f['id'] as String? ?? '')
-            .where((s) => s.isNotEmpty)
-            .toList(),
+        initialRoleIds: (op['role_ids'] as List?)?.cast<String>() ?? [],
         initialTelegramChatId: meta['telegram_chat_id'] as String?,
         initialMetadata: meta,
         initialEmail: op['email'] as String?,
