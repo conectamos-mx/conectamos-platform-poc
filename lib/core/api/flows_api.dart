@@ -68,8 +68,6 @@ class FlowsApi {
     Map<String, dynamic>? onComplete,
     List<String>? triggerSources,
     bool? sendProactive,
-    String? prerequisiteFlowSlug,
-    bool clearPrerequisite = false,
     List<String>? allowedRoleIds,
     List<Map<String, dynamic>>? preconditions,
   }) async {
@@ -86,11 +84,6 @@ class FlowsApi {
       'allowed_role_ids':  ?allowedRoleIds,
       'preconditions':     ?preconditions,
     };
-    if (clearPrerequisite) {
-      body['prerequisite_flow_slug'] = null;
-    } else if (prerequisiteFlowSlug != null) {
-      body['prerequisite_flow_slug'] = prerequisiteFlowSlug;
-    }
     final response = await ApiClient.instance.patch(
       '/flows/$flowId',
       data: body,
