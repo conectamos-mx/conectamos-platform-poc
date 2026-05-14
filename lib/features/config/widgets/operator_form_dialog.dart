@@ -878,6 +878,10 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
       _fieldErrors['phone'] = 'Teléfono obligatorio';
       hasErrors = true;
     }
+    if (_selectedRoleId == null) {
+      _fieldErrors['role'] = 'Debes seleccionar un rol';
+      hasErrors = true;
+    }
     for (final def in _customFieldDefs) {
       final key = def['field_key'] as String? ?? '';
       final label = def['label'] as String? ?? key;
@@ -1441,14 +1445,21 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
                               horizontal: 12, vertical: 10),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                                color: AppColors.ctBorder),
+                            borderSide: BorderSide(
+                                color: _fieldErrors.containsKey('role')
+                                    ? AppColors.ctDanger
+                                    : AppColors.ctBorder),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                                color: AppColors.ctBorder),
+                            borderSide: BorderSide(
+                                color: _fieldErrors.containsKey('role')
+                                    ? AppColors.ctDanger
+                                    : AppColors.ctBorder),
                           ),
+                          errorText: _fieldErrors['role'],
+                          errorStyle: const TextStyle(
+                              fontFamily: 'Geist', fontSize: 11),
                         ),
                         hint: const Text('Sin rol asignado',
                             style: TextStyle(
