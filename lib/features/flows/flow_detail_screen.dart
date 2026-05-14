@@ -4223,11 +4223,12 @@ class _GhostButton extends StatelessWidget {
 // ── Precondiciones ────────────────────────────────────────────────────────────
 
 const _kPreconditionTypes = [
-  ('no_active_execution',       'Sin ejecución activa'),
-  ('requires_active_execution', 'Requiere ejecución activa'),
-  ('no_concurrent_execution',   'Sin ejecución concurrente'),
-  ('field_unique_in_window',    'Campo único en ventana de tiempo'),
-  ('operator_role_in',          'Requiere rol de operador'),
+  ('no_active_execution',          'Sin ejecución activa'),
+  ('requires_active_execution',    'Requiere ejecución activa'),
+  ('no_concurrent_execution',      'Sin ejecución concurrente'),
+  ('field_unique_in_window',       'Campo único en ventana de tiempo'),
+  ('operator_role_in',             'Requiere rol de operador'),
+  ('requires_completed_sibling',   'Requiere flow completado'),
 ];
 
 class _PrecondicionesTab extends StatefulWidget {
@@ -4413,7 +4414,19 @@ class _RuleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ruleType = rule['type'] as String? ?? '';
     final message = rule['message'] as String? ?? '';
+    final config = ((rule['params'] ?? rule['config']) as Map?)?.cast<String, dynamic>() ?? {};
+    final isSibling = ruleType == 'requires_completed_sibling';
+    final siblingSlug = config['sibling_slug'] as String? ?? '';
+    final windowType = config['window_type'] as String? ?? 'calendar_day';
+    final bodyText = isSibling
+        ? (siblingSlug.isNotEmpty
+            ? 'Requiere completar: $siblingSlug'
+            : '(sin configurar)')
+        : (message.isEmpty ? '—' : message);
+    final windowLabel = windowType == 'calendar_day' ? 'Ventana: día calendario' : 'Ventana: móvil';
+
     return InkWell(
       onTap: canManage ? onEdit : null,
       borderRadius: BorderRadius.circular(8),
@@ -4442,14 +4455,35 @@ class _RuleCard extends StatelessWidget {
                     color: AppColors.ctInfoText),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
+            if (isSibling) ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.ctBorder,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  windowLabel,
+                  style: const TextStyle(
+                      fontFamily: 'Geist',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.ctText2),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: Text(
-                message.isEmpty ? '—' : message,
-                style: const TextStyle(
+                bodyText,
+                style: TextStyle(
                     fontFamily: 'Geist',
                     fontSize: 12,
-                    color: AppColors.ctText2),
+                    color: (isSibling && siblingSlug.isEmpty)
+                        ? AppColors.ctDanger
+                        : AppColors.ctText2),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -4493,6 +4527,11 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
   final _fieldCtrl = TextEditingController();
   List<String> _selectedRoleIds = [];
   final _messageCtrl = TextEditingController();
+  String? _selectedSiblingSlug;
+  List<Map<String, dynamic>> _availableFlows = [];
+  bool _loadingFlows = false;
+  String _windowType = 'calendar_day';
+  final _windowDurationCtrl = TextEditingController();
 
   bool get _isEdit => widget.rule != null;
   bool get _hasSlugScope =>
@@ -4500,6 +4539,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
   bool get _hasConcurrentScope => _type == 'no_concurrent_execution';
   bool get _isFieldUnique => _type == 'field_unique_in_window';
   bool get _isRoleIn => _type == 'operator_role_in';
+  bool get _isSiblingFlow => _type == 'requires_completed_sibling';
 
   static const _scopeOptions = [
     ('operator', 'Operador'),
@@ -4524,13 +4564,17 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     if (rule != null) {
       _type = rule['type'] as String?;
       _messageCtrl.text = rule['message'] as String? ?? '';
-      final config = (rule['config'] as Map?)?.cast<String, dynamic>() ?? {};
+      final config = ((rule['params'] ?? rule['config']) as Map?)?.cast<String, dynamic>() ?? {};
       _slugCtrl.text = config['slug'] as String? ?? '';
       _scope = config['scope'] as String? ?? 'operator';
       _window = config['window'] as String? ?? '24h';
       _fieldCtrl.text = config['field'] as String? ?? '';
       _selectedRoleIds =
           List<String>.from((config['role_ids'] as List? ?? []).map((e) => e.toString()));
+      _selectedSiblingSlug = config['sibling_slug'] as String?;
+      _windowType = config['window_type'] as String? ?? 'calendar_day';
+      _windowDurationCtrl.text = config['window'] as String? ?? '';
+      if (_type == 'requires_completed_sibling') _loadFlows();
     }
   }
 
@@ -4539,7 +4583,19 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     _slugCtrl.dispose();
     _fieldCtrl.dispose();
     _messageCtrl.dispose();
+    _windowDurationCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadFlows() async {
+    if (_loadingFlows) return;
+    setState(() => _loadingFlows = true);
+    try {
+      final flows = await FlowsApi.listFlows();
+      if (mounted) setState(() { _availableFlows = flows; _loadingFlows = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loadingFlows = false);
+    }
   }
 
   Map<String, dynamic> _buildConfig() {
@@ -4553,6 +4609,14 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
       };
     } else if (_isRoleIn) {
       return {'role_ids': List<String>.from(_selectedRoleIds)};
+    } else if (_isSiblingFlow) {
+      return {
+        'sibling_slug': _selectedSiblingSlug ?? '',
+        'window_type': _windowType,
+        'timezone': 'America/Mexico_City',
+        if (_windowType == 'rolling' && _windowDurationCtrl.text.trim().isNotEmpty)
+          'window': _windowDurationCtrl.text.trim(),
+      };
     }
     return {};
   }
@@ -4569,14 +4633,11 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
       return;
     }
     final updated = <String, dynamic>{
-      if (_isEdit && widget.rule!['id'] != null) 'id': widget.rule!['id'],
+      'id': (_isEdit ? widget.rule!['id'] : null) ?? 'tmp_${DateTime.now().millisecondsSinceEpoch}',
       'type': _type,
-      'config': _buildConfig(),
+      'params': _buildConfig(),
       'message': _messageCtrl.text.trim(),
     };
-    if (!_isEdit || updated['id'] == null) {
-      updated['id'] = DateTime.now().millisecondsSinceEpoch.toString();
-    }
     Navigator.of(context).pop();
     widget.onSaved(updated);
   }
@@ -4650,6 +4711,11 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                     if (_scope != 'operator' && _scope != 'operator+day') {
                       _scope = 'operator';
                     }
+                  }
+                  if (val == 'requires_completed_sibling') {
+                    _windowType = 'calendar_day';
+                    _selectedSiblingSlug = null;
+                    _loadFlows();
                   }
                 }),
               ),
@@ -4807,6 +4873,130 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                         }),
                       );
                     }),
+                ],
+
+                // Sibling slug + window type (requires_completed_sibling)
+                if (_isSiblingFlow) ...[
+                  const Text('Flow prerequisito',
+                      style: TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.ctText2)),
+                  const SizedBox(height: 6),
+                  if (_loadingFlows)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.ctTeal),
+                        ),
+                      ),
+                    )
+                  else
+                    DropdownButtonFormField<String>(
+                      value: _availableFlows.any((f) =>
+                              (f['slug'] as String?) == _selectedSiblingSlug)
+                          ? _selectedSiblingSlug
+                          : null,
+                      decoration: _inputDecoration,
+                      hint: const Text('Seleccionar flow',
+                          style: TextStyle(
+                              fontFamily: 'Geist',
+                              fontSize: 13,
+                              color: AppColors.ctText3)),
+                      items: [
+                        ..._availableFlows.map((f) {
+                          final slug = f['slug'] as String? ?? '';
+                          final name = f['name'] as String? ?? slug;
+                          return DropdownMenuItem<String>(
+                            value: slug,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(name,
+                                    style: const TextStyle(
+                                        fontFamily: 'Geist',
+                                        fontSize: 13,
+                                        color: AppColors.ctText)),
+                                Text(slug,
+                                    style: const TextStyle(
+                                        fontFamily: 'Geist',
+                                        fontSize: 11,
+                                        color: AppColors.ctText2)),
+                              ],
+                            ),
+                          );
+                        }),
+                        if (_selectedSiblingSlug != null &&
+                            _selectedSiblingSlug!.isNotEmpty &&
+                            !_availableFlows.any((f) =>
+                                (f['slug'] as String?) == _selectedSiblingSlug))
+                          DropdownMenuItem<String>(
+                            value: _selectedSiblingSlug,
+                            enabled: false,
+                            child: Text(
+                              '$_selectedSiblingSlug (no encontrado)',
+                              style: const TextStyle(
+                                  fontFamily: 'Geist',
+                                  fontSize: 13,
+                                  color: AppColors.ctText2),
+                            ),
+                          ),
+                      ],
+                      onChanged: (val) =>
+                          setState(() => _selectedSiblingSlug = val),
+                    ),
+                  const SizedBox(height: 16),
+                  const Text('Tipo de ventana',
+                      style: TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.ctText2)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    value: _windowType,
+                    decoration: _inputDecoration,
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'calendar_day',
+                          child: Text('Día calendario',
+                              style: TextStyle(
+                                  fontFamily: 'Geist', fontSize: 13))),
+                      DropdownMenuItem(
+                          value: 'rolling',
+                          child: Text('Ventana móvil',
+                              style: TextStyle(
+                                  fontFamily: 'Geist', fontSize: 13))),
+                    ],
+                    onChanged: (val) =>
+                        setState(() => _windowType = val ?? _windowType),
+                  ),
+                  if (_windowType == 'rolling') ...[
+                    const SizedBox(height: 16),
+                    const Text('Duración de ventana',
+                        style: TextStyle(
+                            fontFamily: 'Geist',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.ctText2)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _windowDurationCtrl,
+                      style:
+                          const TextStyle(fontFamily: 'Geist', fontSize: 13),
+                      decoration: _inputDecoration.copyWith(
+                          hintText: 'ej: 24h, 7d',
+                          hintStyle: const TextStyle(
+                              fontFamily: 'Geist',
+                              color: AppColors.ctText3)),
+                    ),
+                  ],
                 ],
               ],
 
