@@ -393,12 +393,11 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
     final helper = html.ScriptElement()
       ..text = '''
         window.fbAsyncInit = function() {
-          FB.init({ 
-            appId: '4149613485350757', 
-            cookie: true, 
-            xfbml: true,          
-            autoLogAppEvents: true, 
-            version: 'v19.0' 
+          FB.init({
+            appId            : '4149613485350757',
+            autoLogAppEvents : true,
+            xfbml            : true,
+            version          : 'v25.0'
           });
         };
 
