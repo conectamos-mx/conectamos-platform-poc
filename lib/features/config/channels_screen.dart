@@ -400,7 +400,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
       ..text = '''
         window.fbAsyncInit = function() {
           FB.init({
-            appId            : '980871654909798',
+            appId            : '4149613485350757',
             autoLogAppEvents : true,
             xfbml            : true,
             version          : 'v25.0'
