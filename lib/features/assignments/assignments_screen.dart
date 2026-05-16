@@ -2410,17 +2410,20 @@ class _FlowSelectorState extends State<_FlowSelector> {
           ),
         ),
         if (_expanded)
-          Container(
-            constraints: const BoxConstraints(maxHeight: 200),
-            margin: const EdgeInsets.only(top: 2),
-            decoration: BoxDecoration(
-              color: AppColors.ctSurface,
-              border: Border.all(color: AppColors.ctBorder),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: ListView(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
+          SizedBox(
+            width: double.infinity,
+            child: Container(
+              constraints: const BoxConstraints(maxHeight: 200),
+              margin: const EdgeInsets.only(top: 2),
+              decoration: BoxDecoration(
+                color: AppColors.ctSurface,
+                border: Border.all(color: AppColors.ctBorder),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ListView(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
               children: widget.flowDefs.map((f) {
                 final id = f['id'] as String? ?? '';
                 final name = f['name'] as String? ??
@@ -2447,6 +2450,7 @@ class _FlowSelectorState extends State<_FlowSelector> {
                 );
               }).toList(),
             ),
+          ),
           ),
       ],
     );
