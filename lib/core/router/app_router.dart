@@ -21,6 +21,7 @@ import '../../features/settings/operator_fields_screen.dart';
 import '../../features/config/ai_workers_screen.dart';
 import '../../features/config/workflows_screen.dart';
 import '../../features/assignments/assignments_screen.dart';
+import '../../features/assignments/assignment_detail_screen.dart';
 import '../../features/catalogs/catalog_detail_screen.dart';
 import '../../features/catalogs/catalogs_screen.dart';
 import '../../features/flows/all_executions_screen.dart';
@@ -299,6 +300,16 @@ final routerProvider = Provider<GoRouter>((ref) {
             GoRoute(
               path: '/assignments',
               pageBuilder: (c, s) => const NoTransitionPage(child: AssignmentsScreen()),
+              routes: [
+                GoRoute(
+                  path: ':assignmentId',
+                  pageBuilder: (c, s) => NoTransitionPage(
+                    child: AssignmentDetailScreen(
+                      assignmentId: s.pathParameters['assignmentId'] ?? '',
+                    ),
+                  ),
+                ),
+              ],
             ),
           ]),
         ],
