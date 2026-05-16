@@ -1400,38 +1400,39 @@ class _AssignmentsSchedulerState extends State<_AssignmentsScheduler> {
       if (id.isNotEmpty) legendOps[id] = a['operator_name'] as String? ?? id;
     }
 
-    return Theme(
-      data: Theme.of(context).copyWith(
-        primaryColor: AppColors.ctTeal,
-        colorScheme: Theme.of(context).colorScheme.copyWith(
-          primary: AppColors.ctTeal,
-          onPrimary: Colors.white,
-        ),
-      ),
-      child: Column(
-        children: [
-          if (legendOps.isNotEmpty)
-            _SchedulerLegend(
-              operatorNames: legendOps,
-              operatorColors: _operatorColors,
-            ),
-          Expanded(
-            child: WeekView<Map<String, dynamic>>(
-              controller: _eventController,
-              initialDay: widget.currentMonday,
-              startHour: 6,
-              endHour: 22,
-              startDay: WeekDays.monday,
-              onEventTap: (events, _) {
-                if (events.isNotEmpty) {
-                  final a = events.first.event;
-                  if (a != null) widget.onAssignmentTap(a);
-                }
-              },
-            ),
+    return Column(
+      children: [
+        if (legendOps.isNotEmpty)
+          _SchedulerLegend(
+            operatorNames: legendOps,
+            operatorColors: _operatorColors,
           ),
-        ],
-      ),
+        Expanded(
+          child: WeekView<Map<String, dynamic>>(
+            controller: _eventController,
+            initialDay: widget.currentMonday,
+            startHour: 6,
+            endHour: 22,
+            startDay: WeekDays.monday,
+            headerStyle: const HeaderStyle(
+              decoration: BoxDecoration(color: AppColors.ctNavy),
+              headerTextStyle: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              leftIconConfig: IconDataConfig(color: Colors.white),
+              rightIconConfig: IconDataConfig(color: Colors.white),
+            ),
+            onEventTap: (events, _) {
+              if (events.isNotEmpty) {
+                final a = events.first.event;
+                if (a != null) widget.onAssignmentTap(a);
+              }
+            },
+          ),
+        ),
+      ],
     );
   }
 }

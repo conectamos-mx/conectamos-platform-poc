@@ -7,9 +7,11 @@ class AppDateTimePicker {
     BuildContext context, {
     DateTime? initial,
   }) async {
+    final rootContext =
+        Navigator.of(context, rootNavigator: true).context;
     final now = initial ?? DateTime.now();
-    final baseTheme = Theme.of(context).copyWith(
-      colorScheme: Theme.of(context).colorScheme.copyWith(
+    final baseTheme = Theme.of(rootContext).copyWith(
+      colorScheme: Theme.of(rootContext).colorScheme.copyWith(
         primary: AppColors.ctTeal,
         onPrimary: Colors.white,
         surface: AppColors.ctSurface,
@@ -18,7 +20,7 @@ class AppDateTimePicker {
     );
 
     final date = await showDatePicker(
-      context: context,
+      context: rootContext,
       initialDate: now,
       firstDate: DateTime(2020),
       lastDate: DateTime(2035),
@@ -26,10 +28,10 @@ class AppDateTimePicker {
       builder: (context, child) => Theme(data: baseTheme, child: child!),
     );
     if (date == null) return null;
-    if (!context.mounted) return null;
+    if (!rootContext.mounted) return null;
 
     final time = await showTimePicker(
-      context: context,
+      context: rootContext,
       initialTime: TimeOfDay.fromDateTime(now),
       builder: (context, child) => Theme(data: baseTheme, child: child!),
     );
