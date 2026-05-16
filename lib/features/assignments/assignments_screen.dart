@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:omni_datetime_picker/omni_datetime_picker.dart';
-import 'package:timely_x/timely_x.dart';
+import 'package:calendar_view/calendar_view.dart';
 
 import '../../core/api/assignments_api.dart';
 import '../../core/api/catalogs_api.dart';
@@ -147,7 +148,9 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadAssignments());
+    initializeDateFormatting('es', null).then((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadAssignments());
+    });
   }
 
   Future<void> _loadAssignments() async {
@@ -1287,6 +1290,21 @@ class _Chip extends StatelessWidget {
 
 // ── Scheduler view ────────────────────────────────────────────────────────────
 
+// ── Operator color palette ─────────────────────────────────────────────────────
+
+const List<Color> _kOperatorPalette = [
+  AppColors.ctTeal,
+  Color(0xFF6366F1),
+  Color(0xFFF59E0B),
+  Color(0xFF10B981),
+  Color(0xFFEF4444),
+  Color(0xFF8B5CF6),
+  Color(0xFF06B6D4),
+  Color(0xFFF97316),
+  Color(0xFF84CC16),
+  Color(0xFFEC4899),
+];
+
 class _AssignmentsScheduler extends StatefulWidget {
   const _AssignmentsScheduler({
     required this.operators,
@@ -1301,89 +1319,143 @@ class _AssignmentsScheduler extends StatefulWidget {
   final ValueChanged<Map<String, dynamic>> onAssignmentTap;
 
   @override
-  State<_AssignmentsScheduler> createState() =>
-      _AssignmentsSchedulerState();
+  State<_AssignmentsScheduler> createState() => _AssignmentsSchedulerState();
 }
 
 class _AssignmentsSchedulerState extends State<_AssignmentsScheduler> {
-  late CalendarController _ctrl;
+  late EventController<Map<String, dynamic>> _eventController;
+  Map<String, Color> _operatorColors = {};
 
   @override
   void initState() {
     super.initState();
-    _ctrl = CalendarController(
-      config: const CalendarConfig(
-        viewType: CalendarViewType.week,
-        dayStartHour: 7,
-        dayEndHour: 22,
-      ),
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) => _updateData());
+    _eventController = EventController<Map<String, dynamic>>();
+    _buildEvents();
   }
 
   @override
   void didUpdateWidget(_AssignmentsScheduler old) {
     super.didUpdateWidget(old);
-    if (old.operators != widget.operators ||
-        old.assignments != widget.assignments) {
-      _updateData();
+    if (old.assignments != widget.assignments ||
+        old.currentMonday != widget.currentMonday) {
+      _buildEvents();
     }
   }
 
-  void _updateData() {
-    _ctrl.updateResources(
-      widget.operators
-          .map((op) => DefaultResource(
-                id: op['id'] as String? ?? '',
-                name: op['display_name'] as String? ??
-                    op['name'] as String? ??
-                    '',
-              ))
-          .toList(),
-    );
+  void _buildEvents() {
+    // Build operator → color map based on unique operator_ids in assignments
+    final operatorIds = widget.assignments
+        .map((a) => a['operator_id'] as String? ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+    _operatorColors = {
+      for (var i = 0; i < operatorIds.length; i++)
+        operatorIds[i]: _kOperatorPalette[i % _kOperatorPalette.length],
+    };
 
-    final appts = <DefaultAppointment>[];
+    final events = <CalendarEventData<Map<String, dynamic>>>[];
     for (final a in widget.assignments) {
       final (lo, hi) = _parseScope(a['scope'] as String?);
       if (lo == null || hi == null) continue;
-      final flows = a['flows'] as List<dynamic>? ?? [];
+      final operatorId = a['operator_id'] as String? ?? '';
+      final color = _operatorColors[operatorId] ?? AppColors.ctTeal;
+      final title = a['operator_name'] as String? ?? 'Operador';
       final resources = a['resources'] as List<dynamic>? ?? [];
-      final color = _behaviorColor(flows);
-      final title = resources.isNotEmpty
-          ? ((resources.first as Map<dynamic, dynamic>?)?['resource_type']
-                  as String? ??
-              (resources.first as Map<dynamic, dynamic>?)?['catalog_slug']
-                  as String? ??
-              'Activo')
-          : (a['operator_name'] as String? ?? 'Sin activo');
-      appts.add(DefaultAppointment(
-        id: a['id'] as String? ?? '${lo.millisecondsSinceEpoch}',
-        resourceId: a['operator_id'] as String? ?? '',
-        title: title,
+      final description = resources.isNotEmpty
+          ? ((resources.first as Map?)?['resource_type'] as String? ??
+              (resources.first as Map?)?['catalog_slug'] as String? ??
+              '')
+          : '';
+      events.add(CalendarEventData<Map<String, dynamic>>(
+        date: lo.toLocal(),
+        endDate: hi.toLocal(),
         startTime: lo.toLocal(),
         endTime: hi.toLocal(),
+        title: title,
+        description: description,
         color: color,
-        customData: {'assignment': a},
+        event: a,
       ));
     }
-    _ctrl.updateAppointments(appts);
+
+    _eventController.removeWhere((_) => true);
+    _eventController.addAll(events);
   }
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _eventController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return CalendarView(
-      controller: _ctrl,
-      onAppointmentTap: (appt) {
-        final a = (appt as DefaultAppointment).customData?['assignment']
-            as Map<String, dynamic>?;
-        if (a != null) widget.onAssignmentTap(a);
-      },
+    final legendOps = <String, String>{};
+    for (final a in widget.assignments) {
+      final id = a['operator_id'] as String? ?? '';
+      if (id.isNotEmpty) legendOps[id] = a['operator_name'] as String? ?? id;
+    }
+
+    return Column(
+      children: [
+        if (legendOps.isNotEmpty)
+          _SchedulerLegend(
+            operatorNames: legendOps,
+            operatorColors: _operatorColors,
+          ),
+        Expanded(
+          child: WeekView<Map<String, dynamic>>(
+            controller: _eventController,
+            initialDay: widget.currentMonday,
+            startHour: 6,
+            endHour: 22,
+            startDay: WeekDays.monday,
+            onEventTap: (events, _) {
+              if (events.isNotEmpty) {
+                final a = events.first.event;
+                if (a != null) widget.onAssignmentTap(a);
+              }
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SchedulerLegend extends StatelessWidget {
+  const _SchedulerLegend({
+    required this.operatorNames,
+    required this.operatorColors,
+  });
+  final Map<String, String> operatorNames;
+  final Map<String, Color> operatorColors;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        itemCount: operatorNames.length,
+        separatorBuilder: (context0, index0) => const SizedBox(width: 12),
+        itemBuilder: (_, i) {
+          final id = operatorNames.keys.elementAt(i);
+          final name = operatorNames[id]!;
+          final color = operatorColors[id] ?? AppColors.ctTeal;
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(radius: 6, backgroundColor: color),
+              const SizedBox(width: 6),
+              Text(name,
+                  style: AppFonts.geist(fontSize: 12, color: AppColors.ctText)),
+            ],
+          );
+        },
+      ),
     );
   }
 }
