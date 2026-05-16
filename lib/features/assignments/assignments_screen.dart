@@ -1648,6 +1648,8 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
 
   List<Map<String, dynamic>> _catalogs = [];
   List<Map<String, dynamic>> _flowDefs = [];
+  bool _loadingApiData = true;
+  String? _apiError;
 
   @override
   void initState() {
@@ -1656,13 +1658,20 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
   }
 
   Future<void> _loadApiData() async {
+    if (mounted) setState(() { _loadingApiData = true; _apiError = null; });
     try {
       final catalogs =
           await CatalogsApi.listCatalogs(tenantId: widget.tenantId);
       final flows = await FlowsApi.listFlows();
-      if (mounted) setState(() { _catalogs = catalogs; _flowDefs = flows; });
+      if (mounted) {
+        setState(() {
+          _catalogs = catalogs;
+          _flowDefs = flows;
+          _loadingApiData = false;
+        });
+      }
     } catch (e) {
-      debugPrint('Error loading api data: $e');
+      if (mounted) setState(() { _apiError = e.toString(); _loadingApiData = false; });
     }
   }
 
@@ -1964,6 +1973,36 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
   }
 
   Widget _buildStep3() {
+    if (_loadingApiData) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: AppColors.ctTeal),
+            const SizedBox(height: 8),
+            Text('Cargando flows…',
+                style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2)),
+          ],
+        ),
+      );
+    }
+    if (_apiError != null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Error al cargar flows: $_apiError',
+              style: AppFonts.geist(fontSize: 12, color: AppColors.ctDanger)),
+          const SizedBox(height: 8),
+          TextButton(onPressed: _loadApiData, child: const Text('Reintentar')),
+        ],
+      );
+    }
+    if (_flowDefs.isEmpty) {
+      return Text(
+        'No hay flows configurados en este tenant.',
+        style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1996,7 +2035,7 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
             children: [
               const Icon(Icons.add_circle_outline,
                   size: 16, color: AppColors.ctTeal),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               Text('+ Agregar flow',
                   style: AppFonts.geist(
                       fontSize: 13,
@@ -2068,27 +2107,30 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
                           : (_resItemIds[i] ?? _resItemIdCtrls[i].text.trim()),
                     )),
               ],
-              if (_flowDefIds.isNotEmpty) ...[
+              if (_flowDefIds.any((id) => id.isNotEmpty)) ...[
                 const SizedBox(height: 6),
                 Text('Flows',
                     style: AppFonts.geist(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: AppColors.ctText2)),
-                ...List.generate(_flowDefIds.length, (i) {
-                  final flowLabel = _flowDefs
-                          .where((f) => f['id'] == _flowDefIds[i])
-                          .map((f) =>
-                              f['name'] as String? ??
-                              f['slug'] as String? ??
-                              _flowDefIds[i])
-                          .firstOrNull ??
-                      _flowDefIds[i];
-                  return _SummaryRow(
-                    label: flowLabel,
-                    value: _flowBehaviors[i],
-                  );
-                }),
+                ..._flowDefIds.asMap().entries
+                    .where((e) => e.value.isNotEmpty)
+                    .map((e) {
+                      final i = e.key;
+                      final flowLabel = _flowDefs
+                              .where((f) => f['id'] == _flowDefIds[i])
+                              .map((f) =>
+                                  f['name'] as String? ??
+                                  f['slug'] as String? ??
+                                  _flowDefIds[i])
+                              .firstOrNull ??
+                          _flowDefIds[i];
+                      return _SummaryRow(
+                        label: flowLabel,
+                        value: _flowBehaviors[i],
+                      );
+                    }),
               ],
             ],
           ),
