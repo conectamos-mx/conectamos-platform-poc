@@ -2337,6 +2337,122 @@ class _ResourceRowState extends State<_ResourceRow> {
   }
 }
 
+class _FlowSelector extends StatefulWidget {
+  const _FlowSelector({
+    required this.value,
+    required this.flowDefs,
+    required this.onChanged,
+  });
+
+  final String? value;
+  final List<Map<String, dynamic>> flowDefs;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  State<_FlowSelector> createState() => _FlowSelectorState();
+}
+
+class _FlowSelectorState extends State<_FlowSelector> {
+  bool _expanded = false;
+
+  String _label() {
+    const hint = 'Selecciona un flow';
+    if (widget.value == null || widget.value!.isEmpty) return hint;
+    final match = widget.flowDefs
+        .where((f) => f['id'] == widget.value)
+        .firstOrNull;
+    if (match == null) return hint;
+    return match['name'] as String? ??
+        match['slug'] as String? ??
+        widget.value!;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = widget.value != null && widget.value!.isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.ctSurface2,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.ctBorder2),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _label(),
+                    style: AppFonts.geist(
+                      fontSize: 12,
+                      color: selected
+                          ? AppColors.ctText
+                          : AppColors.ctText2,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Icon(
+                  _expanded
+                      ? Icons.expand_less
+                      : Icons.expand_more,
+                  size: 16,
+                  color: AppColors.ctText2,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded)
+          Container(
+            constraints: const BoxConstraints(maxHeight: 200),
+            margin: const EdgeInsets.only(top: 2),
+            decoration: BoxDecoration(
+              color: AppColors.ctSurface,
+              border: Border.all(color: AppColors.ctBorder),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ListView(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              children: widget.flowDefs.map((f) {
+                final id = f['id'] as String? ?? '';
+                final name = f['name'] as String? ??
+                    f['slug'] as String? ??
+                    id;
+                final isSelected = id == widget.value;
+                return ListTile(
+                  dense: true,
+                  selected: isSelected,
+                  selectedColor: AppColors.ctTeal,
+                  title: Text(
+                    name,
+                    style: AppFonts.geist(
+                      fontSize: 12,
+                      color: isSelected
+                          ? AppColors.ctTeal
+                          : AppColors.ctText,
+                    ),
+                  ),
+                  onTap: () {
+                    widget.onChanged(id);
+                    setState(() => _expanded = false);
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _FlowRow extends StatelessWidget {
   const _FlowRow({
     required this.index,
@@ -2378,33 +2494,13 @@ class _FlowRow extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: flowDefs.isEmpty
-                    ? Text('Cargando flows…',
-                        style: AppFonts.geist(
-                            fontSize: 12, color: AppColors.ctText2))
-                    : _NullableDropdown<String>(
-                        value: flowDefs.any((f) => f['id'] == flowDefId)
-                            ? flowDefId
-                            : null,
-                        hint: Text('Selecciona un flow',
-                            style: AppFonts.geist(
-                                fontSize: 12, color: AppColors.ctText2)),
-                        items: flowDefs
-                            .map((f) => DropdownMenuItem(
-                                  value: f['id'] as String? ?? '',
-                                  child: Text(
-                                    f['name'] as String? ??
-                                        f['id'] as String? ??
-                                        '',
-                                    style: AppFonts.geist(
-                                        fontSize: 12,
-                                        color: AppColors.ctText),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ))
-                            .toList(),
-                        onChanged: onFlowChanged,
-                      ),
+                child: _FlowSelector(
+                  value: flowDefs.any((f) => f['id'] == flowDefId)
+                      ? flowDefId
+                      : null,
+                  flowDefs: flowDefs,
+                  onChanged: onFlowChanged,
+                ),
               ),
               const SizedBox(width: 8),
               _Dropdown<String>(
@@ -2596,43 +2692,6 @@ class _Dropdown<T> extends StatelessWidget {
 }
 
 // Variante que acepta value nullable (para dropdowns con hint)
-class _NullableDropdown<T> extends StatelessWidget {
-  const _NullableDropdown({
-    required this.value,
-    required this.items,
-    required this.onChanged,
-    this.hint,
-  });
-
-  final T? value;
-  final List<DropdownMenuItem<T>> items;
-  final ValueChanged<T?> onChanged;
-  final Widget? hint;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.ctSurface2,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.ctBorder2),
-      ),
-      child: DropdownButton<T>(
-        value: value,
-        hint: hint,
-        isExpanded: true,
-        underline: const SizedBox.shrink(),
-        dropdownColor: AppColors.ctSurface,
-        style: AppFonts.geist(fontSize: 13, color: AppColors.ctText),
-        items: items,
-        onChanged: onChanged,
-      ),
-    );
-  }
-}
-
 // ── Shared buttons ────────────────────────────────────────────────────────────
 
 class _PrimaryButton extends StatelessWidget {
