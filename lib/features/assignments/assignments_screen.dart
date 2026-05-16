@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/api/assignments_api.dart';
 import '../../core/api/operators_api.dart';
@@ -98,20 +97,18 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
       final monday = _currentMonday;
       final dayFutures = List.generate(7, (i) {
         final day = monday.add(Duration(days: i));
-        return AssignmentsApi.getAssignments(
+        return AssignmentsApi.listAssignments(
           tenantId: tenantId,
           scopeDate: _isoDate(day),
         );
       });
-      final typesFuture = AssignmentsApi.getAssignmentTypes(tenantId: tenantId);
       final dayResultsFuture = Future.wait(dayFutures);
-      final types = await typesFuture;
       final dayResults = await dayResultsFuture;
       final data = dayResults.expand((list) => list).toList();
       if (!mounted) return;
       setState(() {
-        _assignments = data;
-        _assignmentTypes = types;
+        _assignments = List<Map<String, dynamic>>.from(data);
+        _assignmentTypes = const [];
         _loading = false;
       });
     } catch (e) {
@@ -138,11 +135,6 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
             title: 'Asignaciones',
             subtitle: 'Asigna recursos a operadores con horario.',
             actions: [
-              _SecondaryButton(
-                label: 'Tipos',
-                icon: Icons.tune_outlined,
-                onTap: () => context.go('/assignments/types'),
-              ),
               _SecondaryButton(
                 label: 'Importar CSV',
                 icon: Icons.upload_file_outlined,
@@ -1178,13 +1170,11 @@ class _NewAssignmentDialogState
     try {
       await AssignmentsApi.createAssignment(
         tenantId: widget.tenantId,
-        body: {
-          'operator_id': _selectedOperatorId!,
-          'assignment_type': _assignmentType,
-          'scope_date': _isoDate(_scopeDate),
-          'data': <String, dynamic>{},
-          'source': 'manual',
-        },
+        operatorId: _selectedOperatorId!,
+        scopeStart: DateTime.utc(_scopeDate.year, _scopeDate.month, _scopeDate.day),
+        scopeEnd: DateTime.utc(_scopeDate.year, _scopeDate.month, _scopeDate.day + 1),
+        resources: const [],
+        flows: const [],
       );
       widget.onSaved();
       if (mounted) Navigator.of(context).pop();

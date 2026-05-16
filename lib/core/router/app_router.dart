@@ -20,8 +20,6 @@ import '../../features/config/settings_screen.dart';
 import '../../features/settings/operator_fields_screen.dart';
 import '../../features/config/ai_workers_screen.dart';
 import '../../features/config/workflows_screen.dart';
-import '../../features/assignments/assignment_sources_screen.dart';
-import '../../features/assignments/assignment_types_screen.dart';
 import '../../features/assignments/assignments_screen.dart';
 import '../../features/catalogs/catalog_detail_screen.dart';
 import '../../features/catalogs/catalogs_screen.dart';
@@ -301,16 +299,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             GoRoute(
               path: '/assignments',
               pageBuilder: (c, s) => const NoTransitionPage(child: AssignmentsScreen()),
-              routes: [
-                GoRoute(
-                  path: 'types',
-                  pageBuilder: (c, s) => const NoTransitionPage(child: AssignmentTypesScreen()),
-                ),
-                GoRoute(
-                  path: 'sources',
-                  pageBuilder: (c, s) => const NoTransitionPage(child: AssignmentSourcesScreen()),
-                ),
-              ],
             ),
           ]),
         ],
