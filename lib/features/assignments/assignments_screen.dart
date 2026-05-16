@@ -1637,6 +1637,7 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
   // Resources
   final List<String> _resCatalogSlugs = [];
   final List<String?> _resItemIds = [];       // id confirmado por Autocomplete.onSelected
+  final List<String> _resItemNames = [];      // nombre legible del item seleccionado
   final List<TextEditingController> _resItemIdCtrls = [];
   final List<TextEditingController> _resTypeCtrls = [];
 
@@ -1687,6 +1688,7 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
               ? (_catalogs.first['slug'] as String? ?? '')
               : '');
       _resItemIds.add(null);
+      _resItemNames.add('');
       _resItemIdCtrls.add(TextEditingController());
       _resTypeCtrls.add(TextEditingController());
     });
@@ -1696,6 +1698,7 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
     setState(() {
       _resCatalogSlugs.removeAt(i);
       _resItemIds.removeAt(i);
+      _resItemNames.removeAt(i);
       _resItemIdCtrls[i].dispose();
       _resItemIdCtrls.removeAt(i);
       _resTypeCtrls[i].dispose();
@@ -1711,20 +1714,23 @@ bool get _step1Valid =>
 
   Future<void> _submit() async {
     setState(() { _saving = true; _error = null; });
+    final resources = List.generate(_resCatalogSlugs.length, (i) {
+      final rt = _resTypeCtrls[i].text.trim();
+      final itemId = _resItemIds[i] ?? _resItemIdCtrls[i].text.trim();
+      return <String, dynamic>{
+        'catalog_slug': _resCatalogSlugs[i],
+        'asset_item_id': itemId,
+        if (rt.isNotEmpty) 'resource_type': rt,
+      };
+    });
+    final flows = _selectedFlowIds.map((id) => <String, dynamic>{
+      'flow_definition_id': id,
+      'behavior': 'permissive',
+    }).toList();
+    debugPrint('SUBMIT payload: operator=$_selectedOperatorId '
+        'scope=$_scopeStart→$_scopeEnd '
+        'resources=${resources.length} flows=${flows.length}');
     try {
-      final resources = List.generate(_resCatalogSlugs.length, (i) {
-        final rt = _resTypeCtrls[i].text.trim();
-        final itemId = _resItemIds[i] ?? _resItemIdCtrls[i].text.trim();
-        return <String, dynamic>{
-          'catalog_slug': _resCatalogSlugs[i],
-          'asset_item_id': itemId,
-          if (rt.isNotEmpty) 'resource_type': rt,
-        };
-      });
-      final flows = _selectedFlowIds.map((id) => <String, dynamic>{
-        'flow_definition_id': id,
-        'behavior': 'permissive',
-      }).toList();
       await AssignmentsApi.createAssignment(
         tenantId: widget.tenantId,
         operatorId: _selectedOperatorId!,
@@ -1736,6 +1742,7 @@ bool get _step1Valid =>
       widget.onSaved();
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
+      debugPrint('CREATE ERROR: $e');
       if (!mounted) return;
       setState(() { _error = e.toString(); _saving = false; });
     }
@@ -1912,9 +1919,13 @@ bool get _step1Valid =>
               catalogs: _catalogs,
               itemIdCtrl: _resItemIdCtrls[i],
               typeCtrl: _resTypeCtrls[i],
-              onCatalogChanged: (v) =>
-                  setState(() { _resCatalogSlugs[i] = v ?? ''; _resItemIds[i] = null; }),
+              onCatalogChanged: (v) => setState(() {
+                _resCatalogSlugs[i] = v ?? '';
+                _resItemIds[i] = null;
+                _resItemNames[i] = '';
+              }),
               onItemSelected: (id) => setState(() => _resItemIds[i] = id),
+              onItemNameSelected: (name) => setState(() => _resItemNames[i] = name),
               onRemove: () => _removeResource(i),
             )),
         const SizedBox(height: 8),
@@ -2076,10 +2087,9 @@ bool get _step1Valid =>
                         color: AppColors.ctText2)),
                 ...List.generate(_resCatalogSlugs.length, (i) => _SummaryRow(
                       label: _resCatalogSlugs[i],
-                      value: (_resItemIds[i] ?? _resItemIdCtrls[i].text.trim())
-                              .isEmpty
-                          ? '—'
-                          : (_resItemIds[i] ?? _resItemIdCtrls[i].text.trim()),
+                      value: _resItemNames[i].isNotEmpty
+                          ? _resItemNames[i]
+                          : (_resItemIds[i] ?? '—'),
                     )),
               ],
               if (_selectedFlowIds.isNotEmpty) ...[
@@ -2120,6 +2130,7 @@ class _ResourceRow extends StatefulWidget {
     required this.typeCtrl,
     required this.onCatalogChanged,
     required this.onItemSelected,
+    required this.onItemNameSelected,
     required this.onRemove,
   });
 
@@ -2131,6 +2142,7 @@ class _ResourceRow extends StatefulWidget {
   final TextEditingController typeCtrl;
   final ValueChanged<String?> onCatalogChanged;
   final ValueChanged<String?> onItemSelected;
+  final ValueChanged<String> onItemNameSelected;
   final VoidCallback onRemove;
 
   @override
@@ -2272,8 +2284,15 @@ class _ResourceRowState extends State<_ResourceRow> {
               },
               onSelected: (item) {
                 final id = item['id'] as String? ?? '';
+                final data = item['data'] as Map<String, dynamic>?;
+                final name = item['name'] as String? ??
+                    data?['nombre'] as String? ??
+                    data?['name'] as String? ??
+                    data?['label'] as String? ??
+                    id;
                 widget.itemIdCtrl.text = id;
                 widget.onItemSelected(id);
+                widget.onItemNameSelected(name);
               },
               fieldViewBuilder:
                   (context, fieldCtrl, focusNode, onFieldSubmitted) {
