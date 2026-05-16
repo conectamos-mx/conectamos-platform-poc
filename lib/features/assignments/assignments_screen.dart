@@ -1538,6 +1538,7 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
 
   // Resources
   final List<String> _resCatalogSlugs = [];
+  final List<String?> _resItemIds = [];       // id confirmado por Autocomplete.onSelected
   final List<TextEditingController> _resItemIdCtrls = [];
   final List<TextEditingController> _resTypeCtrls = [];
 
@@ -1582,6 +1583,7 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
           _catalogs.isNotEmpty
               ? (_catalogs.first['slug'] as String? ?? '')
               : '');
+      _resItemIds.add(null);
       _resItemIdCtrls.add(TextEditingController());
       _resTypeCtrls.add(TextEditingController());
     });
@@ -1590,6 +1592,7 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
   void _removeResource(int i) {
     setState(() {
       _resCatalogSlugs.removeAt(i);
+      _resItemIds.removeAt(i);
       _resItemIdCtrls[i].dispose();
       _resItemIdCtrls.removeAt(i);
       _resTypeCtrls[i].dispose();
@@ -1599,10 +1602,7 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
 
   void _addFlow() {
     setState(() {
-      _flowDefIds.add(
-          _flowDefs.isNotEmpty
-              ? (_flowDefs.first['id'] as String? ?? '')
-              : '');
+      _flowDefIds.add('');   // vacío → dropdown muestra hint
       _flowBehaviors.add('scheduled');
       _flowTriggerCtrls.add(TextEditingController());
       _flowWindowCtrls.add(TextEditingController());
@@ -1631,9 +1631,10 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
     try {
       final resources = List.generate(_resCatalogSlugs.length, (i) {
         final rt = _resTypeCtrls[i].text.trim();
+        final itemId = _resItemIds[i] ?? _resItemIdCtrls[i].text.trim();
         return <String, dynamic>{
           'catalog_slug': _resCatalogSlugs[i],
-          'asset_item_id': _resItemIdCtrls[i].text.trim(),
+          'asset_item_id': itemId,
           if (rt.isNotEmpty) 'resource_type': rt,
         };
       });
@@ -1838,7 +1839,8 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
               itemIdCtrl: _resItemIdCtrls[i],
               typeCtrl: _resTypeCtrls[i],
               onCatalogChanged: (v) =>
-                  setState(() => _resCatalogSlugs[i] = v ?? ''),
+                  setState(() { _resCatalogSlugs[i] = v ?? ''; _resItemIds[i] = null; }),
+              onItemSelected: (id) => setState(() => _resItemIds[i] = id),
               onRemove: () => _removeResource(i),
             )),
         const SizedBox(height: 8),
@@ -1909,6 +1911,12 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
   }
 
   Widget _buildStep4() {
+    if (_scopeStart == null || _scopeEnd == null || _selectedOperatorId == null) {
+      return Center(
+        child: Text('Datos incompletos — regresa al paso 1',
+            style: AppFonts.geist(fontSize: 13, color: AppColors.ctDanger)),
+      );
+    }
     final opName = widget.operators
             .where((o) => o['id'] == _selectedOperatorId)
             .map((o) =>
@@ -1955,9 +1963,10 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
                         color: AppColors.ctText2)),
                 ...List.generate(_resCatalogSlugs.length, (i) => _SummaryRow(
                       label: _resCatalogSlugs[i],
-                      value: _resItemIdCtrls[i].text.trim().isEmpty
+                      value: (_resItemIds[i] ?? _resItemIdCtrls[i].text.trim())
+                              .isEmpty
                           ? '—'
-                          : _resItemIdCtrls[i].text.trim(),
+                          : (_resItemIds[i] ?? _resItemIdCtrls[i].text.trim()),
                     )),
               ],
               if (_flowDefIds.isNotEmpty) ...[
@@ -1971,8 +1980,8 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
                   final flowLabel = _flowDefs
                           .where((f) => f['id'] == _flowDefIds[i])
                           .map((f) =>
-                              f['slug'] as String? ??
                               f['name'] as String? ??
+                              f['slug'] as String? ??
                               _flowDefIds[i])
                           .firstOrNull ??
                       _flowDefIds[i];
@@ -2002,6 +2011,7 @@ class _ResourceRow extends StatefulWidget {
     required this.itemIdCtrl,
     required this.typeCtrl,
     required this.onCatalogChanged,
+    required this.onItemSelected,
     required this.onRemove,
   });
 
@@ -2012,6 +2022,7 @@ class _ResourceRow extends StatefulWidget {
   final TextEditingController itemIdCtrl;
   final TextEditingController typeCtrl;
   final ValueChanged<String?> onCatalogChanged;
+  final ValueChanged<String?> onItemSelected;
   final VoidCallback onRemove;
 
   @override
@@ -2128,23 +2139,33 @@ class _ResourceRowState extends State<_ResourceRow> {
             )
           else
             Autocomplete<Map<String, dynamic>>(
-              displayStringForOption: (item) =>
-                  item['name'] as String? ??
-                  item['id'] as String? ??
-                  item.toString(),
+              displayStringForOption: (item) {
+                final data = item['data'];
+                return item['name'] as String? ??
+                    (data is Map ? (data['nombre'] as String? ?? data['name'] as String? ?? data['label'] as String? ?? data['title'] as String? ?? (data.values.isNotEmpty ? data.values.first?.toString() : null)) : null) ??
+                    item['id'] as String? ??
+                    '';
+              },
               optionsBuilder: (textEditingValue) {
                 if (textEditingValue.text.isEmpty) return _items;
                 final q = textEditingValue.text.toLowerCase();
                 return _items.where((item) {
-                  final name =
-                      (item['name'] as String? ?? '').toLowerCase();
-                  final id =
-                      (item['id'] as String? ?? '').toLowerCase();
+                  final data = item['data'];
+                  final name = (item['name'] as String? ??
+                          (data is Map
+                              ? (data['nombre'] as String? ??
+                                  data['name'] as String? ??
+                                  '')
+                              : ''))
+                      .toLowerCase();
+                  final id = (item['id'] as String? ?? '').toLowerCase();
                   return name.contains(q) || id.contains(q);
                 });
               },
               onSelected: (item) {
-                widget.itemIdCtrl.text = item['id'] as String? ?? '';
+                final id = item['id'] as String? ?? '';
+                widget.itemIdCtrl.text = id;
+                widget.onItemSelected(id);
               },
               fieldViewBuilder:
                   (context, fieldCtrl, focusNode, onFieldSubmitted) {
@@ -2165,7 +2186,7 @@ class _ResourceRowState extends State<_ResourceRow> {
             controller: widget.typeCtrl,
             style: AppFonts.geist(fontSize: 12, color: AppColors.ctText),
             decoration: const InputDecoration(
-              labelText: 'resource_type (opc.)',
+              labelText: 'Rol del activo (opc.)',
               isDense: true,
             ),
           ),
@@ -2220,11 +2241,13 @@ class _FlowRow extends StatelessWidget {
                     ? Text('Cargando flows…',
                         style: AppFonts.geist(
                             fontSize: 12, color: AppColors.ctText2))
-                    : _Dropdown<String>(
-                        value: flowDefs.any(
-                                (f) => f['id'] == flowDefId)
+                    : _NullableDropdown<String>(
+                        value: flowDefs.any((f) => f['id'] == flowDefId)
                             ? flowDefId
-                            : (flowDefs.first['id'] as String? ?? ''),
+                            : null,
+                        hint: Text('Selecciona un flow',
+                            style: AppFonts.geist(
+                                fontSize: 12, color: AppColors.ctText2)),
                         items: flowDefs
                             .map((f) => DropdownMenuItem(
                                   value: f['id'] as String? ?? '',
@@ -2420,6 +2443,44 @@ class _Dropdown<T> extends StatelessWidget {
       ),
       child: DropdownButton<T>(
         value: value,
+        isExpanded: true,
+        underline: const SizedBox.shrink(),
+        dropdownColor: AppColors.ctSurface,
+        style: AppFonts.geist(fontSize: 13, color: AppColors.ctText),
+        items: items,
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+// Variante que acepta value nullable (para dropdowns con hint)
+class _NullableDropdown<T> extends StatelessWidget {
+  const _NullableDropdown({
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.hint,
+  });
+
+  final T? value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?> onChanged;
+  final Widget? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.ctSurface2,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.ctBorder2),
+      ),
+      child: DropdownButton<T>(
+        value: value,
+        hint: hint,
         isExpanded: true,
         underline: const SizedBox.shrink(),
         dropdownColor: AppColors.ctSurface,
