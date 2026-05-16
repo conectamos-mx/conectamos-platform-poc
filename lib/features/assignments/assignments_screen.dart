@@ -94,7 +94,6 @@ Color _behaviorColor(List<dynamic> flows) {
   return switch (behavior) {
     'scheduled'  => AppColors.ctTeal,
     'permissive' => AppColors.ctNavy,
-    'proactive'  => AppColors.ctWarn,
     _            => AppColors.ctText2,
   };
 }
@@ -1653,8 +1652,8 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
   final List<TextEditingController> _resItemIdCtrls = [];
   final List<TextEditingController> _resTypeCtrls = [];
 
-  // Flows
-  final Set<String> _selectedFlowIds = {};
+  // Flows — key: flow_definition_id, value: 'permissive'|'scheduled'
+  final Map<String, String> _selectedFlows = {};
 
   List<Map<String, dynamic>> _catalogs = [];
   List<Map<String, dynamic>> _flowDefs = [];
@@ -1735,9 +1734,9 @@ bool get _step1Valid =>
         if (rt.isNotEmpty) 'resource_type': rt,
       };
     });
-    final flows = _selectedFlowIds.map((id) => <String, dynamic>{
-      'flow_definition_id': id,
-      'behavior': 'permissive',
+    final flows = _selectedFlows.entries.map((e) => <String, dynamic>{
+      'flow_definition_id': e.key,
+      'behavior': e.value,
     }).toList();
     debugPrint('SUBMIT payload: operator=$_selectedOperatorId '
         'scope=$_scopeStart→$_scopeEnd '
@@ -2002,39 +2001,63 @@ bool get _step1Valid =>
         ..._flowDefs.map((f) {
           final id = f['id'] as String? ?? '';
           final name = f['name'] as String? ?? f['slug'] as String? ?? id;
-          final isSelected = _selectedFlowIds.contains(id);
-          return InkWell(
-            onTap: () => setState(() {
-              if (isSelected) {
-                _selectedFlowIds.remove(id);
-              } else {
-                _selectedFlowIds.add(id);
-              }
-            }),
-            borderRadius: BorderRadius.circular(6),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-              child: Row(
-                children: [
-                  Icon(
-                    isSelected
-                        ? Icons.check_box
-                        : Icons.check_box_outline_blank,
-                    color: isSelected ? AppColors.ctTeal : AppColors.ctText2,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(name,
-                        style: AppFonts.geist(
-                            fontSize: 13, color: AppColors.ctText)),
-                  ),
-                ],
+          final isSelected = _selectedFlows.containsKey(id);
+          final behavior = _selectedFlows[id] ?? 'permissive';
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: InkWell(
+              onTap: () => setState(() {
+                if (isSelected) {
+                  _selectedFlows.remove(id);
+                } else {
+                  _selectedFlows[id] = 'permissive';
+                }
+              }),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      isSelected
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                      color:
+                          isSelected ? AppColors.ctTeal : AppColors.ctText2,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(name,
+                          style: AppFonts.geist(
+                              fontSize: 13, color: AppColors.ctText)),
+                    ),
+                    if (isSelected) ...[
+                      const SizedBox(width: 8),
+                      _BehaviorBtn(
+                        label: 'Manual',
+                        value: 'permissive',
+                        current: behavior,
+                        onChanged: (v) =>
+                            setState(() => _selectedFlows[id] = v),
+                      ),
+                      const SizedBox(width: 4),
+                      _BehaviorBtn(
+                        label: 'Automático',
+                        value: 'scheduled',
+                        current: behavior,
+                        onChanged: (v) =>
+                            setState(() => _selectedFlows[id] = v),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           );
         }),
-        if (_selectedFlowIds.isEmpty)
+        if (_selectedFlows.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
@@ -2104,21 +2127,23 @@ bool get _step1Valid =>
                           : (_resItemIds[i] ?? '—'),
                     )),
               ],
-              if (_selectedFlowIds.isNotEmpty) ...[
+              if (_selectedFlows.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text('Flows',
                     style: AppFonts.geist(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: AppColors.ctText2)),
-                ..._selectedFlowIds.map((id) {
+                ..._selectedFlows.entries.map((e) {
                   final f = _flowDefs.firstWhere(
-                      (f) => f['id'] == id,
+                      (f) => f['id'] == e.key,
                       orElse: () => {});
                   final name = f['name'] as String? ??
                       f['slug'] as String? ??
-                      id;
-                  return _SummaryRow(label: name, value: 'permissive');
+                      e.key;
+                  final behaviorLabel =
+                      e.value == 'scheduled' ? 'Automático' : 'Manual';
+                  return _SummaryRow(label: name, value: behaviorLabel);
                 }),
               ],
             ],
@@ -2387,6 +2412,46 @@ class _DateTimePickerBtn extends StatelessWidget {
                       : AppColors.ctText2),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BehaviorBtn extends StatelessWidget {
+  const _BehaviorBtn({
+    required this.label,
+    required this.value,
+    required this.current,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final String current;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = value == current;
+    return InkWell(
+      onTap: () => onChanged(value),
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? AppColors.ctTeal : AppColors.ctSurface,
+          border: Border.all(
+              color: active ? AppColors.ctTeal : AppColors.ctBorder),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          label,
+          style: AppFonts.geist(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: active ? Colors.white : AppColors.ctText2,
+          ),
         ),
       ),
     );
