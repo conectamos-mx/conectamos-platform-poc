@@ -373,3 +373,33 @@ Active migration in progress — do not revert these changes:
 Push to `main` → GitHub Actions → `flutter build web --release` → `firebase deploy --only hosting`.
 Production URL: `https://conectamos-platform-poc.web.app`.
 Requires `FIREBASE_TOKEN` secret in GitHub Actions.
+
+---
+
+## Componentes UI — leer antes de cualquier pantalla nueva o modificación
+
+Antes de escribir cualquier widget de presentación, botón, badge, chip, fila de detalle
+o tarjeta de KPI, lee el archivo de convenciones de componentes compartidos:
+
+  cat FLUTTER_CONVENTIONS.md   ← convenciones generales del repo
+  cat SKILL_FLUTTER_SHARED_WIDGETS.md   ← catálogo de primitivos y reglas de uso
+
+### Regla de oro
+Las screens en lib/features/ son compositors — solo organizan widgets.
+No crean presentación inline. Antes de hacer commit en cualquier screen, ejecuta:
+
+  grep -c "ElevatedButton\|TextButton\|OutlinedButton\|FilledButton" [archivo]  → debe ser 0
+  grep -c "Color(0x\|Color.fromARGB" [archivo]  → debe ser 0
+  grep -c "TextStyle(" [archivo]  → debe ser 0
+  flutter analyze [archivo]  → No issues found
+
+Si alguno retorna > 0, aplicar los primitivos de lib/shared/widgets/ antes de continuar.
+
+### Primitivos disponibles en lib/shared/widgets/
+- app_button.dart     — todos los botones (reemplaza ElevatedButton, TextButton, OutlinedButton)
+- app_badge.dart      — badges de estado, canal, tipo
+- app_chip.dart       — chips de filtro interactivos
+- app_detail_row.dart — filas label + valor para fichas de detalle
+- app_kpi_card.dart   — tarjetas de métricas numéricas
+- app_shell.dart      — shell de navegación principal
+- operator_avatar.dart, page_header.dart, screen_header.dart — otros shared
