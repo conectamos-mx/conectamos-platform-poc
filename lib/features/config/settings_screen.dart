@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/channels_api.dart';
@@ -1567,6 +1568,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
   bool _rolesLoading = true;
   bool _sending = false;
   String? _error;
+  String? _phoneError;
 
   @override
   void initState() {
@@ -1596,9 +1598,29 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
     }
   }
 
+  String? _validatePhone(String? value) {
+    if (value == null || value.trim().isEmpty) return 'El teléfono es obligatorio';
+    final cleaned = value.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    if (RegExp(r'^\d{10}$').hasMatch(cleaned) ||
+        RegExp(r'^52\d{10}$').hasMatch(cleaned) ||
+        RegExp(r'^\+52\d{10}$').hasMatch(cleaned) ||
+        RegExp(r'^\+521\d{10}$').hasMatch(cleaned)) {
+      return null;
+    }
+    return 'Formato inválido. Ejemplo: +52 55 1234 5678';
+  }
+
+  String _normalizePhone(String raw) {
+    final cleaned = raw.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    if (cleaned.startsWith('+')) return cleaned;
+    if (cleaned.startsWith('52')) return '+$cleaned';
+    return '+52$cleaned';
+  }
+
   Future<void> _send() async {
-    final nombre = _nombreCtrl.text.trim();
-    final email  = _emailCtrl.text.trim();
+    final nombre     = _nombreCtrl.text.trim();
+    final email      = _emailCtrl.text.trim();
+    final phoneError = _validatePhone(_telefonoCtrl.text);
     if (nombre.isEmpty) {
       setState(() => _error = 'Ingresa el nombre completo');
       return;
@@ -1607,15 +1629,19 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
       setState(() => _error = 'Ingresa un email');
       return;
     }
+    if (phoneError != null) {
+      setState(() => _phoneError = phoneError);
+      return;
+    }
     if (_roleId == null || _roleId!.isEmpty) {
       setState(() => _error = 'Selecciona un rol');
       return;
     }
-    setState(() { _sending = true; _error = null; });
+    setState(() { _sending = true; _error = null; _phoneError = null; });
     try {
       await IamApi.inviteUser({
         'nombre':    nombre,
-        'telefono':  _telefonoCtrl.text.trim(),
+        'telefono':  _normalizePhone(_telefonoCtrl.text.trim()),
         'email':     email,
         'role_id':   _roleId,
       });
@@ -1675,10 +1701,81 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
                   ctrl: _emailCtrl,
                   placeholder: 'usuario@empresa.com',
                 ),
-                right: _Field(
-                  label: 'Teléfono (opcional)',
-                  ctrl: _telefonoCtrl,
-                  placeholder: '+52 55 1234 5678',
+                right: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Teléfono',
+                      style: TextStyle(
+                        fontFamily: 'Geist',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.ctText,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _telefonoCtrl,
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[\d\+\s\-\(\)]'),
+                        ),
+                      ],
+                      onChanged: (_) {
+                        if (_phoneError != null) {
+                          setState(() => _phoneError = null);
+                        }
+                      },
+                      style: const TextStyle(
+                        fontFamily: 'Geist',
+                        fontSize: 13,
+                        color: AppColors.ctText,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: '+52 55 1234 5678',
+                        hintStyle: const TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 13,
+                          color: AppColors.ctText3,
+                        ),
+                        errorText: _phoneError,
+                        errorStyle: const TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 11,
+                          color: AppColors.ctDanger,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.ctSurface2,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide:
+                              const BorderSide(color: AppColors.ctBorder2),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: _phoneError != null
+                                ? AppColors.ctDanger
+                                : AppColors.ctBorder2,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: _phoneError != null
+                                ? AppColors.ctDanger
+                                : AppColors.ctTeal,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 12),
