@@ -228,10 +228,7 @@ class _ActivosTab extends StatelessWidget {
       itemBuilder: (context, i) {
         final r = resources[i];
         final catalog = r['catalog_slug'] as String? ?? '—';
-        final data = r['data'] as Map?;
-        final itemLabel = data?['nombre'] as String? ??
-            data?['name'] as String? ??
-            data?['label'] as String? ??
+        final itemLabel = r['item_name'] as String? ??
             r['asset_item_id'] as String? ??
             '—';
         final type = r['resource_type'] as String?;
@@ -292,9 +289,7 @@ class _FlowsTab extends StatelessWidget {
       itemBuilder: (context, i) {
         final f = flows[i];
         final rawId  = f['flow_definition_id'] as String? ?? '';
-        // TODO: backend debe incluir flow_name en assignment_flows response
         final name   = f['flow_name'] as String? ??
-            f['flow_slug'] as String? ??
             (rawId.length > 8 ? '${rawId.substring(0, 8)}…' : rawId.isNotEmpty ? rawId : '—');
         final behavior = f['behavior'] as String? ?? '—';
         final trigger  = f['trigger_offset'];
@@ -303,7 +298,6 @@ class _FlowsTab extends StatelessWidget {
         final (bg, fg) = switch (behavior) {
           'scheduled'  => (AppColors.ctTealLight, AppColors.ctTealText),
           'permissive' => (AppColors.ctSurface2,  AppColors.ctNavy),
-          'proactive'  => (AppColors.ctWarnBg,    AppColors.ctWarnText),
           _            => (AppColors.ctSurface2,  AppColors.ctText2),
         };
 
