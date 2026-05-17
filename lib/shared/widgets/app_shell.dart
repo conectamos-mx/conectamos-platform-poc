@@ -826,15 +826,6 @@ class _Sidebar extends ConsumerWidget {
                               navigationShell: navigationShell,
                             ),
                           if (hasPermission(ref, 'settings', 'view')) ...[
-                            if (hasPermission(ref, 'operator_roles', 'view'))
-                              _NavItem(
-                                icon: Icons.badge_outlined,
-                                label: 'Roles',
-                                route: '/operators/roles',
-                                currentRoute: currentRoute,
-                                collapsed: collapsed,
-                                navigationShell: navigationShell,
-                              ),
                             _NavItem(
                               icon: Icons.cable_outlined,
                               label: 'Conexiones',
@@ -851,6 +842,15 @@ class _Sidebar extends ConsumerWidget {
                               collapsed: collapsed,
                               navigationShell: navigationShell,
                             ),
+                            if (!collapsed && hasPermission(ref, 'operator_roles', 'view'))
+                              _SubItemTile(
+                                sub: _ExpandableSubItem(
+                                  icon: Icons.badge_outlined,
+                                  label: 'Roles',
+                                  route: '/operators/roles',
+                                  currentRoute: currentRoute,
+                                ),
+                              ),
                           ],
                         ],
                         // ── Próximamente (comentado) ──────────────────────
