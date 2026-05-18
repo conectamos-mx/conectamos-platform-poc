@@ -10,6 +10,7 @@ import '../../core/api/flows_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 import '../conversations/conversations_screen.dart' show selectedChannelIdProvider;
 import 'widgets/execution_header_block.dart';
 import 'widgets/execution_metadata_sidebar.dart';
@@ -139,9 +140,11 @@ class _ExecutionDetailScreenState
                   style: AppFonts.geist(
                       fontSize: 14, color: AppColors.ctDanger)),
               const SizedBox(height: 12),
-              TextButton(
+              AppButton(
+                label: 'Reintentar',
+                variant: AppButtonVariant.ghost,
+                size: AppButtonSize.sm,
                 onPressed: _load,
-                child: const Text('Reintentar'),
               ),
             ],
           ),
@@ -276,61 +279,61 @@ final content = _MainContent(exec: exec, flow: flow);
             style: AppFonts.geist(fontSize: 14, color: AppColors.ctText2),
           ),
           actions: [
-            TextButton(
-              onPressed: loading ? null : () => Navigator.pop(ctx),
-              child: const Text('Cancelar'),
+            AppButton(
+              label: 'Cancelar',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.sm,
+              isDisabled: loading,
+              onPressed: () => Navigator.pop(ctx),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444),
-                foregroundColor: Colors.white,
-              ),
-              onPressed: loading
-                  ? null
-                  : () async {
-                      setDialogState(() => loading = true);
-                      try {
-                        await FlowsApi.abandonExecution(
-                            executionId: executionId);
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        if (mounted) {
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text('Ejecución abandonada'),
-                              duration: Duration(milliseconds: 2000),
-                            ),
-                          );
-                          await _load();
-                        }
-                      } on DioException catch (e) {
-                        final data = e.response?.data;
-                        final code =
-                            data is Map ? data['code'] as String? : null;
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        if (mounted) {
-                          final msg = code == 'execution_not_abandonable'
-                              ? 'Esta ejecución no se puede abandonar (estado: ${data['current_status'] ?? '—'})'
-                              : 'Error al abandonar la ejecución';
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text(msg),
-                              duration: const Duration(milliseconds: 3000),
-                            ),
-                          );
-                        }
-                      } catch (_) {
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        if (mounted) {
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text('Error al abandonar la ejecución'),
-                              duration: Duration(milliseconds: 2000),
-                            ),
-                          );
-                        }
-                      }
-                    },
-              child: const Text('Sí, abandonar'),
+            AppButton(
+              label: 'Sí, abandonar',
+              variant: AppButtonVariant.danger,
+              size: AppButtonSize.sm,
+              isLoading: loading,
+              onPressed: () async {
+                setDialogState(() => loading = true);
+                try {
+                  await FlowsApi.abandonExecution(
+                      executionId: executionId);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (mounted) {
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text('Ejecución abandonada'),
+                        duration: Duration(milliseconds: 2000),
+                      ),
+                    );
+                    await _load();
+                  }
+                } on DioException catch (e) {
+                  final data = e.response?.data;
+                  final code =
+                      data is Map ? data['code'] as String? : null;
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (mounted) {
+                    final msg = code == 'execution_not_abandonable'
+                        ? 'Esta ejecución no se puede abandonar (estado: ${data['current_status'] ?? '—'})'
+                        : 'Error al abandonar la ejecución';
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text(msg),
+                        duration: const Duration(milliseconds: 3000),
+                      ),
+                    );
+                  }
+                } catch (_) {
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (mounted) {
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text('Error al abandonar la ejecución'),
+                        duration: Duration(milliseconds: 2000),
+                      ),
+                    );
+                  }
+                }
+              },
             ),
           ],
         ),
@@ -960,12 +963,7 @@ class _EvidenceThumb extends StatelessWidget {
                   photo.fieldLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 11,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: AppTextStyles.bodySmall.copyWith(color: Colors.white),
                 ),
               ),
             ),
@@ -1061,10 +1059,7 @@ class _LegacyFieldsCard extends StatelessWidget {
                     SizedBox(
                       width: 160,
                       child: Text(slug,
-                          style: const TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 12,
-                              color: Color(0xFF475569))),
+                          style: AppTextStyles.formLabel.copyWith(color: AppColors.ctInk700)),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -1446,7 +1441,11 @@ class _MessagesBlock extends ConsumerWidget {
                 ],
               ),
             ),
-            OutlinedButton.icon(
+            AppButton(
+              label: 'Abrir hilo completo',
+              variant: AppButtonVariant.outline,
+              size: AppButtonSize.sm,
+              prefixIcon: const Icon(Icons.arrow_outward_rounded, size: 14, color: AppColors.ctInk700),
               onPressed: () {
                 final channelId = (exec['channel'] as Map?)?['id'] as String?;
                 context.go('/conversations');
@@ -1456,19 +1455,6 @@ class _MessagesBlock extends ConsumerWidget {
                   });
                 }
               },
-              icon: const Icon(Icons.arrow_outward_rounded, size: 12),
-              label: const Text('Abrir hilo completo'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.ctText2,
-                side: const BorderSide(color: AppColors.ctBorder),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                minimumSize: Size.zero,
-                textStyle:
-                    AppFonts.geist(fontSize: 12, fontWeight: FontWeight.w600),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
-              ),
             ),
           ],
         ),

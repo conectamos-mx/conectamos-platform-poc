@@ -5,6 +5,7 @@ import '../../core/api/operator_roles_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/screen_header.dart';
 
 // ── Pantalla principal ────────────────────────────────────────────────────────
@@ -63,18 +64,17 @@ class _OperatorRolesScreenState extends ConsumerState<OperatorRolesScreen> {
           style: AppFonts.geist(fontSize: 13, color: AppColors.ctText2),
         ),
         actions: [
-          TextButton(
+          AppButton(
+            label: 'Cancelar',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
             onPressed: () => Navigator.of(dlg).pop(false),
-            child: const Text('Cancelar'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.ctDanger,
-              foregroundColor: Colors.white,
-              elevation: 0,
-            ),
+          AppButton(
+            label: 'Eliminar',
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.sm,
             onPressed: () => Navigator.of(dlg).pop(true),
-            child: const Text('Eliminar'),
           ),
         ],
       ),
@@ -127,7 +127,12 @@ class _OperatorRolesScreenState extends ConsumerState<OperatorRolesScreen> {
                 subtitle: 'Roles en campo — no confundir con roles IAM del dashboard.',
                 actions: [
                   if (canManage)
-                    _PrimaryButton(label: '+ Nuevo rol', onTap: _openCreate),
+                    AppButton(
+                      label: '+ Nuevo rol',
+                      variant: AppButtonVariant.primary,
+                      size: AppButtonSize.sm,
+                      onPressed: _openCreate,
+                    ),
                 ],
               ),
               Expanded(
@@ -143,9 +148,11 @@ class _OperatorRolesScreenState extends ConsumerState<OperatorRolesScreen> {
                                     style: AppFonts.geist(
                                         fontSize: 14, color: AppColors.ctDanger)),
                                 const SizedBox(height: 12),
-                                TextButton(
+                                AppButton(
+                                  label: 'Reintentar',
+                                  variant: AppButtonVariant.ghost,
+                                  size: AppButtonSize.sm,
                                   onPressed: _load,
-                                  child: const Text('Reintentar'),
                                 ),
                               ],
                             ),
@@ -584,43 +591,22 @@ class _RoleEditorDrawerState extends State<_RoleEditorDrawer> {
             child: Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
+                  child: AppButton(
+                    label: 'Cancelar',
+                    variant: AppButtonVariant.outline,
+                    expand: true,
                     onPressed: widget.onClose,
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: AppColors.ctBorder2),
-                      foregroundColor: AppColors.ctText2,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                    child: const Text('Cancelar',
-                        style: TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500)),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: (_saving || !widget.canManage) ? null : _save,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.ctTeal,
-                      disabledBackgroundColor: AppColors.ctSurface2,
-                      foregroundColor: AppColors.ctNavy,
-                      disabledForegroundColor: AppColors.ctText3,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                    child: _saving
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                        : const Text('Guardar',
-                            style: TextStyle(
-                                fontFamily: 'Geist',
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600)),
+                  child: AppButton(
+                    label: 'Guardar',
+                    variant: AppButtonVariant.teal,
+                    expand: true,
+                    isLoading: _saving,
+                    isDisabled: !widget.canManage,
+                    onPressed: _save,
                   ),
                 ),
               ],
@@ -692,53 +678,3 @@ class _DrawerField extends StatelessWidget {
   }
 }
 
-// ── Botón primario ────────────────────────────────────────────────────────────
-
-class _PrimaryButton extends StatefulWidget {
-  const _PrimaryButton({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  State<_PrimaryButton> createState() => _PrimaryButtonState();
-}
-
-class _PrimaryButtonState extends State<_PrimaryButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit:  (_) => setState(() => _hovered = false),
-      cursor: widget.onTap != null
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.forbidden,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: widget.onTap == null
-                ? AppColors.ctSurface2
-                : _hovered
-                    ? AppColors.ctTealDark
-                    : AppColors.ctTeal,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            widget.label,
-            style: AppFonts.onest(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: widget.onTap == null
-                  ? AppColors.ctText2
-                  : AppColors.ctNavy,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

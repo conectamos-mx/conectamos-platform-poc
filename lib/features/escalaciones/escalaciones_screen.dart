@@ -5,6 +5,7 @@ import '../../core/api/escalaciones_api.dart';
 import '../../core/providers/escalaciones_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/screen_header.dart';
 import 'widgets/escalacion_detail_sheet.dart';
 import 'widgets/escalacion_list_tile.dart';
@@ -199,15 +200,11 @@ class _EscalacionesScreenState extends ConsumerState<EscalacionesScreen>
       unselectedLabelColor:  AppColors.ctText2,
       indicatorColor:        AppColors.ctTeal,
       dividerColor:          AppColors.ctBorder,
-      labelStyle:            const TextStyle(
-        fontFamily:  'Geist',
-        fontSize:    13,
-        fontWeight:  FontWeight.w600,
-      ),
-      unselectedLabelStyle:  const TextStyle(
-        fontFamily:  'Geist',
-        fontSize:    13,
-        fontWeight:  FontWeight.w500,
+      labelStyle:            AppTextStyles.formLabel.copyWith(fontSize: 13),
+      unselectedLabelStyle:  AppTextStyles.body.copyWith(
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+        color: AppColors.ctText2,
       ),
       tabs: const [
         Tab(text: 'Abiertas'),
@@ -281,18 +278,10 @@ class _AssignedToDropdown extends StatelessWidget {
         key:          ValueKey(value),
         initialValue: value,
         isExpanded:   true,
-        style:       const TextStyle(
-          fontFamily: 'Geist',
-          fontSize:   12,
-          color:      AppColors.ctText,
-        ),
-        hint: const Text(
+        style:       AppTextStyles.body.copyWith(fontSize: 12),
+        hint: Text(
           'Asignado a',
-          style: TextStyle(
-            fontFamily: 'Geist',
-            fontSize:   12,
-            color:      AppColors.ctText3,
-          ),
+          style: AppTextStyles.caption.copyWith(fontSize: 12),
         ),
         decoration: InputDecoration(
           filled:           true,
@@ -363,10 +352,9 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             _label,
-            style: const TextStyle(
-              fontFamily: 'Onest',
-              fontSize:   16,
-              color:      AppColors.ctText2,
+            style: AppTextStyles.pageTitle.copyWith(
+              fontSize: 16,
+              color: AppColors.ctText2,
             ),
           ),
         ],
@@ -398,12 +386,11 @@ class _ErrorState extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
-          TextButton(
+          AppButton(
+            label: 'Reintentar',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
             onPressed: onRetry,
-            child: const Text(
-              'Reintentar',
-              style: TextStyle(color: AppColors.ctTeal),
-            ),
           ),
         ],
       ),
