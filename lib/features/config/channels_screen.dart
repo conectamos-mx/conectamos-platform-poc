@@ -13,6 +13,7 @@ import '../../core/api/channels_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/page_header.dart';
 
 /// JS bridge injected by [_CreateChannelStepperState._initFbSdk].
@@ -173,7 +174,7 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
           description: 'Conecta números de WhatsApp con AI Workers y operadores',
           actions: [
             if (hasPermission(ref, 'settings', 'manage'))
-              _PrimaryBtn(label: '+ Nuevo canal', onTap: _openCreate, disabled: _loading),
+              AppButton(label: '+ Nuevo canal', variant: AppButtonVariant.teal, size: AppButtonSize.sm, isDisabled: _loading, onPressed: _openCreate),
           ],
         ),
         Expanded(
@@ -184,9 +185,9 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(_error!, style: const TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctDanger), textAlign: TextAlign.center),
+                          Text(_error!, style: AppTextStyles.body.copyWith(color: AppColors.ctDanger), textAlign: TextAlign.center),
                           const SizedBox(height: 12),
-                          _GhostBtn(label: 'Reintentar', onTap: _fetchAll),
+                          AppButton(label: 'Reintentar', variant: AppButtonVariant.outline, size: AppButtonSize.sm, onPressed: _fetchAll),
                         ],
                       ),
                     )
@@ -219,7 +220,7 @@ class _ChannelsBody extends StatelessWidget {
   final void Function(Map<String, dynamic>) onToggleActive;
   final bool canManage;
 
-  static const _headerStyle = TextStyle(fontFamily: 'Geist', fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.ctText2, letterSpacing: 0.4);
+  static TextStyle get _headerStyle => AppTextStyles.kpiLabel.copyWith(letterSpacing: 0.4);
 
   @override
   Widget build(BuildContext context) {
@@ -230,7 +231,7 @@ class _ChannelsBody extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: const BoxDecoration(color: AppColors.ctSurface2, borderRadius: BorderRadius.only(topLeft: Radius.circular(9), topRight: Radius.circular(9))),
-            child: const Row(
+            child: Row(
               children: [
                 Expanded(flex: 4, child: Text('CANAL',    style: _headerStyle)),
                 Expanded(flex: 3, child: Text('WORKER',   style: _headerStyle)),
@@ -240,9 +241,9 @@ class _ChannelsBody extends StatelessWidget {
             ),
           ),
           if (channels.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: Center(child: Text('No hay canales configurados aún.', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText2))),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Center(child: Text('No hay canales configurados aún.', style: AppTextStyles.body.copyWith(color: AppColors.ctText2))),
             )
           else
             ...channels.asMap().entries.map((entry) {
@@ -317,12 +318,12 @@ class _ChannelRowState extends State<_ChannelRow> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(name, style: const TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.ctText), overflow: TextOverflow.ellipsis),
+                        Text(name, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 3),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(color: typeEntry.bg, borderRadius: BorderRadius.circular(20)),
-                          child: Text(typeEntry.label, style: TextStyle(fontFamily: 'Geist', fontSize: 10, fontWeight: FontWeight.w600, color: typeEntry.fg)),
+                          child: Text(typeEntry.label, style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600, color: typeEntry.fg)),
                         ),
                       ],
                     ),
@@ -333,13 +334,13 @@ class _ChannelRowState extends State<_ChannelRow> {
             Expanded(
               flex: 3,
               child: workerName.isEmpty
-                  ? const Text('Sin worker', style: TextStyle(fontFamily: 'Geist', fontSize: 12, color: AppColors.ctText3))
+                  ? Text('Sin worker', style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctText3))
                   : Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(width: 10, height: 10, decoration: BoxDecoration(color: _hexColor(workerColor), shape: BoxShape.circle)),
                         const SizedBox(width: 8),
-                        Flexible(child: Text(workerName, style: const TextStyle(fontFamily: 'Geist', fontSize: 12, color: AppColors.ctText), overflow: TextOverflow.ellipsis)),
+                        Flexible(child: Text(workerName, style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctText), overflow: TextOverflow.ellipsis)),
                       ],
                     ),
             ),
@@ -350,7 +351,7 @@ class _ChannelRowState extends State<_ChannelRow> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(color: isActive ? AppColors.ctOkBg : AppColors.ctSurface2, borderRadius: BorderRadius.circular(20)),
-                  child: Text(isActive ? 'Activo' : 'Inactivo', style: TextStyle(fontFamily: 'Geist', fontSize: 11, fontWeight: FontWeight.w600, color: isActive ? AppColors.ctOkText : AppColors.ctText2)),
+                  child: Text(isActive ? 'Activo' : 'Inactivo', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: isActive ? AppColors.ctOkText : AppColors.ctText2)),
                 ),
               ),
             ),
@@ -788,7 +789,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
 
   InputDecoration _fieldDec(String hint) => InputDecoration(
     hintText: hint,
-    hintStyle: const TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText3),
+    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
     filled: true, fillColor: AppColors.ctSurface2,
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.ctBorder2)),
@@ -798,7 +799,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
 
   Widget _label(String text) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
-    child: Text(text, style: const TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.ctText)),
+    child: Text(text, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
   );
 
   Widget _dropdownBox(Widget child) => Container(
@@ -813,9 +814,9 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 24, 20, 16),
-          child: Text('Nuevo canal', style: TextStyle(fontFamily: 'Geist', fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.ctText)),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+          child: Text('Nuevo canal', style: AppTextStyles.body.copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
         ),
         const Divider(height: 1, color: AppColors.ctBorder),
         const SizedBox(height: 12),
@@ -842,11 +843,11 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
             alignment: Alignment.center,
             child: isCompleted
                 ? const Icon(Icons.check, size: 12, color: Colors.white)
-                : Text('$number', style: TextStyle(fontFamily: 'Geist', fontSize: 11, fontWeight: FontWeight.w700, color: isActive ? AppColors.ctNavy : AppColors.ctText2)),
+                : Text('$number', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w700, color: isActive ? AppColors.ctNavy : AppColors.ctText2)),
           ),
           const SizedBox(width: 10),
           Flexible(
-            child: Text(label, style: TextStyle(fontFamily: 'Geist', fontSize: 12, fontWeight: isActive ? FontWeight.w600 : FontWeight.w400, color: isActive ? AppColors.ctText : AppColors.ctText2)),
+            child: Text(label, style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: isActive ? FontWeight.w600 : FontWeight.w400, color: isActive ? AppColors.ctText : AppColors.ctText2)),
           ),
         ],
       ),
@@ -860,9 +861,9 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text('Elige el tipo de canal', style: TextStyle(fontFamily: 'Geist', fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.ctText)),
+        Text('Elige el tipo de canal', style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist', fontSize: 16)),
         const SizedBox(height: 4),
-        const Text('Selecciona la plataforma de mensajería para este canal.', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText2)),
+        Text('Selecciona la plataforma de mensajería para este canal.', style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
         const SizedBox(height: 24),
         Row(
           children: [
@@ -889,16 +890,16 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
               children: [
                 const Icon(Icons.warning_amber_rounded, color: AppColors.ctWarnText, size: 16),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'No tienes Workers contratados. Ve a Mis Workers para contratar uno.',
-                    style: TextStyle(fontFamily: 'Geist', fontSize: 12, color: AppColors.ctWarnText),
+                    style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctWarnText),
                   ),
                 ),
                 const SizedBox(width: 8),
                 GestureDetector(
                   onTap: () => Navigator.of(context).pop('_workers'),
-                  child: const Text('Ir a Workers', style: TextStyle(fontFamily: 'Geist', fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.ctWarnText, decoration: TextDecoration.underline)),
+                  child: Text('Ir a Workers', style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.ctWarnText, decoration: TextDecoration.underline)),
                 ),
               ],
             ),
@@ -909,7 +910,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
               child: DropdownButton<String>(
                 value: _workerId,
                 isExpanded: true,
-                style: const TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText),
+                style: AppTextStyles.body,
                 icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: AppColors.ctText3),
                 items: widget.workers.map((w) {
                   final id    = w['id']           as String? ?? '';
@@ -940,11 +941,11 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text('Configura tu canal de WhatsApp', style: TextStyle(fontFamily: 'Geist', fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.ctText)),
+        Text('Configura tu canal de WhatsApp', style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist', fontSize: 16)),
         const SizedBox(height: 24),
 
         // ── Embedded Signup ──────────────────────────────────────────────
-        const Text('Conexión automática', style: TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.ctText)),
+        Text('Conexión automática', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         GestureDetector(
           onTap: _creating ? null : _launchEmbeddedSignup,
@@ -967,7 +968,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
                       : const Text('f', style: TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFF1877F2))),
                 ),
                 const SizedBox(width: 12),
-                const Text('Conectar con WhatsApp Business', style: TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
+                Text('Conectar con WhatsApp Business', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600, color: Colors.white)),
               ],
             ),
           ),
@@ -1008,18 +1009,18 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text('Configura tu canal de Telegram', style: TextStyle(fontFamily: 'Geist', fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.ctText)),
+        Text('Configura tu canal de Telegram', style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist', fontSize: 16)),
         const SizedBox(height: 24),
 
         _label('Nombre del canal *'),
-        TextField(controller: _nameCtrl, style: const TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText), decoration: _fieldDec('Ej: Soporte Telegram')),
+        TextField(controller: _nameCtrl, style: AppTextStyles.body, decoration: _fieldDec('Ej: Soporte Telegram')),
         const SizedBox(height: 14),
 
         _label('Bot Token *'),
         TextField(
           controller: _tokenCtrl,
           obscureText: !_tokenVisible,
-          style: const TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText),
+          style: AppTextStyles.body,
           decoration: _fieldDec('Ej: 123456:ABC-DEF...').copyWith(
             suffixIcon: IconButton(
               icon: Icon(_tokenVisible ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18, color: AppColors.ctText3),
@@ -1031,29 +1032,29 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
 
         ExpansionTile(
           tilePadding: EdgeInsets.zero,
-          title: const Text('¿Cómo obtengo mi Bot Token?', style: TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.ctTeal)),
+          title: Text('¿Cómo obtengo mi Bot Token?', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500, color: AppColors.ctTeal)),
           iconColor: AppColors.ctTeal,
           collapsedIconColor: AppColors.ctTeal,
-          children: const [
+          children: [
             ListTile(
               dense: true,
-              leading: CircleAvatar(radius: 10, backgroundColor: AppColors.ctTeal, child: Text('1', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.ctNavy))),
-              title: Text('Abre Telegram y busca @BotFather', style: TextStyle(fontFamily: 'Geist', fontSize: 12, color: AppColors.ctText2)),
+              leading: CircleAvatar(radius: 10, backgroundColor: AppColors.ctTeal, child: Text('1', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700, color: AppColors.ctNavy))),
+              title: Text('Abre Telegram y busca @BotFather', style: AppTextStyles.bodySmall.copyWith(fontSize: 12)),
             ),
             ListTile(
               dense: true,
-              leading: CircleAvatar(radius: 10, backgroundColor: AppColors.ctTeal, child: Text('2', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.ctNavy))),
-              title: Text('Envía /newbot y sigue las instrucciones', style: TextStyle(fontFamily: 'Geist', fontSize: 12, color: AppColors.ctText2)),
+              leading: CircleAvatar(radius: 10, backgroundColor: AppColors.ctTeal, child: Text('2', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700, color: AppColors.ctNavy))),
+              title: Text('Envía /newbot y sigue las instrucciones', style: AppTextStyles.bodySmall.copyWith(fontSize: 12)),
             ),
             ListTile(
               dense: true,
-              leading: CircleAvatar(radius: 10, backgroundColor: AppColors.ctTeal, child: Text('3', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.ctNavy))),
-              title: Text('Al finalizar, BotFather te dará un token como 123456:ABC-DEF...', style: TextStyle(fontFamily: 'Geist', fontSize: 12, color: AppColors.ctText2)),
+              leading: CircleAvatar(radius: 10, backgroundColor: AppColors.ctTeal, child: Text('3', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700, color: AppColors.ctNavy))),
+              title: Text('Al finalizar, BotFather te dará un token como 123456:ABC-DEF...', style: AppTextStyles.bodySmall.copyWith(fontSize: 12)),
             ),
             ListTile(
               dense: true,
-              leading: CircleAvatar(radius: 10, backgroundColor: AppColors.ctTeal, child: Text('4', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.ctNavy))),
-              title: Text('Copia ese token en el campo de arriba', style: TextStyle(fontFamily: 'Geist', fontSize: 12, color: AppColors.ctText2)),
+              leading: CircleAvatar(radius: 10, backgroundColor: AppColors.ctTeal, child: Text('4', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700, color: AppColors.ctNavy))),
+              title: Text('Copia ese token en el campo de arriba', style: AppTextStyles.bodySmall.copyWith(fontSize: 12)),
             ),
           ],
         ),
@@ -1078,7 +1079,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(color: AppColors.ctRedBg, borderRadius: BorderRadius.circular(8)),
-              child: Text(_createError!, style: const TextStyle(fontFamily: 'Geist', fontSize: 12, color: AppColors.ctRedText)),
+              child: Text(_createError!, style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctRedText)),
             ),
           ])
         : const SizedBox.shrink();
@@ -1088,9 +1089,9 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Revisa antes de crear', style: TextStyle(fontFamily: 'Geist', fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.ctText)),
+          Text('Revisa antes de crear', style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist', fontSize: 16)),
           const SizedBox(height: 4),
-          const Text('Verifica que la información sea correcta.', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText2)),
+          Text('Verifica que la información sea correcta.', style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
           const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.all(16),
@@ -1099,13 +1100,13 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
               children: [
                 _reviewRow('Tipo de canal', _buildTypeChip()),
                 const Divider(height: 20, color: AppColors.ctBorder),
-                _reviewRow('Nombre', Text(_nameCtrl.text.trim(), style: const TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText))),
+                _reviewRow('Nombre', Text(_nameCtrl.text.trim(), style: AppTextStyles.body)),
                 const Divider(height: 20, color: AppColors.ctBorder),
-                _reviewRow('Username', Text('@${_botUsername ?? '—'}', style: const TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText))),
+                _reviewRow('Username', Text('@${_botUsername ?? '—'}', style: AppTextStyles.body)),
                 const Divider(height: 20, color: AppColors.ctBorder),
-                _reviewRow('Worker', Text(workerName, style: const TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText))),
+                _reviewRow('Worker', Text(workerName, style: AppTextStyles.body)),
                 const Divider(height: 20, color: AppColors.ctBorder),
-                _reviewRow('Token', const Text('••••••••', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText2))),
+                _reviewRow('Token', Text('••••••••', style: AppTextStyles.body.copyWith(color: AppColors.ctText2))),
               ],
             ),
           ),
@@ -1121,9 +1122,9 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text('Revisa antes de crear', style: TextStyle(fontFamily: 'Geist', fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.ctText)),
+        Text('Revisa antes de crear', style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist', fontSize: 16)),
         const SizedBox(height: 4),
-        const Text('Verifica que la información sea correcta.', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText2)),
+        Text('Verifica que la información sea correcta.', style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
         const SizedBox(height: 24),
         Container(
           padding: const EdgeInsets.all(16),
@@ -1132,15 +1133,15 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
             children: [
               _reviewRow('Tipo de canal', _buildTypeChip()),
               const Divider(height: 20, color: AppColors.ctBorder),
-              _reviewRow('Nombre', Text(_nameCtrl.text.trim(), style: const TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText))),
+              _reviewRow('Nombre', Text(_nameCtrl.text.trim(), style: AppTextStyles.body)),
               const Divider(height: 20, color: AppColors.ctBorder),
-              _reviewRow('Worker', Text(workerName, style: const TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText))),
+              _reviewRow('Worker', Text(workerName, style: AppTextStyles.body)),
               const Divider(height: 20, color: AppColors.ctBorder),
-              _reviewRow('Phone Number ID', Text(maskedPhone, style: const TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText))),
+              _reviewRow('Phone Number ID', Text(maskedPhone, style: AppTextStyles.body)),
               const Divider(height: 20, color: AppColors.ctBorder),
-              _reviewRow('WABA ID', Text(_wabaCtrl.text.trim(), style: const TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText))),
+              _reviewRow('WABA ID', Text(_wabaCtrl.text.trim(), style: AppTextStyles.body)),
               const Divider(height: 20, color: AppColors.ctBorder),
-              _reviewRow('Token', const Text('••••••••', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText2))),
+              _reviewRow('Token', Text('••••••••', style: AppTextStyles.body.copyWith(color: AppColors.ctText2))),
             ],
           ),
         ),
@@ -1153,7 +1154,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(fontFamily: 'Geist', fontSize: 12, color: AppColors.ctText2)),
+        Text(label, style: AppTextStyles.bodySmall.copyWith(fontSize: 12)),
         value,
       ],
     );
@@ -1164,12 +1165,12 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(color: const Color(0xFFEDE9FE), borderRadius: BorderRadius.circular(20)),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(width: 8, height: 8, child: DecoratedBox(decoration: BoxDecoration(color: Color(0xFF229ED9), shape: BoxShape.circle))),
-            SizedBox(width: 5),
-            Text('Telegram', style: TextStyle(fontFamily: 'Geist', fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF6D28D9))),
+            const SizedBox(width: 8, height: 8, child: DecoratedBox(decoration: BoxDecoration(color: Color(0xFF229ED9), shape: BoxShape.circle))),
+            const SizedBox(width: 5),
+            Text('Telegram', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: const Color(0xFF6D28D9))),
           ],
         ),
       );
@@ -1177,12 +1178,12 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(20)),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(width: 8, height: 8, child: DecoratedBox(decoration: BoxDecoration(color: Color(0xFF25D366), shape: BoxShape.circle))),
-          SizedBox(width: 5),
-          Text('WhatsApp', style: TextStyle(fontFamily: 'Geist', fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF16A34A))),
+          const SizedBox(width: 8, height: 8, child: DecoratedBox(decoration: BoxDecoration(color: Color(0xFF25D366), shape: BoxShape.circle))),
+          const SizedBox(width: 5),
+          Text('WhatsApp', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: const Color(0xFF16A34A))),
         ],
       ),
     );
@@ -1195,40 +1196,40 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _step > 0
-            ? _GhostBtn(label: '← Atrás', onTap: () => setState(() { _step--; _createError = null; _verifyError = null; if (_step == 1) _botUsername = null; }))
-            : _GhostBtn(label: 'Cancelar', onTap: () => Navigator.pop(context)),
+            ? AppButton(label: '← Atrás', variant: AppButtonVariant.outline, size: AppButtonSize.sm, onPressed: () => setState(() { _step--; _createError = null; _verifyError = null; if (_step == 1) _botUsername = null; }))
+            : AppButton(label: 'Cancelar', variant: AppButtonVariant.outline, size: AppButtonSize.sm, onPressed: () => Navigator.pop(context)),
         if (_step == 0)
-          _PrimaryBtn(label: 'Siguiente →', onTap: _canNext ? () => setState(() => _step++) : (() {}), disabled: !_canNext)
+          AppButton(label: 'Siguiente →', variant: AppButtonVariant.teal, size: AppButtonSize.sm, isDisabled: !_canNext, onPressed: () => setState(() => _step++))
         else if (_step == 1 && _verifying)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
             decoration: BoxDecoration(color: AppColors.ctTeal, borderRadius: BorderRadius.circular(8)),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctNavy)),
-                SizedBox(width: 8),
-                Text('Verificando...', style: TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.ctNavy)),
+                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctNavy)),
+                const SizedBox(width: 8),
+                Text('Verificando...', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600, color: AppColors.ctNavy)),
               ],
             ),
           )
         else if (_step == 1)
-          _PrimaryBtn(label: 'Siguiente →', onTap: _canNext ? _verifyAndNext : (() {}), disabled: !_canNext)
+          AppButton(label: 'Siguiente →', variant: AppButtonVariant.teal, size: AppButtonSize.sm, isDisabled: !_canNext, onPressed: _verifyAndNext)
         else if (_creating)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
             decoration: BoxDecoration(color: AppColors.ctTeal, borderRadius: BorderRadius.circular(8)),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctNavy)),
-                SizedBox(width: 8),
-                Text('Creando...', style: TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.ctNavy)),
+                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctNavy)),
+                const SizedBox(width: 8),
+                Text('Creando...', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600, color: AppColors.ctNavy)),
               ],
             ),
           )
         else
-          _PrimaryBtn(label: 'Crear canal', onTap: _create),
+          AppButton(label: 'Crear canal', variant: AppButtonVariant.teal, size: AppButtonSize.sm, onPressed: _create),
       ],
     );
   }
@@ -1276,11 +1277,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
                               Expanded(
                                 child: Text(
                                   _verifyError!,
-                                  style: const TextStyle(
-                                    fontFamily: 'Geist',
-                                    fontSize: 12,
-                                    color: AppColors.ctRedText,
-                                  ),
+                                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctRedText),
                                 ),
                               ),
                             ],
@@ -1364,13 +1361,13 @@ class _TypeCardState extends State<_TypeCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(label, style: const TextStyle(fontFamily: 'Geist', fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.ctText)),
+                      Text(label, style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.ctText)),
                       if (widget.disabled) ...[
                         const SizedBox(height: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(color: AppColors.ctSurface2, borderRadius: BorderRadius.circular(20)),
-                          child: const Text('Próximamente', style: TextStyle(fontFamily: 'Geist', fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.ctText3)),
+                          child: Text('Próximamente', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w500, color: AppColors.ctText3)),
                         ),
                       ],
                     ],
@@ -1400,7 +1397,7 @@ class _EmptyTypeCard extends StatelessWidget {
         children: [
           Icon(Icons.add_circle_outline_rounded, size: 22, color: AppColors.ctText3),
           const SizedBox(height: 6),
-          const Text('Más próximamente', style: TextStyle(fontFamily: 'Geist', fontSize: 11, color: AppColors.ctText3)),
+          Text('Más próximamente', style: AppTextStyles.bodySmall),
         ],
       ),
     );
@@ -1409,76 +1406,6 @@ class _EmptyTypeCard extends StatelessWidget {
 
 
 // ── Button helpers ────────────────────────────────────────────────────────────
-
-class _PrimaryBtn extends StatefulWidget {
-  const _PrimaryBtn({required this.label, required this.onTap, this.disabled = false});
-  final String label;
-  final VoidCallback onTap;
-  final bool disabled;
-
-  @override
-  State<_PrimaryBtn> createState() => _PrimaryBtnState();
-}
-
-class _PrimaryBtnState extends State<_PrimaryBtn> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit:  (_) => setState(() => _hovered = false),
-      cursor: widget.disabled ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.disabled ? null : widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(
-            color: widget.disabled ? AppColors.ctBorder2 : _hovered ? AppColors.ctTealDark : AppColors.ctTeal,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(widget.label, style: TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w600, color: widget.disabled ? AppColors.ctText3 : AppColors.ctNavy)),
-        ),
-      ),
-    );
-  }
-}
-
-class _GhostBtn extends StatefulWidget {
-  const _GhostBtn({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  State<_GhostBtn> createState() => _GhostBtnState();
-}
-
-class _GhostBtnState extends State<_GhostBtn> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit:  (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(
-            color: _hovered ? AppColors.ctSurface2 : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.ctBorder),
-          ),
-          child: Text(widget.label, style: const TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.ctText2)),
-        ),
-      ),
-    );
-  }
-}
 
 class _ActionBtn extends StatefulWidget {
   const _ActionBtn({required this.label, required this.color, required this.onTap});
