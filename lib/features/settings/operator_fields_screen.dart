@@ -7,6 +7,7 @@ import '../../core/api/operator_fields_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 import 'widgets/operator_field_form_dialog.dart';
 
 // ── Field type helpers ─────────────────────────────────────────────────────────
@@ -50,13 +51,8 @@ class OperatorFieldsScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back, color: AppColors.ctText),
           onPressed: () => context.go('/settings'),
         ),
-        title: const Text('Campos de operador',
-            style: TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: AppColors.ctText,
-            )),
+        title: Text('Campos de operador',
+            style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist', fontWeight: FontWeight.w600)),
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1, color: AppColors.ctBorder),
@@ -161,21 +157,14 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: Text('¿Deshabilitar "$label"?',
-            style: const TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.ctText)),
+            style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist', fontSize: 16)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'El campo dejará de aparecer en el formulario de operadores.',
-              style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 14,
-                  color: AppColors.ctText2),
+              style: AppTextStyles.body.copyWith(fontSize: 14, color: AppColors.ctText2),
             ),
             if (withData > 0) ...[
               const SizedBox(height: 10),
@@ -194,10 +183,7 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
                       'Este campo tiene datos en $withData '
                       'operador${withData == 1 ? '' : 'es'}. '
                       'Los datos no se perderán.',
-                      style: const TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 13,
-                          color: AppColors.ctWarnText),
+                      style: AppTextStyles.body.copyWith(color: AppColors.ctWarnText),
                     ),
                   ),
                 ]),
@@ -206,20 +192,17 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
           ],
         ),
         actions: [
-          TextButton(
+          AppButton(
+            label: 'Cancelar',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar',
-                style: TextStyle(
-                    fontFamily: 'Geist', color: AppColors.ctText2)),
           ),
-          TextButton(
+          AppButton(
+            label: 'Deshabilitar',
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.sm,
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Deshabilitar',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.ctDanger,
-                )),
           ),
         ],
       ),
@@ -296,31 +279,23 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: Text('¿Eliminar "$label" permanentemente?',
-            style: const TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.ctText)),
-        content: const Text(
+            style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist', fontSize: 16)),
+        content: Text(
           'Esta acción no se puede deshacer.',
-          style: TextStyle(
-              fontFamily: 'Geist', fontSize: 14, color: AppColors.ctText2),
+          style: AppTextStyles.body.copyWith(fontSize: 14, color: AppColors.ctText2),
         ),
         actions: [
-          TextButton(
+          AppButton(
+            label: 'Cancelar',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar',
-                style: TextStyle(
-                    fontFamily: 'Geist', color: AppColors.ctText2)),
           ),
-          TextButton(
+          AppButton(
+            label: 'Eliminar',
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.sm,
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Eliminar',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.ctDanger,
-                )),
           ),
         ],
       ),
@@ -375,38 +350,21 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
           color: AppColors.ctSurface,
           child: Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Define campos adicionales para los perfiles de tus operadores. '
                   'Arrastra para cambiar el orden.',
-                  style: TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 13,
-                      color: AppColors.ctText2),
+                  style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                 ),
               ),
               if (canManage) ...[
                 const SizedBox(width: 16),
-                SizedBox(
-                  height: 34,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.ctTeal,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                      textStyle: const TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600),
-                    ),
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Agregar campo'),
-                    onPressed: () => _openCreate(effectiveTenantId),
-                  ),
+                AppButton(
+                  label: 'Agregar campo',
+                  variant: AppButtonVariant.teal,
+                  size: AppButtonSize.sm,
+                  prefixIcon: const Icon(Icons.add, size: 14, color: AppColors.ctNavy),
+                  onPressed: () => _openCreate(effectiveTenantId),
                 ),
               ],
             ],
@@ -433,10 +391,14 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
                 size: 48, color: AppColors.ctDanger),
             const SizedBox(height: 12),
             Text(_error!,
-                style: const TextStyle(
-                    fontFamily: 'Geist', color: AppColors.ctText2)),
+                style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
             const SizedBox(height: 16),
-            TextButton(onPressed: _load, child: const Text('Reintentar')),
+            AppButton(
+              label: 'Reintentar',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.sm,
+              onPressed: _load,
+            ),
           ],
         ),
       );
@@ -450,13 +412,8 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
             const Icon(Icons.dashboard_customize_outlined,
                 size: 56, color: AppColors.ctText3),
             const SizedBox(height: 16),
-            const Text('Sin campos definidos',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.ctText,
-                )),
+            Text('Sin campos definidos',
+                style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist', fontSize: 16)),
             const SizedBox(height: 6),
             Text(
               'Agrega campos personalizados para enriquecer los perfiles de tus operadores',
@@ -465,22 +422,10 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
             ),
             if (canManage) ...[
               const SizedBox(height: 20),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.ctTeal,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                  textStyle: const TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600),
-                ),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Agregar primer campo'),
+              AppButton(
+                label: 'Agregar primer campo',
+                variant: AppButtonVariant.teal,
+                prefixIcon: const Icon(Icons.add, size: 14, color: AppColors.ctNavy),
                 onPressed: () => _openCreate(tenantId),
               ),
             ],
@@ -514,18 +459,12 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
 
         // ── DESHABILITADOS ────────────────────────────────────────────────────
         if (_inactiveFields.isNotEmpty) ...[
-          const SliverToBoxAdapter(
+          SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(20, 28, 20, 8),
+              padding: const EdgeInsets.fromLTRB(20, 28, 20, 8),
               child: Text(
                 'DESHABILITADOS',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.6,
-                  color: AppColors.ctText2,
-                ),
+                style: AppTextStyles.kpiLabel.copyWith(letterSpacing: 0.6),
               ),
             ),
           ),
@@ -623,12 +562,7 @@ class _FieldCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: const TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.ctText,
-                    )),
+                    style: AppTextStyles.body.copyWith(fontSize: 14, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 Row(children: [
                   _Chip(
@@ -732,11 +666,7 @@ class _InactiveFieldCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: const TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.ctText2,
+                    style: AppTextStyles.body.copyWith(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.ctText2
                     )),
                 const SizedBox(height: 4),
                 Row(children: [
@@ -805,11 +735,7 @@ class _Chip extends StatelessWidget {
       decoration:
           BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
       child: Text(label,
-          style: TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: fg)),
+          style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: fg)),
     );
   }
 }

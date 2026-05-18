@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 
 // ── Pantalla ──────────────────────────────────────────────────────────────────
 
@@ -51,78 +52,30 @@ class _ActionBar extends StatelessWidget {
               children: [
                 Text(
                   'Sesión · $operatorName',
-                  style: const TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ctText,
-                  ),
+                  style: AppTextStyles.body.copyWith(fontSize: 15, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 1),
-                const Text(
+                Text(
                   'Hoy · Turno iniciado 07:03 · En curso',
-                  style: TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 11,
-                    color: AppColors.ctText2,
-                  ),
+                  style: AppTextStyles.bodySmall,
                 ),
               ],
             ),
           ),
-          _GhostButton(
+          AppButton(
             label: '← Vista general',
-            onTap: () => context.go('/'),
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
+            onPressed: () => context.go('/'),
           ),
           const SizedBox(width: 8),
-          _GhostButton(
+          AppButton(
             label: 'Ver conversación',
-            onTap: () => context.go('/conversaciones'),
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
+            onPressed: () => context.go('/conversaciones'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _GhostButton extends StatefulWidget {
-  const _GhostButton({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  State<_GhostButton> createState() => _GhostButtonState();
-}
-
-class _GhostButtonState extends State<_GhostButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: _hovered ? AppColors.ctSurface2 : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.ctBorder2),
-          ),
-          child: Text(
-            widget.label,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: AppColors.ctText2,
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -207,13 +160,7 @@ class _KpiValueText extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       value,
-      style: const TextStyle(
-        fontFamily: 'Geist',
-        fontSize: 28,
-        fontWeight: FontWeight.w700,
-        color: AppColors.ctText,
-        height: 1,
-      ),
+      style: AppTextStyles.kpiValue.copyWith(height: 1),
     );
   }
 }
@@ -256,24 +203,14 @@ class _SessionKpiCard extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             label,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: AppColors.ctText2,
-              letterSpacing: 0.6,
-            ),
+            style: AppTextStyles.kpiLabel.copyWith(letterSpacing: 0.6),
           ),
           const SizedBox(height: 8),
           valueWidget,
           const SizedBox(height: 5),
           Text(
             subtext,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 11,
-              color: AppColors.ctText3,
-            ),
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
           ),
         ],
       ),
@@ -348,15 +285,9 @@ class _Timeline extends StatelessWidget {
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'LÍNEA DE TIEMPO',
-            style: TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: AppColors.ctText3,
-              letterSpacing: 1.2,
-            ),
+            style: AppTextStyles.kpiLabel.copyWith(color: AppColors.ctText3, letterSpacing: 1.2),
           ),
           const SizedBox(height: 16),
           ..._kTimelineEvents.asMap().entries.map((entry) {
@@ -425,23 +356,14 @@ class _TimelineItem extends StatelessWidget {
                       Expanded(
                         child: Text(
                           event.title,
-                          style: TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: event.faded
-                                ? AppColors.ctText3
-                                : AppColors.ctText,
+                          style: AppTextStyles.formLabel.copyWith(
+                            color: event.faded ? AppColors.ctText3 : AppColors.ctText,
                           ),
                         ),
                       ),
                       Text(
                         event.time,
-                        style: const TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 10,
-                          color: AppColors.ctText3,
-                        ),
+                        style: AppTextStyles.caption,
                       ),
                     ],
                   ),
@@ -449,12 +371,7 @@ class _TimelineItem extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       event.detail,
-                      style: const TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 11,
-                        color: AppColors.ctText2,
-                        height: 1.4,
-                      ),
+                      style: AppTextStyles.bodySmall.copyWith(height: 1.4),
                     ),
                   ],
                 ],
@@ -476,16 +393,10 @@ class _FlowPanels extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
+      children: [
         Text(
           'IDs POR FLUJO',
-          style: TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: AppColors.ctText3,
-            letterSpacing: 1.2,
-          ),
+          style: AppTextStyles.kpiLabel.copyWith(color: AppColors.ctText3, letterSpacing: 1.2),
         ),
         SizedBox(height: 10),
         _FlowPanel(
@@ -527,12 +438,7 @@ class _FlowPanel extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.ctText,
-            ),
+            style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: AppColors.ctText),
           ),
           const SizedBox(height: 10),
           child,
@@ -553,32 +459,23 @@ class _FlowTurnoContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          children: const [
-            Icon(Icons.check_rounded, size: 13, color: AppColors.ctOk),
-            SizedBox(width: 5),
+          children: [
+            const Icon(Icons.check_rounded, size: 13, color: AppColors.ctOk),
+            const SizedBox(width: 5),
             Text(
               'Inicio: ✓ 07:03',
-              style: TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: AppColors.ctOk,
-              ),
+              style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.ctOk),
             ),
           ],
         ),
         const SizedBox(height: 6),
-        const Row(
+        Row(
           children: [
-            Icon(Icons.schedule_rounded, size: 13, color: AppColors.ctText3),
-            SizedBox(width: 5),
+            const Icon(Icons.schedule_rounded, size: 13, color: AppColors.ctText3),
+            const SizedBox(width: 5),
             Text(
               'Cierre: Pendiente',
-              style: TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 12,
-                color: AppColors.ctText3,
-              ),
+              style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctText3),
             ),
           ],
         ),
@@ -635,24 +532,14 @@ class _FlowRegistrosContent extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Text(
+            Text(
               '3',
-              style: TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: AppColors.ctText,
-                height: 1,
-              ),
+              style: AppTextStyles.kpiValue.copyWith(fontSize: 22, height: 1),
             ),
             const SizedBox(width: 6),
-            const Text(
+            Text(
               'IDs generados',
-              style: TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 11,
-                color: AppColors.ctText2,
-              ),
+              style: AppTextStyles.bodySmall,
             ),
             const Spacer(),
             Container(
@@ -662,14 +549,9 @@ class _FlowRegistrosContent extends StatelessWidget {
                 color: AppColors.ctOkBg,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
+              child: Text(
                 '2 cerrados',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.ctOkText,
-                ),
+                style: AppTextStyles.kpiLabel.copyWith(color: AppColors.ctOkText),
               ),
             ),
           ],
@@ -723,12 +605,7 @@ class _IdRowState extends State<_IdRow> {
               Expanded(
                 child: Text(
                   widget.entry.id,
-                  style: const TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.ctText,
-                  ),
+                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.ctText),
                 ),
               ),
               Container(
@@ -740,12 +617,7 @@ class _IdRowState extends State<_IdRow> {
                 ),
                 child: Text(
                   widget.entry.statusLabel,
-                  style: TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: widget.entry.statusTextColor,
-                  ),
+                  style: AppTextStyles.kpiLabel.copyWith(color: widget.entry.statusTextColor),
                 ),
               ),
             ],
@@ -763,19 +635,14 @@ class _FlowIncidenciasContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
-        Icon(Icons.check_circle_outline_rounded,
+        const Icon(Icons.check_circle_outline_rounded,
             size: 14, color: AppColors.ctOk),
-        SizedBox(width: 6),
+        const SizedBox(width: 6),
         Text(
           'Sin incidencias ✓',
-          style: TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: AppColors.ctOk,
-          ),
+          style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.ctOk),
         ),
       ],
     );

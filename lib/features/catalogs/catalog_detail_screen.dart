@@ -11,6 +11,7 @@ import '../../core/api/connections_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -154,16 +155,17 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
           style: AppFonts.geist(fontSize: 13, color: AppColors.ctText2),
         ),
         actions: [
-          TextButton(
+          AppButton(
+            label: 'Cancelar',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('Cancelar',
-                style: AppFonts.geist(fontSize: 13, color: AppColors.ctText2)),
           ),
-          TextButton(
+          AppButton(
+            label: 'Eliminar',
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.sm,
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Eliminar',
-                style: AppFonts.geist(fontSize: 13, color: AppColors.ctDanger,
-                    fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -235,7 +237,12 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            TextButton(onPressed: _load, child: const Text('Reintentar')),
+            AppButton(
+              label: 'Reintentar',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.sm,
+              onPressed: _load,
+            ),
           ],
         ),
       );
@@ -405,14 +412,25 @@ class _CatalogHeader extends StatelessWidget {
                 const SizedBox(width: 4),
               ],
               if (canManage && isSyncable) ...[
-                _SyncButton(syncing: syncing, onSync: onSync),
+                AppButton(
+                  label: 'Sincronizar ahora',
+                  variant: AppButtonVariant.outline,
+                  size: AppButtonSize.sm,
+                  isLoading: syncing,
+                  prefixIcon: const Icon(Icons.sync_rounded, size: 14, color: AppColors.ctInk700),
+                  onPressed: onSync,
+                ),
                 const SizedBox(width: 8),
               ],
               if (canManage)
-                _SaveButton(
-                    saving: saving,
-                    hasChanges: hasChanges,
-                    onSave: onSave),
+                AppButton(
+                  label: 'Guardar',
+                  variant: AppButtonVariant.teal,
+                  size: AppButtonSize.sm,
+                  isLoading: saving,
+                  isDisabled: !hasChanges,
+                  onPressed: onSave,
+                ),
             ],
           ),
           const SizedBox(height: 6),
@@ -571,73 +589,6 @@ class _MetaDot extends StatelessWidget {
   }
 }
 
-class _SyncButton extends StatelessWidget {
-  const _SyncButton({required this.syncing, required this.onSync});
-  final bool syncing;
-  final VoidCallback onSync;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.ctText,
-        side: const BorderSide(color: AppColors.ctBorder2),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      ),
-      onPressed: syncing ? null : onSync,
-      icon: syncing
-          ? const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.ctTeal),
-            )
-          : const Icon(Icons.sync_rounded, size: 14),
-      label: Text('Sincronizar ahora',
-          style: AppFonts.geist(
-              fontSize: 12, fontWeight: FontWeight.w600)),
-    );
-  }
-}
-
-class _SaveButton extends StatelessWidget {
-  const _SaveButton({
-    required this.saving,
-    required this.hasChanges,
-    required this.onSave,
-  });
-  final bool saving;
-  final bool hasChanges;
-  final VoidCallback onSave;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: hasChanges ? 1.0 : 0.4,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.ctTeal,
-          foregroundColor: AppColors.ctNavy,
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          elevation: 0,
-        ),
-        onPressed: hasChanges && !saving ? onSave : null,
-        child: saving
-            ? const SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: AppColors.ctNavy),
-              )
-            : Text('Guardar',
-                style: AppFonts.geist(
-                    fontSize: 12, fontWeight: FontWeight.w600)),
-      ),
-    );
-  }
-}
 
 // ── Tab 0 — CONFIGURACIÓN ─────────────────────────────────────────────────────
 
@@ -1304,25 +1255,12 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: _reconnecting ? null : _reconnect,
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.ctDanger,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                    ),
-                    child: _reconnecting
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.ctDanger))
-                        : Text('Reconectar',
-                            style: AppFonts.geist(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.ctDanger)),
+                  AppButton(
+                    label: 'Reconectar',
+                    variant: AppButtonVariant.danger,
+                    size: AppButtonSize.sm,
+                    isLoading: _reconnecting,
+                    onPressed: _reconnect,
                   ),
                 ],
               ),
@@ -1351,18 +1289,13 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
                     ],
                     const Spacer(),
                     if (_isOAuth && oauthSt == _OAuthState.connected) ...[
-                      TextButton.icon(
-                        onPressed: _reconnecting ? null : _reconnect,
-                        icon: const Icon(Icons.refresh_rounded, size: 14),
-                        label: Text('Renovar',
-                            style: AppFonts.geist(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600)),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.ctTeal,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                        ),
+                      AppButton(
+                        label: 'Renovar',
+                        variant: AppButtonVariant.ghost,
+                        size: AppButtonSize.sm,
+                        isDisabled: _reconnecting,
+                        prefixIcon: const Icon(Icons.refresh_rounded, size: 14, color: AppColors.ctTeal),
+                        onPressed: _reconnect,
                       ),
                     ],
                   ],
@@ -1740,19 +1673,12 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
               ),
               if (_isManual && widget.canManage) ...[
                 const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.ctTeal,
-                    foregroundColor: AppColors.ctNavy,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                  ),
+                AppButton(
+                  label: 'Agregar',
+                  variant: AppButtonVariant.teal,
+                  size: AppButtonSize.sm,
+                  prefixIcon: const Icon(Icons.add_rounded, size: 14, color: AppColors.ctNavy),
                   onPressed: _showAddItem,
-                  icon: const Icon(Icons.add_rounded, size: 16),
-                  label: Text('Agregar',
-                      style: AppFonts.geist(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600)),
                 ),
               ],
             ],
@@ -2123,27 +2049,12 @@ class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
               );
             }),
             const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.ctTeal,
-                  foregroundColor: AppColors.ctNavy,
-                ),
-                onPressed: _saving ? null : _submit,
-                child: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.ctNavy),
-                      )
-                    : Text('Guardar',
-                        style: AppFonts.geist(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
-              ),
+            AppButton(
+              label: 'Guardar',
+              variant: AppButtonVariant.teal,
+              expand: true,
+              isLoading: _saving,
+              onPressed: _submit,
             ),
           ],
         ),

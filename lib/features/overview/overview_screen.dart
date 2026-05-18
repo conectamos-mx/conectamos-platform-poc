@@ -323,24 +323,14 @@ class KpiCard extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             label,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: AppColors.ctText2,
-              letterSpacing: 0.6,
-            ),
+            style: AppTextStyles.kpiLabel,
           ),
           const SizedBox(height: 8),
           valueWidget,
           const SizedBox(height: 5),
           Text(
             subtext,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 11,
-              color: AppColors.ctText3,
-            ),
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
           ),
         ],
       ),
@@ -861,11 +851,10 @@ class _OperatorsSectionState extends State<_OperatorsSection> {
                     ],
                     Text(
                       label,
-                      style: TextStyle(
-                        fontFamily: 'Geist',
+                      style: AppTextStyles.body.copyWith(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: isActive ? Colors.white : const Color(0xFF4C5D73),
+                        color: isActive ? Colors.white : AppColors.ctInk700,
                       ),
                     ),
                   ],
@@ -1137,11 +1126,10 @@ class _OpChipState extends State<_OpChip> {
                 const SizedBox(width: 7),
                 Text(
                   _shortName,
-                  style: const TextStyle(
-                    fontFamily: 'Geist',
+                  style: AppTextStyles.body.copyWith(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF0B132B),
+                    color: AppColors.ctNavy,
                   ),
                 ),
                 if (widget.lastEventMin != null) ...[
@@ -1254,10 +1242,7 @@ class _OpCardState extends State<_OpCard> {
                     ),
                     child: Text(
                       widget.statusLabel.toUpperCase(),
-                      style: TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
+                      style: AppTextStyles.navSectionLabel.copyWith(
                         letterSpacing: 0.06,
                         color: widget.statusColor,
                       ),
@@ -1928,7 +1913,7 @@ class _DayThread extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.ctBorder),
       ),
-      child: const Center(
+      child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1936,18 +1921,15 @@ class _DayThread extends StatelessWidget {
             SizedBox(height: 8),
             Text(
               'Hilo del día',
-              style: TextStyle(
-                fontFamily: 'Geist',
+              style: AppTextStyles.body.copyWith(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: AppColors.ctText,
               ),
             ),
             SizedBox(height: 4),
             Text(
               'Próximamente',
-              style: TextStyle(
-                fontFamily: 'Geist',
+              style: AppTextStyles.bodySmall.copyWith(
                 fontSize: 12,
                 color: AppColors.ctText3,
               ),

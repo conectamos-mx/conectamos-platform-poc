@@ -8,6 +8,7 @@ import '../../core/api/flows_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/screen_header.dart';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -133,7 +134,7 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
         backgroundColor: const Color(0xFF059669),
         content: Text(
           !isActive ? 'Flujo activado' : 'Flujo desactivado',
-          style: const TextStyle(fontFamily: 'Geist', color: Colors.white),
+          style: AppTextStyles.body.copyWith(color: Colors.white),
         ),
         duration: const Duration(seconds: 2),
       ));
@@ -153,7 +154,7 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
         backgroundColor: AppColors.ctDanger,
         content: Text(
           _dioError(e),
-          style: const TextStyle(fontFamily: 'Geist', color: Colors.white),
+          style: AppTextStyles.body.copyWith(color: Colors.white),
         ),
         duration: const Duration(seconds: 3),
       ));
@@ -202,7 +203,7 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
-            _PrimaryButton(label: 'Reintentar', onTap: _fetchAll),
+            AppButton(label: 'Reintentar', variant: AppButtonVariant.teal, size: AppButtonSize.sm, onPressed: _fetchAll),
           ],
         ),
       );
@@ -217,7 +218,7 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
               style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
             ),
             const SizedBox(height: 12),
-            if (canManage) _PrimaryButton(label: '+ Crear primer flujo', onTap: () => _openForm()),
+            if (canManage) AppButton(label: '+ Crear primer flujo', variant: AppButtonVariant.teal, size: AppButtonSize.sm, onPressed: () => _openForm()),
           ],
         ),
       );
@@ -255,7 +256,7 @@ class _ActionBar extends StatelessWidget {
       title: 'Flujos de trabajo',
       subtitle: 'Automatizaciones configuradas para tus operadores',
       actions: [
-        if (canManage) _PrimaryButton(label: '+ Nuevo flujo', onTap: onNew),
+        if (canManage) AppButton(label: '+ Nuevo flujo', variant: AppButtonVariant.teal, size: AppButtonSize.sm, onPressed: onNew),
       ],
     );
   }
@@ -327,12 +328,7 @@ class _FlowCardState extends State<_FlowCard> {
                   alignment: Alignment.center,
                   child: Text(
                     '${widget.index + 1}',
-                    style: const TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ctTealDark,
-                    ),
+                    style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700, color: AppColors.ctTealDark),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -345,22 +341,13 @@ class _FlowCardState extends State<_FlowCard> {
                     children: [
                       Text(
                         name,
-                        style: const TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.ctText,
-                        ),
+                        style: AppTextStyles.body.copyWith(fontSize: 14, fontWeight: FontWeight.w700),
                       ),
                       if (desc.isNotEmpty) ...[
                         const SizedBox(height: 3),
                         Text(
                           desc,
-                          style: const TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 12,
-                            color: AppColors.ctText2,
-                          ),
+                          style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                         ),
                       ],
                       const SizedBox(height: 8),
@@ -401,14 +388,7 @@ class _FlowCardState extends State<_FlowCard> {
                           ),
                           child: Text(
                             isActive ? 'Activo' : 'Inactivo',
-                            style: TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: isActive
-                                  ? AppColors.ctOkText
-                                  : AppColors.ctText2,
-                            ),
+                            style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: isActive ? AppColors.ctOkText : AppColors.ctText2),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -461,12 +441,7 @@ class _FlowCardState extends State<_FlowCard> {
                     _expanded
                         ? 'Ocultar campos'
                         : 'Ver campos ${fields.length}',
-                    style: const TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.ctText2,
-                    ),
+                    style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
@@ -494,13 +469,7 @@ class _FieldsTable extends StatelessWidget {
   const _FieldsTable({required this.fields});
   final List<Map<String, dynamic>> fields;
 
-  static const _headerStyle = TextStyle(
-    fontFamily: 'Geist',
-    fontSize: 10,
-    fontWeight: FontWeight.w600,
-    color: AppColors.ctText2,
-    letterSpacing: 0.4,
-  );
+  static TextStyle get _headerStyle => AppTextStyles.kpiLabel.copyWith(letterSpacing: 0.4);
 
   @override
   Widget build(BuildContext context) {
@@ -514,21 +483,17 @@ class _FieldsTable extends StatelessWidget {
         ),
       ),
       child: fields.isEmpty
-          ? const Padding(
-              padding: EdgeInsets.all(16),
+          ? Padding(
+              padding: const EdgeInsets.all(16),
               child: Text(
                 'Sin campos configurados',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 12,
-                  color: AppColors.ctText2,
-                ),
+                style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
               ),
             )
           : Column(
               children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   child: Row(
                     children: [
                       Expanded(flex: 3, child: Text('CAMPO', style: _headerStyle)),
@@ -572,12 +537,7 @@ class _FieldRow extends StatelessWidget {
             flex: 3,
             child: Text(
               label,
-              style: const TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: AppColors.ctText,
-              ),
+              style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.ctText),
             ),
           ),
           Expanded(
@@ -614,12 +574,7 @@ class _FieldRow extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   required ? 'Sí' : 'No',
-                  style: TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: required ? AppColors.ctOkText : AppColors.ctText3,
-                  ),
+                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w500, color: required ? AppColors.ctOkText : AppColors.ctText3),
                 ),
               ],
             ),
@@ -730,7 +685,7 @@ class _FlowFormDialogState extends State<_FlowFormDialog> {
           backgroundColor: AppColors.ctDanger,
           content: Text(
             _dioError(e),
-            style: const TextStyle(fontFamily: 'Geist', color: Colors.white),
+            style: AppTextStyles.body.copyWith(color: Colors.white),
           ),
           duration: const Duration(seconds: 3),
         ));
@@ -761,12 +716,7 @@ class _FlowFormDialogState extends State<_FlowFormDialog> {
             children: [
               Text(
                 _isEdit ? 'Editar flujo' : 'Nuevo flujo',
-                style: const TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist'),
               ),
               const SizedBox(height: 20),
 
@@ -783,14 +733,9 @@ class _FlowFormDialogState extends State<_FlowFormDialog> {
               const SizedBox(height: 14),
 
               // Worker
-              const Text(
+              Text(
                 'Worker',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 6),
               if (_isEdit)
@@ -871,15 +816,20 @@ class _FlowFormDialogState extends State<_FlowFormDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  _GhostButton(
+                  AppButton(
                     label: 'Cancelar',
-                    onTap: () => Navigator.pop(context),
+                    variant: AppButtonVariant.outline,
+                    size: AppButtonSize.sm,
+                    onPressed: () => Navigator.pop(context),
                   ),
                   const SizedBox(width: 10),
-                  _PrimaryButton(
-                    label: _saving ? 'Guardando...' : 'Guardar',
-                    onTap: (_saving || !_slugValid) ? () {} : _submit,
-                    enabled: !_saving && _slugValid,
+                  AppButton(
+                    label: 'Guardar',
+                    variant: AppButtonVariant.teal,
+                    size: AppButtonSize.sm,
+                    isLoading: _saving,
+                    isDisabled: !_slugValid,
+                    onPressed: _submit,
                   ),
                 ],
               ),
@@ -964,12 +914,7 @@ class _TypeBadge extends StatelessWidget {
       ),
       child: Text(
         typeEntry.label,
-        style: TextStyle(
-          fontFamily: 'Geist',
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: typeEntry.fg,
-        ),
+        style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: typeEntry.fg),
       ),
     );
   }
@@ -1019,12 +964,7 @@ class _EditButtonState extends State<_EditButton> {
               const SizedBox(width: 5),
               Text(
                 'Editar',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: _hovered ? AppColors.ctInfo : AppColors.ctText2,
-                ),
+                style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w500, color: _hovered ? AppColors.ctInfo : AppColors.ctText2),
               ),
             ],
           ),
@@ -1053,30 +993,17 @@ class _DialogField extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: AppColors.ctText,
-          ),
+          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
           maxLines: maxLines,
           minLines: maxLines,
-          style: const TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            color: AppColors.ctText,
-          ),
+          style: AppTextStyles.body,
           decoration: InputDecoration(
             hintText: placeholder,
-            hintStyle: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 13,
-              color: AppColors.ctText3,
-            ),
+            hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
             filled: true,
             fillColor: AppColors.ctSurface2,
             contentPadding: const EdgeInsets.symmetric(
@@ -1111,15 +1038,11 @@ class _SlugPreview extends StatelessWidget {
     if (error != null) {
       return Row(
         children: [
-          const Icon(Icons.error_outline, size: 13, color: Color(0xFFE24C4B)),
+          const Icon(Icons.error_outline, size: 13, color: AppColors.ctDanger),
           const SizedBox(width: 4),
           Text(
             error!,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 12,
-              color: Color(0xFFE24C4B),
-            ),
+            style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctDanger),
           ),
         ],
       );
@@ -1129,18 +1052,13 @@ class _SlugPreview extends StatelessWidget {
         Icon(
           isValid ? Icons.check_circle_outline : Icons.warning_amber_outlined,
           size: 13,
-          color: isValid ? const Color(0xFF107C41) : const Color(0xFFE24C4B),
+          color: isValid ? AppColors.ctOk : AppColors.ctDanger,
         ),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
             isValid ? slug : (slug.isEmpty ? 'Nombre inválido' : 'Nombre inválido (slug: "$slug")'),
-            style: TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 12,
-              color: isValid ? const Color(0xFF107C41) : const Color(0xFFE24C4B),
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
+            style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: isValid ? AppColors.ctOk : AppColors.ctDanger, fontFeatures: const [FontFeature.tabularFigures()]),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -1149,68 +1067,3 @@ class _SlugPreview extends StatelessWidget {
   }
 }
 
-class _PrimaryButton extends StatelessWidget {
-  const _PrimaryButton({
-    required this.label,
-    required this.onTap,
-    this.enabled = true,
-  });
-  final String label;
-  final VoidCallback onTap;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Opacity(
-        opacity: enabled ? 1.0 : 0.45,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.ctTeal,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.ctNavy,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GhostButton extends StatelessWidget {
-  const _GhostButton({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.ctBorder2),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: AppColors.ctText2,
-          ),
-        ),
-      ),
-    );
-  }
-}

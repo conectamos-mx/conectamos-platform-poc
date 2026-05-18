@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 
 // ── Modelos mock ──────────────────────────────────────────────────────────────
 
@@ -137,33 +138,29 @@ class _ActionBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 22),
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   'Grupos WhatsApp',
-                  style: TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ctText,
-                  ),
+                  style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist'),
                 ),
-                SizedBox(height: 1),
+                const SizedBox(height: 1),
                 Text(
                   'Configura los grupos de salida para notificaciones y reportes',
-                  style: TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 11,
-                    color: AppColors.ctText2,
-                  ),
+                  style: AppTextStyles.bodySmall,
                 ),
               ],
             ),
           ),
-          _PrimaryButton(label: '+ Crear grupo', onTap: onNew),
+          AppButton(
+            label: '+ Crear grupo',
+            variant: AppButtonVariant.teal,
+            size: AppButtonSize.sm,
+            onPressed: onNew,
+          ),
         ],
       ),
     );
@@ -208,10 +205,10 @@ class _InfoBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFBFDBFE)),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
+          const Icon(
             Icons.info_outline_rounded,
             size: 16,
             color: AppColors.ctInfoText,
@@ -220,12 +217,7 @@ class _InfoBanner extends StatelessWidget {
           Expanded(
             child: Text(
               'Los grupos de salida reciben reportes automáticos generados por ConectamOS. Los operadores no son miembros de estos grupos.',
-              style: TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 12,
-                color: AppColors.ctInfoText,
-                height: 1.5,
-              ),
+              style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctInfoText, height: 1.5),
             ),
           ),
         ],
@@ -282,21 +274,12 @@ class _GroupCard extends StatelessWidget {
                     children: [
                       Text(
                         g.name,
-                        style: const TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.ctText,
-                        ),
+                        style: AppTextStyles.body.copyWith(fontSize: 14, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 3),
                       Text(
                         g.description,
-                        style: const TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 12,
-                          color: AppColors.ctText2,
-                        ),
+                        style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                       ),
                       const SizedBox(height: 3),
                       Row(
@@ -309,11 +292,7 @@ class _GroupCard extends StatelessWidget {
                           const SizedBox(width: 4),
                           Text(
                             g.phone,
-                            style: const TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 11,
-                              color: AppColors.ctText3,
-                            ),
+                            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                           ),
                         ],
                       ),
@@ -335,12 +314,7 @@ class _GroupCard extends StatelessWidget {
                       ),
                       child: Text(
                         g.statusLabel,
-                        style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: g.statusTextColor,
-                        ),
+                        style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: g.statusTextColor),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -388,15 +362,9 @@ class _GroupCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'MIEMBROS',
-                  style: TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ctText3,
-                    letterSpacing: 1.0,
-                  ),
+                  style: AppTextStyles.kpiLabel.copyWith(color: AppColors.ctText3, letterSpacing: 1.0),
                 ),
                 const SizedBox(height: 10),
                 Wrap(
@@ -437,12 +405,7 @@ class _GroupMember extends StatelessWidget {
           alignment: Alignment.center,
           child: Text(
             member.initials,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: AppColors.ctText2,
-            ),
+            style: AppTextStyles.kpiLabel,
           ),
         ),
         const SizedBox(width: 6),
@@ -451,20 +414,11 @@ class _GroupMember extends StatelessWidget {
           children: [
             Text(
               member.name,
-              style: const TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: AppColors.ctText,
-              ),
+              style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w500, color: AppColors.ctText),
             ),
             Text(
               member.role,
-              style: const TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 10,
-                color: AppColors.ctText3,
-              ),
+              style: AppTextStyles.caption,
             ),
           ],
         ),
@@ -529,14 +483,9 @@ class _CreateGroupDialogState extends State<_CreateGroupDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Título
-              const Text(
+              Text(
                 'Crear grupo de WhatsApp',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist'),
               ),
               const SizedBox(height: 20),
 
@@ -575,14 +524,9 @@ class _CreateGroupDialogState extends State<_CreateGroupDialog> {
               const SizedBox(height: 18),
 
               // Tipo de reporte
-              const Text(
+              Text(
                 'Tipo de reporte',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 8),
               Container(
@@ -635,11 +579,7 @@ class _CreateGroupDialogState extends State<_CreateGroupDialog> {
                                 const SizedBox(width: 10),
                                 Text(
                                   _reportTypes[i],
-                                  style: const TextStyle(
-                                    fontFamily: 'Geist',
-                                    fontSize: 13,
-                                    color: AppColors.ctText,
-                                  ),
+                                  style: AppTextStyles.body,
                                 ),
                               ],
                             ),
@@ -659,14 +599,18 @@ class _CreateGroupDialogState extends State<_CreateGroupDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  _OutlineButton(
+                  AppButton(
                     label: 'Cancelar',
-                    onTap: () => Navigator.pop(context),
+                    variant: AppButtonVariant.outline,
+                    size: AppButtonSize.sm,
+                    onPressed: () => Navigator.pop(context),
                   ),
                   const SizedBox(width: 10),
-                  _PrimaryButton(
+                  AppButton(
                     label: 'Crear grupo',
-                    onTap: () => Navigator.pop(context),
+                    variant: AppButtonVariant.teal,
+                    size: AppButtonSize.sm,
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
@@ -695,11 +639,7 @@ class _MetadataChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          fontFamily: 'Geist',
-          fontSize: 11,
-          color: AppColors.ctText2,
-        ),
+        style: AppTextStyles.bodySmall,
       ),
     );
   }
@@ -760,12 +700,7 @@ class _GhostButtonState extends State<_GhostButton> {
               ],
               Text(
                 widget.label,
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: _hovered ? widget.color : AppColors.ctText2,
-                ),
+                style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w500, color: _hovered ? widget.color : AppColors.ctText2),
               ),
             ],
           ),
@@ -792,28 +727,15 @@ class _DialogField extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: AppColors.ctText,
-          ),
+          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
-          style: const TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            color: AppColors.ctText,
-          ),
+          style: AppTextStyles.body,
           decoration: InputDecoration(
             hintText: placeholder,
-            hintStyle: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 13,
-              color: AppColors.ctText3,
-            ),
+            hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
             filled: true,
             fillColor: AppColors.ctSurface2,
             contentPadding: const EdgeInsets.symmetric(
@@ -857,12 +779,7 @@ class _DialogSelect extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: AppColors.ctText,
-          ),
+          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 6),
         Container(
@@ -878,11 +795,7 @@ class _DialogSelect extends StatelessWidget {
               value: value,
               isExpanded: true,
               isDense: true,
-              style: const TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 13,
-                color: AppColors.ctText,
-              ),
+              style: AppTextStyles.body,
               icon: const Icon(
                 Icons.keyboard_arrow_down_rounded,
                 size: 16,
@@ -902,89 +815,3 @@ class _DialogSelect extends StatelessWidget {
   }
 }
 
-class _PrimaryButton extends StatefulWidget {
-  const _PrimaryButton({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  State<_PrimaryButton> createState() => _PrimaryButtonState();
-}
-
-class _PrimaryButtonState extends State<_PrimaryButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: _hovered ? AppColors.ctTealDark : AppColors.ctTeal,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            widget.label,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.ctNavy,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _OutlineButton extends StatefulWidget {
-  const _OutlineButton({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  State<_OutlineButton> createState() => _OutlineButtonState();
-}
-
-class _OutlineButtonState extends State<_OutlineButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: _hovered ? AppColors.ctSurface2 : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.ctBorder2),
-          ),
-          child: Text(
-            widget.label,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: AppColors.ctText2,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

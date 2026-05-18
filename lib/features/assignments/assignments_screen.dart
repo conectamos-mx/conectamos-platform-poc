@@ -13,6 +13,8 @@ import '../../core/api/operators_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_detail_row.dart';
 import '../../shared/widgets/screen_header.dart';
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -224,18 +226,17 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
         content: Text('Esta acción no se puede deshacer.',
             style: AppFonts.geist(fontSize: 13, color: AppColors.ctText2)),
         actions: [
-          TextButton(
+          AppButton(
+            label: 'Cancelar',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('Cancelar',
-                style: AppFonts.geist(fontSize: 13, color: AppColors.ctText2)),
           ),
-          TextButton(
+          AppButton(
+            label: 'Eliminar',
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.sm,
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Eliminar',
-                style: AppFonts.geist(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ctDanger)),
           ),
         ],
       ),
@@ -274,14 +275,18 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
             subtitle: 'Asigna recursos a operadores con horario.',
             actions: [
               if (canManage) ...[
-                _SecondaryButton(
+                AppButton(
                   label: 'Importar CSV',
-                  icon: Icons.upload_file_outlined,
-                  onTap: () {},
+                  variant: AppButtonVariant.outline,
+                  size: AppButtonSize.sm,
+                  prefixIcon: const Icon(Icons.upload_file_outlined, size: 14, color: AppColors.ctText2),
+                  onPressed: () {},
                 ),
-                _PrimaryButton(
+                AppButton(
                   label: '+ Nueva asignación',
-                  onTap: () => setState(() => _showNewModal = true),
+                  variant: AppButtonVariant.teal,
+                  size: AppButtonSize.sm,
+                  onPressed: () => setState(() => _showNewModal = true),
                 ),
               ],
             ],
@@ -314,9 +319,11 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
                             style: AppFonts.geist(
                                 fontSize: 13, color: AppColors.ctDanger)),
                         const SizedBox(height: 12),
-                        TextButton(
+                        AppButton(
+                          label: 'Reintentar',
+                          variant: AppButtonVariant.ghost,
+                          size: AppButtonSize.sm,
                           onPressed: _loadAssignments,
-                          child: const Text('Reintentar'),
                         ),
                       ],
                     ),
@@ -1553,8 +1560,7 @@ class _StepDot extends StatelessWidget {
                 ? const Icon(Icons.check, size: 14, color: Colors.white)
                 : Text(
                     '${index + 1}',
-                    style: TextStyle(
-                      fontSize: 11,
+                    style: AppTextStyles.bodySmall.copyWith(
                       fontWeight: FontWeight.w600,
                       color: active ? Colors.white : AppColors.ctText2,
                     ),
@@ -1603,7 +1609,12 @@ class _EmptyState extends StatelessWidget {
                   AppFonts.geist(fontSize: 13, color: AppColors.ctText2)),
           if (canManage) ...[
             const SizedBox(height: 16),
-            _PrimaryButton(label: '+ Nueva asignación', onTap: onNew),
+            AppButton(
+              label: '+ Nueva asignación',
+              variant: AppButtonVariant.teal,
+              size: AppButtonSize.sm,
+              onPressed: onNew,
+            ),
           ],
         ],
       ),
@@ -1841,19 +1852,29 @@ bool get _step1Valid =>
         Row(
           children: [
             if (_step > 0) ...[
-              _GhostButton(label: 'Atrás', onTap: _onCancel),
+              AppButton(
+                label: 'Atrás',
+                variant: AppButtonVariant.outline,
+                size: AppButtonSize.sm,
+                onPressed: _onCancel,
+              ),
               const SizedBox(width: 10),
             ],
-            _PrimaryButton(
+            AppButton(
               label: _step == 3
                   ? (_saving ? 'Guardando…' : 'Confirmar')
                   : 'Siguiente',
-              onTap: _saving ? null : _onContinue,
+              variant: AppButtonVariant.teal,
+              size: AppButtonSize.sm,
+              onPressed: _onContinue,
+              isDisabled: _saving,
             ),
             const Spacer(),
-            _GhostButton(
+            AppButton(
               label: 'Cancelar',
-              onTap: () {
+              variant: AppButtonVariant.outline,
+              size: AppButtonSize.sm,
+              onPressed: () {
                 widget.onCancel();
                 Navigator.of(context).pop();
               },
@@ -1975,7 +1996,12 @@ bool get _step1Valid =>
           Text('Error al cargar flows: $_apiError',
               style: AppFonts.geist(fontSize: 12, color: AppColors.ctDanger)),
           const SizedBox(height: 8),
-          TextButton(onPressed: _loadApiData, child: const Text('Reintentar')),
+          AppButton(
+            label: 'Reintentar',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
+            onPressed: _loadApiData,
+          ),
         ],
       );
     }
@@ -2097,14 +2123,20 @@ bool get _step1Valid =>
                       fontWeight: FontWeight.w600,
                       color: AppColors.ctText)),
               const SizedBox(height: 8),
-              _SummaryRow(label: 'Operador', value: opName),
-              _SummaryRow(
+              AppDetailRow(
+                label: 'Operador',
+                value: Text(opName, style: AppTextStyles.body.copyWith(fontSize: 12, fontWeight: FontWeight.w500)),
+              ),
+              AppDetailRow(
                 label: 'Ventana',
-                value: _formatWindow(
-                  _scopeStart != null && _scopeEnd != null
-                      ? '[${_scopeStart!.toUtc().toIso8601String()}'
-                          ',${_scopeEnd!.toUtc().toIso8601String()})'
-                      : null,
+                value: Text(
+                  _formatWindow(
+                    _scopeStart != null && _scopeEnd != null
+                        ? '[${_scopeStart!.toUtc().toIso8601String()}'
+                            ',${_scopeEnd!.toUtc().toIso8601String()})'
+                        : null,
+                  ),
+                  style: AppTextStyles.body.copyWith(fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),
               if (_resCatalogSlugs.isNotEmpty) ...[
@@ -2114,11 +2146,14 @@ bool get _step1Valid =>
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: AppColors.ctText2)),
-                ...List.generate(_resCatalogSlugs.length, (i) => _SummaryRow(
+                ...List.generate(_resCatalogSlugs.length, (i) => AppDetailRow(
                       label: _resCatalogSlugs[i],
-                      value: _resItemNames[i].isNotEmpty
-                          ? _resItemNames[i]
-                          : (_resItemIds[i] ?? '—'),
+                      value: Text(
+                        _resItemNames[i].isNotEmpty
+                            ? _resItemNames[i]
+                            : (_resItemIds[i] ?? '—'),
+                        style: AppTextStyles.body.copyWith(fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
                     )),
               ],
               if (_selectedFlows.isNotEmpty) ...[
@@ -2137,7 +2172,10 @@ bool get _step1Valid =>
                       e.key;
                   final behaviorLabel =
                       e.value == 'scheduled' ? 'Automático' : 'Manual';
-                  return _SummaryRow(label: name, value: behaviorLabel);
+                  return AppDetailRow(
+                    label: name,
+                    value: Text(behaviorLabel, style: AppTextStyles.body.copyWith(fontSize: 12, fontWeight: FontWeight.w500)),
+                  );
                 }),
               ],
             ],
@@ -2452,35 +2490,6 @@ class _BehaviorBtn extends StatelessWidget {
   }
 }
 
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.label, required this.value});
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(label,
-                style: AppFonts.geist(
-                    fontSize: 12, color: AppColors.ctText2)),
-          ),
-          Expanded(
-            child: Text(value,
-                style: AppFonts.geist(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.ctText)),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _DialogLabel extends StatelessWidget {
   const _DialogLabel(this.text);
@@ -2531,109 +2540,3 @@ class _Dropdown<T> extends StatelessWidget {
 }
 
 // Variante que acepta value nullable (para dropdowns con hint)
-// ── Shared buttons ────────────────────────────────────────────────────────────
-
-class _PrimaryButton extends StatelessWidget {
-  const _PrimaryButton({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onTap != null;
-    return GestureDetector(
-      onTap: onTap,
-      child: MouseRegion(
-        cursor: enabled
-            ? SystemMouseCursors.click
-            : SystemMouseCursors.forbidden,
-        child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: enabled ? AppColors.ctTeal : AppColors.ctBorder,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            label,
-            style: AppFonts.onest(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: enabled ? AppColors.ctNavy : AppColors.ctText2,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GhostButton extends StatelessWidget {
-  const _GhostButton({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.ctBorder),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(label,
-              style: AppFonts.geist(
-                  fontSize: 13, color: AppColors.ctText2)),
-        ),
-      ),
-    );
-  }
-}
-
-class _SecondaryButton extends StatelessWidget {
-  const _SecondaryButton({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.ctSurface,
-            border: Border.all(color: AppColors.ctBorder),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 14, color: AppColors.ctText2),
-              const SizedBox(width: 6),
-              Text(label,
-                  style: AppFonts.geist(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.ctText2)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

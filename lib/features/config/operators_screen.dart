@@ -6,6 +6,7 @@ import '../../core/api/operators_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/screen_header.dart';
 import 'widgets/operator_form_dialog.dart';
 
@@ -173,7 +174,7 @@ class _ActionBar extends StatelessWidget {
       title: 'Operadores',
       subtitle: 'Gestiona los operadores y sus permisos de acceso',
       actions: [
-        if (canManage) _PrimaryButton(label: '+ Agregar operador', onTap: onAdd),
+        if (canManage) AppButton(label: '+ Agregar operador', variant: AppButtonVariant.teal, size: AppButtonSize.sm, onPressed: onAdd),
       ],
     );
   }
@@ -262,13 +263,8 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
     }).toList();
   }
 
-  static const _headerStyle = TextStyle(
-    fontFamily: 'Geist',
-    fontSize: 10,
-    fontWeight: FontWeight.w600,
-    color: AppColors.ctText2,
-    letterSpacing: 0.4,
-  );
+  static TextStyle get _headerStyle =>
+      AppTextStyles.kpiLabel.copyWith(letterSpacing: 0.4);
 
   @override
   Widget build(BuildContext context) {
@@ -335,7 +331,7 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
                     topRight: Radius.circular(9),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
                     Expanded(
                         flex: 3,
@@ -526,12 +522,8 @@ class _OperatorRowState extends State<_OperatorRow> {
                           alignment: Alignment.center,
                           child: Text(
                             _initials(name),
-                            style: const TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.ctTealDark,
-                            ),
+                            style: AppTextStyles.bodySmall.copyWith(
+                              fontWeight: FontWeight.w700, color: AppColors.ctTealDark),
                           ),
                         ),
                   const SizedBox(width: 10),
@@ -542,12 +534,7 @@ class _OperatorRowState extends State<_OperatorRow> {
                       children: [
                         Text(
                           name,
-                          style: const TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.ctText,
-                          ),
+                          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis,
                         ),
                         if (tgBadge != null) ...[
@@ -682,18 +669,10 @@ class _SearchField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       onChanged: onChanged,
-      style: const TextStyle(
-        fontFamily: 'Geist',
-        fontSize: 13,
-        color: AppColors.ctText,
-      ),
+      style: AppTextStyles.body,
       decoration: InputDecoration(
         hintText: 'Buscar por nombre o teléfono...',
-        hintStyle: const TextStyle(
-          fontFamily: 'Geist',
-          fontSize: 13,
-          color: AppColors.ctText3,
-        ),
+        hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
         prefixIcon: const Icon(
           Icons.search_rounded,
           size: 17,
@@ -829,12 +808,8 @@ class _TelegramBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontFamily: 'Geist',
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: fg,
-        ),
+        style: AppTextStyles.caption.copyWith(
+          fontWeight: FontWeight.w600, color: fg),
       ),
     );
   }
@@ -917,12 +892,8 @@ class _ActionButtonState extends State<_ActionButton> {
           ),
           child: Text(
             widget.label,
-            style: TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: widget.color,
-            ),
+            style: AppTextStyles.bodySmall.copyWith(
+              fontWeight: FontWeight.w500, color: widget.color),
           ),
         ),
       ),
@@ -930,88 +901,3 @@ class _ActionButtonState extends State<_ActionButton> {
   }
 }
 
-class _PrimaryButton extends StatefulWidget {
-  const _PrimaryButton({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  State<_PrimaryButton> createState() => _PrimaryButtonState();
-}
-
-class _PrimaryButtonState extends State<_PrimaryButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: _hovered
-                ? AppColors.ctTealDark
-                : AppColors.ctTeal,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            widget.label,
-            style: AppTextStyles.tenantName.copyWith(color: AppColors.ctNavy),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GhostButton extends StatefulWidget {
-  const _GhostButton({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  State<_GhostButton> createState() => _GhostButtonState();
-}
-
-class _GhostButtonState extends State<_GhostButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: _hovered
-                ? AppColors.ctSurface2
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.ctBorder2),
-          ),
-          child: Text(
-            widget.label,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: AppColors.ctText2,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

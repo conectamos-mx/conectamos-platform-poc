@@ -8,6 +8,7 @@ import '../../core/api/api_client.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -699,19 +700,14 @@ class _BroadcastHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 22),
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   'Nuevo broadcast',
-                  style: TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ctText,
-                  ),
+                  style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist'),
                 ),
                 SizedBox(height: 1),
                 Text(
@@ -875,16 +871,7 @@ class _FormColumn extends StatelessWidget {
                 channelId.isEmpty
                     ? 'No hay canal seleccionado'
                     : 'Enviando a canal ${isTelegram ? 'Telegram' : 'WhatsApp'}',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: channelId.isEmpty
-                      ? AppColors.ctWarnText
-                      : (isTelegram
-                          ? const Color(0xFF7C3AED)
-                          : AppColors.ctOkText),
-                ),
+                style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w500, color: channelId.isEmpty ? AppColors.ctWarnText : (isTelegram ? const Color(0xFF7C3AED) : AppColors.ctOkText)),
               ),
             ],
           ),
@@ -1134,14 +1121,9 @@ class _PreviewColumn extends StatelessWidget {
               _SectionTitle(label: previewTitle),
               const SizedBox(height: 12),
               if (previewText.isEmpty)
-                const Text(
+                Text(
                   'El mensaje aparecerá aquí...',
-                  style: TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 12,
-                    color: AppColors.ctText3,
-                    fontStyle: FontStyle.italic,
-                  ),
+                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctText3, fontStyle: FontStyle.italic),
                 )
               else
                 Align(
@@ -1183,12 +1165,7 @@ class _PreviewColumn extends StatelessWidget {
                   ),
                   Text(
                     '${effectiveSelectedIds.length}/${filtered.length}',
-                    style: const TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ctTeal,
-                    ),
+                    style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700, color: AppColors.ctTeal),
                   ),
                 ],
               ),
@@ -1249,14 +1226,7 @@ class _PreviewColumn extends StatelessWidget {
                             ),
                             child: Text(
                               windowOpen ? 'Abierta' : 'Cerrada',
-                              style: TextStyle(
-                                fontFamily: 'Geist',
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: windowOpen
-                                    ? AppColors.ctOkText
-                                    : AppColors.ctRedText,
-                              ),
+                              style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600, color: windowOpen ? AppColors.ctOkText : AppColors.ctRedText),
                             ),
                           ),
                         ],
@@ -1349,15 +1319,10 @@ class _HistorySection extends ConsumerWidget {
                   const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               child: Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Broadcasts anteriores',
-                      style: TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ctText,
-                      ),
+                      style: AppTextStyles.body.copyWith(fontSize: 14, fontWeight: FontWeight.w700),
                     ),
                   ),
                   Icon(
@@ -1516,15 +1481,10 @@ class _BroadcastDetailDialog extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Detalle del broadcast',
-                      style: TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ctText,
-                      ),
+                      style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist'),
                     ),
                   ),
                   IconButton(
@@ -1544,14 +1504,9 @@ class _BroadcastDetailDialog extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (msgText.isNotEmpty) ...[
-                      const Text(
+                      Text(
                         'Mensaje',
-                        style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ctText2,
-                        ),
+                        style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 6),
                       Container(
@@ -1569,14 +1524,9 @@ class _BroadcastDetailDialog extends StatelessWidget {
                       const SizedBox(height: 16),
                     ],
                     if (recipientList.isNotEmpty) ...[
-                      const Text(
+                      Text(
                         'Destinatarios',
-                        style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ctText2,
-                        ),
+                        style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 8),
                       ...recipientList.map((r) {
@@ -1639,12 +1589,7 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: const TextStyle(
-        fontFamily: 'Geist',
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
-        color: AppColors.ctText,
-      ),
+      style: AppTextStyles.body.copyWith(fontSize: 14, fontWeight: FontWeight.w700),
     );
   }
 }
@@ -1745,10 +1690,7 @@ class _BuildTextField extends StatelessWidget {
       decoration: InputDecoration(
         hintText:
             'Escribe el mensaje que recibirán todos los operadores...',
-        hintStyle: const TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            color: AppColors.ctText3),
+        hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
         filled: true,
         fillColor: AppColors.ctSurface2,
         contentPadding:
@@ -1799,12 +1741,9 @@ class _TemplateDropdown extends StatelessWidget {
           value: validId,
           isExpanded: true,
           isDense: true,
-          hint: const Text(
+          hint: Text(
             'Selecciona una plantilla',
-            style: TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 13,
-                color: AppColors.ctText3),
+            style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
           ),
           style: AppTextStyles.body,
           icon: const Icon(
@@ -1938,14 +1877,7 @@ class _SendButtonState extends State<_SendButton> {
                       widget.count > 0
                           ? 'Enviar broadcast a ${widget.count} operadores'
                           : 'Enviar broadcast',
-                      style: TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: widget.enabled
-                            ? AppColors.ctTeal
-                            : AppColors.ctText3,
-                      ),
+                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700, color: widget.enabled ? AppColors.ctTeal : AppColors.ctText3),
                     ),
                   ],
                 ),
@@ -1987,12 +1919,7 @@ class _ConfirmBox extends StatelessWidget {
               Expanded(
                 child: Text(
                   '¿Enviar a $count operador${count != 1 ? 'es' : ''}?',
-                  style: const TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ctWarnText,
-                  ),
+                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600, color: AppColors.ctWarnText),
                 ),
               ),
             ],
@@ -2003,10 +1930,13 @@ class _ConfirmBox extends StatelessWidget {
             children: [
               _OutlineButton(label: 'Cancelar', onTap: onCancel),
               const SizedBox(width: 10),
-              _PrimaryButton(
-                label:   'Confirmar envío',
-                onTap:   sending ? null : onConfirm,
-                loading: sending,
+              AppButton(
+                label: 'Confirmar envío',
+                variant: AppButtonVariant.teal,
+                size: AppButtonSize.sm,
+                isLoading: sending,
+                isDisabled: sending,
+                onPressed: onConfirm,
               ),
             ],
           ),
@@ -2205,67 +2135,6 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-class _PrimaryButton extends StatefulWidget {
-  const _PrimaryButton(
-      {required this.label, required this.onTap, this.loading = false});
-  final String label;
-  final VoidCallback? onTap;
-  final bool loading;
-
-  @override
-  State<_PrimaryButton> createState() => _PrimaryButtonState();
-}
-
-class _PrimaryButtonState extends State<_PrimaryButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit:  (_) => setState(() => _hovered = false),
-      cursor: widget.onTap != null
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.basic,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: widget.onTap == null
-                ? AppColors.ctTeal.withValues(alpha: 0.5)
-                : _hovered
-                    ? AppColors.ctTealDark
-                    : AppColors.ctTeal,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: widget.loading
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(AppColors.ctNavy),
-                  ),
-                )
-              : Text(
-                  widget.label,
-                  style: const TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ctNavy,
-                  ),
-                ),
-        ),
-      ),
-    );
-  }
-}
-
 class _OutlineButton extends StatefulWidget {
   const _OutlineButton({required this.label, required this.onTap});
   final String label;
@@ -2382,12 +2251,7 @@ class _BcastAvatar extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(
         name.isNotEmpty ? name[0].toUpperCase() : '?',
-        style: const TextStyle(
-          fontFamily: 'Geist',
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: AppColors.ctText2,
-        ),
+        style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700, color: AppColors.ctText2),
       ),
     );
   }
@@ -2428,13 +2292,9 @@ class _FlowCard extends StatelessWidget {
                 label,
                 style: AppTextStyles.tenantName.copyWith(color: AppColors.ctTealDark),
               ),
-              const Text(
+              Text(
                 'Worker activo',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 10,
-                  color: AppColors.ctTeal,
-                ),
+                style: AppTextStyles.caption.copyWith(color: AppColors.ctTeal),
               ),
             ],
           ),

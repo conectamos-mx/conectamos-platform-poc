@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/screen_header.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -177,13 +178,9 @@ class _EmptyState extends StatelessWidget {
         children: [
           const Icon(Icons.task_alt, size: 48, color: AppColors.ctText3),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'No hay tareas pendientes',
-            style: TextStyle(
-              fontFamily: 'Onest',
-              fontSize: 16,
-              color: AppColors.ctText2,
-            ),
+            style: AppTextStyles.pageTitle.copyWith(fontSize: 16, color: AppColors.ctText2),
           ),
           const SizedBox(height: 6),
           Text(
@@ -218,10 +215,11 @@ class _ErrorState extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
-          TextButton(
+          AppButton(
+            label: 'Reintentar',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
             onPressed: onRetry,
-            child: const Text('Reintentar',
-                style: TextStyle(color: AppColors.ctTeal)),
           ),
         ],
       ),
@@ -259,12 +257,7 @@ class _StatusChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontFamily: 'Geist',
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: fg,
-        ),
+        style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: fg),
       ),
     );
   }
@@ -311,21 +304,12 @@ class _ExecutionCard extends StatelessWidget {
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(
-                        fontFamily: 'Onest',
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.ctText,
-                      ),
+                      style: AppTextStyles.cardTitle.copyWith(fontSize: 14),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       _formatDate(createdAt),
-                      style: const TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 12,
-                        color: AppColors.ctText2,
-                      ),
+                      style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                     ),
                   ],
                 ),
@@ -339,11 +323,7 @@ class _ExecutionCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       '$fieldCount campos',
-                      style: const TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 11,
-                        color: AppColors.ctText3,
-                      ),
+                      style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                     ),
                   ],
                 ],
@@ -575,26 +555,15 @@ class _ExecutionDetailSheetState
       children: [
         Text(
           flowName,
-          style: const TextStyle(
-            fontFamily: 'Onest',
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppColors.ctText,
-          ),
+          style: AppTextStyles.kpiValue.copyWith(fontSize: 18),
         ),
         const SizedBox(height: 8),
 
         // Inherited fields
         if (hasInherited) ...[
-          const Text(
+          Text(
             'INFORMACIÓN HEREDADA',
-            style: TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: AppColors.ctText3,
-              letterSpacing: 0.8,
-            ),
+            style: AppTextStyles.kpiLabel.copyWith(color: AppColors.ctText3, letterSpacing: 0.8),
           ),
           const SizedBox(height: 4),
           ...inheritedFields.map((f) {
@@ -607,21 +576,13 @@ class _ExecutionDetailSheetState
                 children: [
                   Text(
                     label,
-                    style: const TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 12,
-                      color: AppColors.ctText2,
-                    ),
+                    style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                   ),
                   const Spacer(),
                   Text(
                     value,
-                    style: const TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.ctText,
-                    ),
+                    style: AppTextStyles.bodySmall.copyWith(
+                      fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.ctText),
                   ),
                 ],
               ),
@@ -632,15 +593,9 @@ class _ExecutionDetailSheetState
         ],
 
         // Fields to capture
-        const Text(
+        Text(
           'CAMPOS A COMPLETAR',
-          style: TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: AppColors.ctText3,
-            letterSpacing: 0.8,
-          ),
+          style: AppTextStyles.kpiLabel.copyWith(color: AppColors.ctText3, letterSpacing: 0.8),
         ),
         const SizedBox(height: 8),
 
@@ -662,18 +617,10 @@ class _ExecutionDetailSheetState
               padding: const EdgeInsets.only(bottom: 14),
               child: TextField(
                 controller: ctrl,
-                style: const TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.body,
                 decoration: InputDecoration(
                   labelText: isRequired ? '$label *' : label,
-                  labelStyle: const TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 13,
-                    color: AppColors.ctText2,
-                  ),
+                  labelStyle: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                   filled: true,
                   fillColor: AppColors.ctSurface2,
                   contentPadding: const EdgeInsets.symmetric(
@@ -700,38 +647,13 @@ class _ExecutionDetailSheetState
         const SizedBox(height: 24),
 
         // Submit button
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: (_submitting || !_canSubmit) ? null : _submit,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.ctTeal,
-              foregroundColor: AppColors.ctNavy,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              elevation: 0,
-            ),
-            child: _submitting
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Text(
-                    'Enviar',
-                    style: TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-          ),
+        AppButton(
+          label: 'Enviar',
+          variant: AppButtonVariant.teal,
+          expand: true,
+          isLoading: _submitting,
+          isDisabled: !_canSubmit,
+          onPressed: _submit,
         ),
       ],
     );

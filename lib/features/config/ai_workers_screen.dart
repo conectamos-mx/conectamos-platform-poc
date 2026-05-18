@@ -183,11 +183,7 @@ class _AiWorkersScreenState extends ConsumerState<AiWorkersScreen> {
                         children: [
                           Text(
                             _error!,
-                            style: const TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 13,
-                              color: AppColors.ctDanger,
-                            ),
+                            style: AppTextStyles.body.copyWith(color: AppColors.ctDanger),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 12),
@@ -260,13 +256,8 @@ class _WorkersBody extends StatelessWidget {
   final void Function(Map<String, dynamic>) onTap;
   final bool canManage;
 
-  static const _headerStyle = TextStyle(
-    fontFamily: 'Geist',
-    fontSize: 10,
-    fontWeight: FontWeight.w600,
-    color: AppColors.ctText2,
-    letterSpacing: 0.4,
-  );
+  static TextStyle get _headerStyle =>
+      AppTextStyles.kpiLabel.copyWith(letterSpacing: 0.4);
 
   @override
   Widget build(BuildContext context) {
@@ -288,7 +279,7 @@ class _WorkersBody extends StatelessWidget {
                 topRight: Radius.circular(9),
               ),
             ),
-            child: const Row(
+            child: Row(
               children: [
                 Expanded(flex: 3, child: Text('WORKER',      style: _headerStyle)),
                 Expanded(flex: 2, child: Text('TIPO',        style: _headerStyle)),
@@ -392,12 +383,7 @@ class _WorkerRowState extends State<_WorkerRow> {
                       children: [
                         Text(
                           displayName,
-                          style: const TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.ctText,
-                          ),
+                          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis,
                         ),
                         if (description.isNotEmpty) ...[
@@ -568,14 +554,9 @@ class _RenameDialogState extends State<_RenameDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Renombrar worker',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist'),
               ),
               if (originalName.isNotEmpty) ...[
                 const SizedBox(height: 4),
@@ -585,31 +566,18 @@ class _RenameDialogState extends State<_RenameDialog> {
                 ),
               ],
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Nombre personalizado',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 6),
               TextField(
                 controller: _nameCtrl,
                 autofocus: true,
-                style: const TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.body,
                 decoration: InputDecoration(
                   hintText: 'Ej: Worker Logística Norte',
-                  hintStyle: const TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 13,
-                    color: AppColors.ctText3,
-                  ),
+                  hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                   filled: true,
                   fillColor: AppColors.ctSurface2,
                   contentPadding: const EdgeInsets.symmetric(
@@ -641,11 +609,8 @@ class _RenameDialogState extends State<_RenameDialog> {
                   ),
                   child: Text(
                     _errorMsg!,
-                    style: const TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 12,
-                      color: AppColors.ctRedText,
-                    ),
+                    style: AppTextStyles.bodySmall.copyWith(
+                      fontSize: 12, color: AppColors.ctRedText),
                   ),
                 ),
               ],
@@ -758,18 +723,13 @@ class _CatalogDialogState extends State<_CatalogDialog> {
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text(
                     'Catálogo de Workers',
-                    style: TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ctText,
-                    ),
+                    style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist'),
                   ),
-                  SizedBox(height: 4),
-                  Text(
+                  const SizedBox(height: 4),
+                  const Text(
                     'Selecciona un worker para agregarlo a tu operación.',
                     style: AppTextStyles.navItem,
                   ),
@@ -829,12 +789,8 @@ class _CatalogDialogState extends State<_CatalogDialog> {
                                 alignment: Alignment.center,
                                 child: Text(
                                   _initials(name),
-                                  style: const TextStyle(
-                                    fontFamily: 'Geist',
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
+                                  style: AppTextStyles.body.copyWith(
+                                    fontWeight: FontWeight.w700, color: Colors.white),
                                 ),
                               ),
                               const SizedBox(width: 14),
@@ -846,12 +802,8 @@ class _CatalogDialogState extends State<_CatalogDialog> {
                                   children: [
                                     Text(
                                       name,
-                                      style: const TextStyle(
-                                        fontFamily: 'Geist',
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.ctText,
-                                      ),
+                                      style: AppTextStyles.body.copyWith(
+                                        fontSize: 14, fontWeight: FontWeight.w600),
                                     ),
                                     if (description.isNotEmpty) ...[
                                       const SizedBox(height: 3),
@@ -900,14 +852,10 @@ class _CatalogDialogState extends State<_CatalogDialog> {
                                         borderRadius: BorderRadius.circular(20),
                                         border: Border.all(color: AppColors.ctBorder),
                                       ),
-                                      child: const Text(
+                                      child: Text(
                                         'Próximamente',
-                                        style: TextStyle(
-                                          fontFamily: 'Geist',
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w500,
-                                          color: AppColors.ctText2,
-                                        ),
+                                        style: AppTextStyles.bodySmall.copyWith(
+                                          fontWeight: FontWeight.w500),
                                       ),
                                     )
                                   else if (contracted)
@@ -1047,9 +995,7 @@ class _PrimaryBtnState extends State<_PrimaryBtn> {
           ),
           child: Text(
             widget.label,
-            style: TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 13,
+            style: AppTextStyles.body.copyWith(
               fontWeight: FontWeight.w600,
               color: widget.disabled ? AppColors.ctText3 : AppColors.ctNavy,
             ),
@@ -1134,8 +1080,7 @@ class _ActionBtnState extends State<_ActionBtn> {
           ),
           child: Text(
             widget.label,
-            style: TextStyle(
-              fontFamily: 'Geist',
+            style: AppTextStyles.bodySmall.copyWith(
               fontSize: 12,
               fontWeight: FontWeight.w500,
               color: widget.color,

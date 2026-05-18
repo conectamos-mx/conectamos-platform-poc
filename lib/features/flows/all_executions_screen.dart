@@ -14,6 +14,7 @@ import '../../core/api/executions_api.dart';
 import '../../core/api/operators_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_shell.dart';
 
 // ── _ColDef ───────────────────────────────────────────────────────────────────
@@ -1533,17 +1534,11 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           ...chips,
-          TextButton(
+          AppButton(
+            label: 'Limpiar todo',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
             onPressed: _clearFilters,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Text(
-              'Limpiar todo',
-              style: AppFonts.geist(fontSize: 11, color: AppColors.ctText2),
-            ),
           ),
         ],
       ),
@@ -1584,24 +1579,17 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
           onSubmitted: (_) => Navigator.of(ctx).pop(ctrl.text.trim()),
         ),
         actions: [
-          TextButton(
+          AppButton(
+            label: 'Cancelar',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text('Cancelar',
-                style: AppFonts.geist(fontSize: 13, color: AppColors.ctText2)),
           ),
-          ElevatedButton(
+          AppButton(
+            label: 'Guardar',
+            variant: AppButtonVariant.teal,
+            size: AppButtonSize.sm,
             onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.ctTeal,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
-            ),
-            child: Text('Guardar',
-                style: AppFonts.geist(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                )),
           ),
         ],
       ),
@@ -1732,7 +1720,12 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
                 style: AppFonts.geist(
                     fontSize: 13, color: AppColors.ctDanger)),
             const SizedBox(height: 8),
-            TextButton(onPressed: _load, child: const Text('Reintentar')),
+            AppButton(
+              label: 'Reintentar',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.sm,
+              onPressed: _load,
+            ),
           ],
         ),
       );
@@ -2080,32 +2073,20 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
             style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2),
           ),
           const Spacer(),
-          OutlinedButton(
-            onPressed: (_page <= 1 || _loading)
-                ? null
-                : () { setState(() => _page--); _load(); },
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.ctText2,
-              side: const BorderSide(color: AppColors.ctBorder2),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              minimumSize: Size.zero,
-              textStyle: AppFonts.geist(fontSize: 12),
-            ),
-            child: const Text('← Anterior'),
+          AppButton(
+            label: '← Anterior',
+            variant: AppButtonVariant.outline,
+            size: AppButtonSize.sm,
+            isDisabled: _page <= 1 || _loading,
+            onPressed: () { setState(() => _page--); _load(); },
           ),
           const SizedBox(width: 8),
-          OutlinedButton(
-            onPressed: (_page >= totalPages || _loading)
-                ? null
-                : () { setState(() => _page++); _load(); },
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.ctText2,
-              side: const BorderSide(color: AppColors.ctBorder2),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              minimumSize: Size.zero,
-              textStyle: AppFonts.geist(fontSize: 12),
-            ),
-            child: const Text('Siguiente →'),
+          AppButton(
+            label: 'Siguiente →',
+            variant: AppButtonVariant.outline,
+            size: AppButtonSize.sm,
+            isDisabled: _page >= totalPages || _loading,
+            onPressed: () { setState(() => _page++); _load(); },
           ),
         ],
       ),
@@ -2321,54 +2302,21 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
               mainAxisAlignment: MainAxisAlignment.end,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                TextButton(
-                  onPressed: _exporting
-                      ? null
-                      : () => setState(() => _showExportModal = false),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text('Cancelar',
-                      style: AppFonts.geist(
-                          fontSize: 13, color: AppColors.ctText2)),
+                AppButton(
+                  label: 'Cancelar',
+                  variant: AppButtonVariant.ghost,
+                  size: AppButtonSize.sm,
+                  isDisabled: _exporting,
+                  onPressed: () => setState(() => _showExportModal = false),
                 ),
                 const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _exporting ? null : _doExport,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.ctTeal,
-                    disabledBackgroundColor: AppColors.ctBorder,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_exporting)
-                        const SizedBox(
-                          width: 14, height: 14,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      else
-                        const Icon(Icons.download_rounded, size: 16),
-                      const SizedBox(width: 8),
-                      Text(
-                        _exporting ? 'Exportando...' : 'Descargar XLSX',
-                        style: AppFonts.geist(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
+                AppButton(
+                  label: 'Descargar XLSX',
+                  variant: AppButtonVariant.teal,
+                  size: AppButtonSize.sm,
+                  isLoading: _exporting,
+                  prefixIcon: const Icon(Icons.download_rounded, size: 14, color: AppColors.ctNavy),
+                  onPressed: _doExport,
                 ),
               ],
             ),
@@ -2736,43 +2684,19 @@ class _ValueInputState extends State<_ValueInput> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton(
+                AppButton(
+                  label: 'Cancelar',
+                  variant: AppButtonVariant.ghost,
+                  size: AppButtonSize.sm,
                   onPressed: widget.onCancel,
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text(
-                    'Cancelar',
-                    style: AppFonts.geist(
-                        fontSize: 12, color: AppColors.ctText2),
-                  ),
                 ),
                 const SizedBox(width: 6),
-                ElevatedButton(
-                  onPressed: _values.isEmpty && _ctrl.text.trim().isEmpty
-                      ? null
-                      : _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.ctTeal,
-                    disabledBackgroundColor: AppColors.ctBorder,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 6),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6)),
-                  ),
-                  child: Text(
-                    'Aplicar',
-                    style: AppFonts.geist(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
+                AppButton(
+                  label: 'Aplicar',
+                  variant: AppButtonVariant.teal,
+                  size: AppButtonSize.sm,
+                  isDisabled: _values.isEmpty && _ctrl.text.trim().isEmpty,
+                  onPressed: _submit,
                 ),
               ],
             ),
