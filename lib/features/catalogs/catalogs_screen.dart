@@ -5,6 +5,7 @@ import '../../core/api/catalogs_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/screen_header.dart';
 import 'new_catalog_wizard.dart';
 
@@ -144,9 +145,11 @@ class _CatalogsScreenState extends ConsumerState<CatalogsScreen> {
           subtitle: 'Datos del tenant referenciables desde flujos y workers.',
           actions: [
             if (canManage)
-              _PrimaryButton(
+              AppButton(
                 label: '+ Nuevo catálogo',
-                onTap: () => _openWizard(),
+                variant: AppButtonVariant.teal,
+                size: AppButtonSize.sm,
+                onPressed: () => _openWizard(),
               ),
           ],
         ),
@@ -163,9 +166,11 @@ class _CatalogsScreenState extends ConsumerState<CatalogsScreen> {
                               style: AppFonts.geist(
                                   fontSize: 14, color: AppColors.ctDanger)),
                           const SizedBox(height: 12),
-                          TextButton(
+                          AppButton(
+                            label: 'Reintentar',
+                            variant: AppButtonVariant.ghost,
+                            size: AppButtonSize.sm,
                             onPressed: _load,
-                            child: const Text('Reintentar'),
                           ),
                         ],
                       ),
@@ -236,13 +241,8 @@ class _CatalogsBodyState extends State<_CatalogsBody> {
     }).toList();
   }
 
-  static const _headerStyle = TextStyle(
-    fontFamily: 'Geist',
-    fontSize: 10,
-    fontWeight: FontWeight.w600,
-    color: AppColors.ctText2,
-    letterSpacing: 0.4,
-  );
+  static TextStyle get _headerStyle =>
+      AppTextStyles.kpiLabel.copyWith(letterSpacing: 0.4);
 
   @override
   Widget build(BuildContext context) {
@@ -302,7 +302,7 @@ class _CatalogsBodyState extends State<_CatalogsBody> {
                     topRight: Radius.circular(9),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
                     Expanded(flex: 3, child: Text('NOMBRE', style: _headerStyle)),
                     Expanded(flex: 2, child: Text('FUENTE', style: _headerStyle)),
@@ -457,12 +457,7 @@ class _CatalogRowState extends State<_CatalogRow> {
                     children: [
                       Text(
                         label,
-                        style: const TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ctText,
-                        ),
+                        style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis,
                       ),
                       if (slug.isNotEmpty)
@@ -637,9 +632,7 @@ class _SourcePill extends StatelessWidget {
           ),
           child: Text(
             label,
-            style: TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 11,
+            style: AppTextStyles.bodySmall.copyWith(
               fontWeight: FontWeight.w600,
               color: active ? AppColors.ctTealDark : AppColors.ctText2,
             ),
@@ -695,51 +688,3 @@ class _StatusDropdown extends StatelessWidget {
   }
 }
 
-class _PrimaryButton extends StatefulWidget {
-  const _PrimaryButton({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  State<_PrimaryButton> createState() => _PrimaryButtonState();
-}
-
-class _PrimaryButtonState extends State<_PrimaryButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: widget.onTap != null
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.forbidden,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: widget.onTap == null
-                ? AppColors.ctSurface2
-                : _hovered
-                    ? AppColors.ctTealDark
-                    : AppColors.ctTeal,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            widget.label,
-            style: AppFonts.onest(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: widget.onTap == null
-                  ? AppColors.ctText2
-                  : AppColors.ctNavy,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

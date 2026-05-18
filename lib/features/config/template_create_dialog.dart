@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/api/templates_api.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/text_styles.dart';
+import '../../shared/widgets/app_button.dart';
 
 // ── Tipos de encabezado ────────────────────────────────────────────────────────
 
@@ -169,39 +171,28 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
           const SizedBox(height: 4),
           Text(
             _varError!,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 11,
-              color: AppColors.ctDanger,
-            ),
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
           ),
         ],
         const SizedBox(height: 8),
         for (final n in indices) ...[
           Text(
             'Ejemplo para {{$n}}',
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 12,
-              color: AppColors.ctText2,
-            ),
+            style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
           ),
           const SizedBox(height: 4),
           TextField(
             controller: _varExampleCtrls[n],
             decoration: InputDecoration(
               hintText: _varHints[n] ?? 'Ej: Valor $n',
-              hintStyle: const TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  color: AppColors.ctText3),
+              hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
               border:
                   OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               isDense: true,
             ),
-            style: const TextStyle(fontFamily: 'Geist', fontSize: 13),
+            style: AppTextStyles.body,
             onChanged: (_) {
               if (_varError != null) setState(() => _varError = null);
             },
@@ -345,14 +336,9 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
       color: AppColors.ctNavy,
       child: Row(
         children: [
-          const Text(
+          Text(
             'Nueva plantilla',
-            style: TextStyle(
-              fontFamily: 'Onest',
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
+            style: AppTextStyles.pageTitle.copyWith(color: Colors.white),
           ),
           const Spacer(),
           IconButton(
@@ -381,8 +367,7 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
             controller: _nameCtrl,
             decoration: InputDecoration(
               hintText: 'nombre_en_snake_case',
-              hintStyle: const TextStyle(
-                  fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText3),
+              hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
               errorText: _nameError,
               border:
                   OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -390,7 +375,7 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               isDense: true,
             ),
-            style: const TextStyle(fontFamily: 'Geist', fontSize: 13),
+            style: AppTextStyles.body,
             onChanged: (v) {
               if (_nameError != null) {
                 setState(() =>
@@ -419,10 +404,7 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
                             horizontal: 12, vertical: 10),
                         isDense: true,
                       ),
-                      style: const TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 13,
-                          color: AppColors.ctText),
+                      style: AppTextStyles.body,
                       items: _categories
                           .map((c) => DropdownMenuItem(
                               value: c.value, child: Text(c.label)))
@@ -450,10 +432,7 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
                             horizontal: 12, vertical: 10),
                         isDense: true,
                       ),
-                      style: const TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 13,
-                          color: AppColors.ctText),
+                      style: AppTextStyles.body,
                       items: _languages
                           .map((l) => DropdownMenuItem(
                               value: l.value, child: Text(l.label)))
@@ -494,18 +473,14 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
               maxLength: 60,
               decoration: InputDecoration(
                 hintText: 'Texto del encabezado',
-                hintStyle: const TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 13,
-                    color: AppColors.ctText3),
+                hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8)),
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 isDense: true,
               ),
-              style:
-                  const TextStyle(fontFamily: 'Geist', fontSize: 13),
+              style: AppTextStyles.body,
             ),
           ] else if (_headerType != _HeaderType.none) ...[
             const SizedBox(height: 10),
@@ -513,18 +488,14 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
               controller: _headerUrlCtrl,
               decoration: InputDecoration(
                 hintText: 'URL de ejemplo (requerido por Meta)',
-                hintStyle: const TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 13,
-                    color: AppColors.ctText3),
+                hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8)),
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 isDense: true,
               ),
-              style:
-                  const TextStyle(fontFamily: 'Geist', fontSize: 13),
+              style: AppTextStyles.body,
             ),
           ],
           const SizedBox(height: 16),
@@ -539,29 +510,20 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
             maxLines: 8,
             decoration: InputDecoration(
               hintText: 'Escribe el cuerpo del mensaje…',
-              hintStyle: const TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  color: AppColors.ctText3),
+              hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
               border:
                   OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               contentPadding: const EdgeInsets.all(12),
             ),
-            style: const TextStyle(fontFamily: 'Geist', fontSize: 13),
+            style: AppTextStyles.body,
           ),
           const SizedBox(height: 6),
-          TextButton.icon(
+          AppButton(
+            label: '+ Agregar variable',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
+            prefixIcon: const Icon(Icons.add_circle_outline_rounded, size: 14, color: AppColors.ctTeal),
             onPressed: _insertVariable,
-            icon: const Icon(Icons.add_circle_outline_rounded, size: 15),
-            label: const Text('Variable',
-                style: TextStyle(fontFamily: 'Geist', fontSize: 12)),
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.ctTeal,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
           ),
           // 4b ── Ejemplos de variables (condicional)
           _buildVarExamples(),
@@ -575,17 +537,14 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
             maxLength: 60,
             decoration: InputDecoration(
               hintText: 'Texto del pie de página',
-              hintStyle: const TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  color: AppColors.ctText3),
+              hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
               border:
                   OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               isDense: true,
             ),
-            style: const TextStyle(fontFamily: 'Geist', fontSize: 13),
+            style: AppTextStyles.body,
           ),
 
           // 6 ── Botones QUICK_REPLY (opcional, máx 3)
@@ -595,22 +554,16 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
               _sectionLabel('Botones · Opcional'),
               const Spacer(),
               if (_buttonCtrls.length < 3)
-                TextButton.icon(
+                AppButton(
+                  label: '+ Agregar botón',
+                  variant: AppButtonVariant.ghost,
+                  size: AppButtonSize.sm,
+                  prefixIcon: const Icon(Icons.add_circle_outline_rounded, size: 14, color: AppColors.ctTeal),
                   onPressed: () {
                     setState(() {
                       _buttonCtrls.add(TextEditingController());
                     });
                   },
-                  icon: const Icon(Icons.add_circle_outline_rounded, size: 15),
-                  label: const Text('Agregar botón',
-                      style: TextStyle(fontFamily: 'Geist', fontSize: 12)),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.ctTeal,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
                 ),
             ],
           ),
@@ -624,10 +577,7 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
                     maxLength: 25,
                     decoration: InputDecoration(
                       hintText: 'Texto del botón ${i + 1}',
-                      hintStyle: const TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 13,
-                          color: AppColors.ctText3),
+                      hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8)),
                       contentPadding: const EdgeInsets.symmetric(
@@ -635,7 +585,7 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
                       isDense: true,
                       counterText: '',
                     ),
-                    style: const TextStyle(fontFamily: 'Geist', fontSize: 13),
+                    style: AppTextStyles.body,
                     onChanged: (_) => setState(() {}),
                   ),
                 ),
@@ -677,14 +627,9 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Vista previa',
-            style: TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.ctText2,
-            ),
+            style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 14),
           Expanded(
@@ -738,12 +683,7 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
                           padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
                           child: Text(
                             headerTxt,
-                            style: const TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.ctText,
-                            ),
+                            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700),
                           ),
                         ),
                       // Body
@@ -758,12 +698,8 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
                             0),
                         child: Text(
                           body.isEmpty ? 'El mensaje aparecerá aquí…' : body,
-                          style: TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 13,
-                            color: body.isEmpty
-                                ? AppColors.ctText3
-                                : AppColors.ctText,
+                          style: AppTextStyles.body.copyWith(
+                            color: body.isEmpty ? AppColors.ctText3 : AppColors.ctText,
                           ),
                         ),
                       ),
@@ -774,11 +710,7 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
                               const EdgeInsets.fromLTRB(12, 4, 12, 0),
                           child: Text(
                             footer,
-                            style: const TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 11,
-                              color: AppColors.ctText2,
-                            ),
+                            style: AppTextStyles.bodySmall,
                           ),
                         ),
                       // Buttons preview
@@ -813,11 +745,7 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
                           children: [
                             Text(
                               time,
-                              style: const TextStyle(
-                                fontFamily: 'Geist',
-                                fontSize: 10,
-                                color: AppColors.ctText2,
-                              ),
+                              style: AppTextStyles.caption.copyWith(color: AppColors.ctText2),
                             ),
                             const SizedBox(width: 4),
                             const Icon(Icons.done_all_rounded,
@@ -847,44 +775,20 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          OutlinedButton(
-            onPressed:
-                _submitting ? null : () => Navigator.of(context).pop(false),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.ctBorder2),
-              foregroundColor: AppColors.ctText2,
-              textStyle: const TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            ),
-            child: const Text('Cancelar'),
+          AppButton(
+            label: 'Cancelar',
+            variant: AppButtonVariant.outline,
+            size: AppButtonSize.sm,
+            isDisabled: _submitting,
+            onPressed: () => Navigator.of(context).pop(false),
           ),
           const SizedBox(width: 10),
-          ElevatedButton(
-            onPressed: _submitting ? null : _submit,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.ctTeal,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor:
-                  AppColors.ctTeal.withValues(alpha: 0.5),
-              textStyle: const TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              elevation: 0,
-            ),
-            child: _submitting
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : const Text('Enviar a revisión'),
+          AppButton(
+            label: 'Enviar a revisión',
+            variant: AppButtonVariant.teal,
+            size: AppButtonSize.sm,
+            isLoading: _submitting,
+            onPressed: _submit,
           ),
         ],
       ),
@@ -895,12 +799,7 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
 
   Widget _sectionLabel(String text) => Text(
         text,
-        style: const TextStyle(
-          fontFamily: 'Geist',
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: AppColors.ctText2,
-        ),
+        style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
       );
 
   String _headerTypeLabel(_HeaderType t) {
@@ -964,8 +863,7 @@ class _HeaderChipState extends State<_HeaderChip> {
           ),
           child: Text(
             widget.label,
-            style: TextStyle(
-              fontFamily: 'Geist',
+            style: AppTextStyles.bodySmall.copyWith(
               fontSize: 12,
               fontWeight: FontWeight.w500,
               color: widget.selected ? Colors.white : AppColors.ctText2,

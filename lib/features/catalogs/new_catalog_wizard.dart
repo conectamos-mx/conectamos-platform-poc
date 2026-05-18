@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/catalogs_api.dart';
 import '../../core/api/connections_api.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_button.dart';
 
 // ── Wizard principal ──────────────────────────────────────────────────────────
 
@@ -357,13 +358,17 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
             'las columnas detectadas en la hoja?',
           ),
           actions: [
-            TextButton(
+            AppButton(
+              label: 'Cancelar',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.sm,
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancelar'),
             ),
-            TextButton(
+            AppButton(
+              label: 'Reemplazar',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.sm,
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Reemplazar'),
             ),
           ],
         ),
@@ -519,47 +524,28 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
       child: Row(
         children: [
           if (_step > 0)
-            TextButton(
+            AppButton(
+              label: '← Anterior',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.sm,
               onPressed: () => setState(() => _step--),
-              child: const Text('← Anterior'),
             ),
           const Spacer(),
           if (_step < 3)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.ctTeal,
-                foregroundColor: AppColors.ctNavy,
-                disabledBackgroundColor: AppColors.ctSurface2,
-              ),
-              onPressed: _canAdvance()
-                  ? () => setState(() => _step++)
-                  : null,
-              child: Text(
-                'Siguiente →',
-                style: AppFonts.geist(
-                    fontSize: 13, fontWeight: FontWeight.w600),
-              ),
+            AppButton(
+              label: 'Siguiente →',
+              variant: AppButtonVariant.teal,
+              size: AppButtonSize.sm,
+              isDisabled: !_canAdvance(),
+              onPressed: () => setState(() => _step++),
             )
           else
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.ctTeal,
-                foregroundColor: AppColors.ctNavy,
-                disabledBackgroundColor: AppColors.ctSurface2,
-              ),
-              onPressed: _saving ? null : _submit,
-              child: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.ctNavy),
-                    )
-                  : Text(
-                      'Crear catálogo',
-                      style: AppFonts.geist(
-                          fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
+            AppButton(
+              label: 'Crear catálogo',
+              variant: AppButtonVariant.teal,
+              size: AppButtonSize.sm,
+              isLoading: _saving,
+              onPressed: _submit,
             ),
         ],
       ),
@@ -798,17 +784,11 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
               ],
             ),
             const SizedBox(height: 12),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.ctTeal,
-                foregroundColor: AppColors.ctNavy,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 8),
-                textStyle: AppFonts.geist(
-                    fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-              icon: const Icon(Icons.open_in_new_rounded, size: 14),
-              label: const Text('Conectar Google'),
+            AppButton(
+              label: 'Conectar Google',
+              variant: AppButtonVariant.teal,
+              size: AppButtonSize.sm,
+              prefixIcon: const Icon(Icons.open_in_new_rounded, size: 14, color: AppColors.ctNavy),
               onPressed: () {
                 Navigator.of(context).pop();
                 context.go('/connections');
@@ -911,17 +891,11 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
               ],
             ),
             const SizedBox(height: 12),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.ctTeal,
-                foregroundColor: AppColors.ctNavy,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 8),
-                textStyle: AppFonts.geist(
-                    fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-              icon: const Icon(Icons.open_in_new_rounded, size: 14),
-              label: const Text('Conectar Microsoft'),
+            AppButton(
+              label: 'Conectar Microsoft',
+              variant: AppButtonVariant.teal,
+              size: AppButtonSize.sm,
+              prefixIcon: const Icon(Icons.open_in_new_rounded, size: 14, color: AppColors.ctNavy),
               onPressed: () {
                 Navigator.of(context).pop();
                 context.go('/connections');
@@ -1056,20 +1030,14 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Divider(color: AppColors.ctBorder),
           ),
-          TextButton(
+          AppButton(
+            label: _showManualFileId
+                ? 'Ocultar ingreso manual'
+                : '¿No encuentras tu archivo? Ingresa el ID manualmente',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
             onPressed: () =>
                 setState(() => _showManualFileId = !_showManualFileId),
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.zero,
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Text(
-              _showManualFileId
-                  ? 'Ocultar ingreso manual'
-                  : '¿No encuentras tu archivo? Ingresa el ID manualmente',
-              style: AppFonts.geist(fontSize: 12, color: AppColors.ctTeal),
-            ),
           ),
           if (_showManualFileId) ...[
             const SizedBox(height: 12),
@@ -1117,31 +1085,24 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
               hint: '14F581EDA45A9C1C!s6c56e127…',
             ),
             const SizedBox(height: 8),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.ctTeal,
-                foregroundColor: AppColors.ctNavy,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 8),
-                textStyle: AppFonts.geist(
-                    fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-              onPressed: _manualFileIdCtrl.text.trim().isEmpty
-                  ? null
-                  : () {
-                      final raw = _manualFileIdCtrl.text.trim();
-                      final decoded = Uri.decodeComponent(raw)
-                          .replaceAll('%21', '!');
-                      setState(() {
-                        _selectedFileId   = decoded;
-                        _selectedFileName = 'Archivo manual';
-                        _selectedSheet    = null;
-                        _availableSheets  = [];
-                        _previewLoaded    = false;
-                      });
-                      _loadOnedrivePreview();
-                    },
-              child: const Text('Cargar archivo'),
+            AppButton(
+              label: 'Usar este archivo',
+              variant: AppButtonVariant.teal,
+              size: AppButtonSize.sm,
+              isDisabled: _manualFileIdCtrl.text.trim().isEmpty,
+              onPressed: () {
+                final raw = _manualFileIdCtrl.text.trim();
+                final decoded = Uri.decodeComponent(raw)
+                    .replaceAll('%21', '!');
+                setState(() {
+                  _selectedFileId   = decoded;
+                  _selectedFileName = 'Archivo manual';
+                  _selectedSheet    = null;
+                  _availableSheets  = [];
+                  _previewLoaded    = false;
+                });
+                _loadOnedrivePreview();
+              },
             ),
           ],
         ],
@@ -1189,16 +1150,12 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
                       strokeWidth: 1.5, color: AppColors.ctTeal),
                 ),
               if (_canEditSchema)
-                TextButton.icon(
-                  onPressed: () =>
-                      setState(() => _fields.add(_newField())),
-                  icon: const Icon(Icons.add_rounded, size: 15),
-                  label: const Text('Agregar campo'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.ctTeal,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
-                  ),
+                AppButton(
+                  label: 'Agregar campo',
+                  variant: AppButtonVariant.ghost,
+                  size: AppButtonSize.sm,
+                  prefixIcon: const Icon(Icons.add_rounded, size: 14, color: AppColors.ctTeal),
+                  onPressed: () => setState(() => _fields.add(_newField())),
                 ),
             ],
           ),
@@ -1719,9 +1676,7 @@ class _StepCircle extends StatelessWidget {
                     size: 14, color: Colors.white)
                 : Text(
                     '$number',
-                    style: TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 11,
+                    style: AppTextStyles.bodySmall.copyWith(
                       fontWeight: FontWeight.w700,
                       color: isActive ? Colors.white : AppColors.ctText2,
                     ),
@@ -1731,10 +1686,7 @@ class _StepCircle extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           label,
-          style: TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
+          style: AppTextStyles.kpiLabel.copyWith(
             color: colored ? AppColors.ctTeal : AppColors.ctText2,
           ),
         ),

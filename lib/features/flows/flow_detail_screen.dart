@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/catalogs_api.dart';
 import '../../core/api/flows_api.dart';
-import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/asset_item_selector.dart';
 import '../../core/api/operator_roles_api.dart';
 import '../../core/constants/field_types.dart';
@@ -312,37 +311,27 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
         backgroundColor: AppColors.ctSurface,
         title: const Text(
           'Eliminar campo',
-          style: TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppColors.ctText,
-          ),
+          style: AppTextStyles.pageTitle,
         ),
         content: Text(
           '¿Eliminar el campo "$label"? Esta acción no se puede deshacer.',
-          style: const TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            color: AppColors.ctText2,
-          ),
+          style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
         ),
         actions: [
-          AppButton(
-            label: 'Cancelar',
-            variant: AppButtonVariant.ghost,
-            size: AppButtonSize.sm,
+          TextButton(
             onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
           ),
-          AppButton(
-            label: 'Eliminar',
-            variant: AppButtonVariant.danger,
-            size: AppButtonSize.sm,
+          TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               setState(() => _fields.removeAt(index));
               _save(silent: true);
             },
+            child: Text(
+              'Eliminar',
+              style: AppTextStyles.body.copyWith(color: AppColors.ctDanger),
+            ),
           ),
         ],
       ),
@@ -378,33 +367,23 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
       builder: (ctx) => AlertDialog(
         title: const Text(
           'Eliminar flujo',
-          style: TextStyle(
-            fontFamily: 'Geist',
-            fontWeight: FontWeight.w600,
-            fontSize: 15,
-            color: AppColors.ctText,
-          ),
+          style: AppTextStyles.pageTitle,
         ),
         content: Text(
           '¿Eliminar "$name"? Esta acción desactivará el flujo. Las ejecuciones existentes no se verán afectadas.',
-          style: const TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            color: AppColors.ctText2,
-          ),
+          style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
         ),
         actions: [
-          AppButton(
-            label: 'Cancelar',
-            variant: AppButtonVariant.ghost,
-            size: AppButtonSize.sm,
+          TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
           ),
-          AppButton(
-            label: 'Eliminar',
-            variant: AppButtonVariant.danger,
-            size: AppButtonSize.sm,
+          TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Eliminar',
+              style: AppTextStyles.body.copyWith(color: AppColors.ctDanger),
+            ),
           ),
         ],
       ),
@@ -453,12 +432,11 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
               const SizedBox(height: 12),
               Text(
                 _error ?? 'No se encontró el flujo',
-                style: const TextStyle(
-                    fontFamily: 'Geist', color: AppColors.ctText2),
+                style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              AppButton(label: 'Reintentar', variant: AppButtonVariant.ghost, size: AppButtonSize.sm, onPressed: _load),
+              TextButton(onPressed: _load, child: const Text('Reintentar')),
             ],
           ),
         ),
@@ -574,27 +552,37 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
               context.go('/flows/${widget.flowId}/integrations?flowName=${Uri.encodeComponent(name)}');
             },
           ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: AppButton(
-            label: 'Guardar',
-            variant: AppButtonVariant.teal,
-            size: AppButtonSize.sm,
-            isLoading: _saving,
-            isDisabled: _loading,
-            onPressed: _save,
+        if (_saving)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+          )
+        else
+          TextButton(
+            onPressed: _loading ? null : _save,
+            child: Text(
+              'Guardar',
+              style: AppTextStyles.body.copyWith(
+                fontWeight: FontWeight.w600,
+                color: AppColors.ctTeal,
+              ),
+            ),
           ),
-        ),
       ],
       bottom: TabBar(
         controller: _tabCtrl,
         labelColor: AppColors.ctTeal,
         unselectedLabelColor: Colors.white60,
         indicatorColor: AppColors.ctTeal,
-        labelStyle: const TextStyle(
-            fontFamily: 'Geist', fontSize: 12, fontWeight: FontWeight.w600),
-        unselectedLabelStyle:
-            const TextStyle(fontFamily: 'Geist', fontSize: 12),
+        labelStyle: AppTextStyles.formLabel,
+        unselectedLabelStyle: AppTextStyles.navItem,
         tabs: const [
           Tab(text: 'INFO'),
           Tab(text: 'CAMPOS'),
@@ -671,14 +659,9 @@ class _InfoTabState extends State<_InfoTab> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Slug',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 6),
               Container(
@@ -694,9 +677,7 @@ class _InfoTabState extends State<_InfoTab> {
                     Expanded(
                       child: Text(
                         slug.isEmpty ? '—' : slug,
-                        style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 13,
+                        style: AppTextStyles.body.copyWith(
                           color: slug.isEmpty ? AppColors.ctText2 : AppColors.ctText,
                         ),
                       ),
@@ -782,8 +763,7 @@ class _InfoTabState extends State<_InfoTab> {
               return FilterChip(
                 label: Text(
                   label,
-                  style: TextStyle(
-                    fontFamily: 'Geist',
+                  style: AppTextStyles.bodySmall.copyWith(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: selected
@@ -812,12 +792,25 @@ class _InfoTabState extends State<_InfoTab> {
           if (widget.canManage) ...[
             const Divider(color: AppColors.ctBorder),
             const SizedBox(height: 16),
-            AppButton(
-              label: 'Eliminar flujo',
-              variant: AppButtonVariant.danger,
-              size: AppButtonSize.sm,
-              prefixIcon: const Icon(Icons.delete_outline, size: 16),
+            OutlinedButton.icon(
               onPressed: widget.onDelete,
+              icon: const Icon(Icons.delete_outline,
+                  size: 16, color: Color(0xFFE24C4B)),
+              label: Text(
+                'Eliminar flujo',
+                style: AppTextStyles.body.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.ctDanger,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFFE24C4B)),
+                backgroundColor: Colors.transparent,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 10),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
             ),
             const SizedBox(height: 8),
           ],
@@ -858,20 +851,20 @@ class _CamposTab extends StatelessWidget {
               children: [
                 Text(
                   'Campos del flujo (${fields.length})',
-                  style: const TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ctText,
-                  ),
+                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const Spacer(),
                 if (canManage)
-                  AppButton(
-                    label: '+ Agregar campo',
-                    variant: AppButtonVariant.ghost,
-                    size: AppButtonSize.sm,
+                  TextButton.icon(
                     onPressed: onAddField,
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text(
+                      '+ Agregar campo',
+                      style: AppTextStyles.formLabel,
+                    ),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.ctTeal,
+                    ),
                   ),
               ],
             ),
@@ -982,12 +975,7 @@ class _FieldRow extends StatelessWidget {
                     children: [
                       Text(
                         label,
-                        style: const TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ctText,
-                        ),
+                        style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                       ),
                       Text(
                         typeLabel,
@@ -1004,14 +992,9 @@ class _FieldRow extends StatelessWidget {
                       color: AppColors.ctTealLight,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Requerido',
-                      style: TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.ctTealDark,
-                      ),
+                      style: AppTextStyles.kpiLabel.copyWith(color: AppColors.ctTealDark),
                     ),
                   ),
                 if (canManage) ...[
@@ -1303,12 +1286,7 @@ class _FieldDialogState extends State<_FieldDialog> {
             children: [
               Text(
                 _isEdit ? 'Editar campo' : 'Nuevo campo',
-                style: const TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.pageTitle,
               ),
               const SizedBox(height: 20),
 
@@ -1345,13 +1323,9 @@ class _FieldDialogState extends State<_FieldDialog> {
                   controller: _descCtrl,
                   maxLines: 3,
                   style: AppTextStyles.body,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Opcional',
-                    hintStyle: TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 13,
-                      color: AppColors.ctText3,
-                    ),
+                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                     border: InputBorder.none,
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
@@ -1503,21 +1477,15 @@ class _FieldDialogState extends State<_FieldDialog> {
                         isExpanded: true,
                         underline: const SizedBox.shrink(),
                         dropdownColor: AppColors.ctSurface,
-                        hint: const Text('Selecciona un flow',
-                            style: TextStyle(
-                                fontFamily: 'Geist',
-                                fontSize: 13,
-                                color: AppColors.ctText2)),
+                        hint: Text('Selecciona un flow',
+                            style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
                         items: _availableFlows.map((f) {
                           final slug = f['slug'] as String? ?? '';
                           final name = f['name'] as String? ?? slug;
                           return DropdownMenuItem<String>(
                             value: slug,
                             child: Text(name,
-                                style: const TextStyle(
-                                    fontFamily: 'Geist',
-                                    fontSize: 13,
-                                    color: AppColors.ctText)),
+                                style: AppTextStyles.body),
                           );
                         }).toList(),
                         onChanged: (v) =>
@@ -1578,13 +1546,9 @@ class _FieldDialogState extends State<_FieldDialog> {
                         child: TextField(
                           controller: _optionCtrl,
                           style: AppTextStyles.body,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             hintText: 'Nueva opción...',
-                            hintStyle: TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 13,
-                              color: AppColors.ctText3,
-                            ),
+                            hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                             border: InputBorder.none,
                             isDense: true,
                             contentPadding:
@@ -1595,11 +1559,9 @@ class _FieldDialogState extends State<_FieldDialog> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    AppButton(
+                    _PrimaryButton(
                       label: 'Agregar',
-                      variant: AppButtonVariant.teal,
-                      size: AppButtonSize.sm,
-                      onPressed: _addStaticOption,
+                      onTap: _addStaticOption,
                     ),
                   ],
                 ),
@@ -1631,26 +1593,17 @@ class _FieldDialogState extends State<_FieldDialog> {
                       DropdownMenuItem(
                         value: 'conversational_list',
                         child: Text('Mostrar lista de opciones al operador',
-                            style: TextStyle(
-                                fontFamily: 'Geist',
-                                fontSize: 13,
-                                color: AppColors.ctText)),
+                            style: AppTextStyles.body),
                       ),
                       DropdownMenuItem(
                         value: 'inherit_actor',
                         child: Text('Usar el operador actual',
-                            style: TextStyle(
-                                fontFamily: 'Geist',
-                                fontSize: 13,
-                                color: AppColors.ctText)),
+                            style: AppTextStyles.body),
                       ),
                       DropdownMenuItem(
                         value: 'defer_dashboard',
                         child: Text('Pedir al supervisor en Tareas',
-                            style: TextStyle(
-                                fontFamily: 'Geist',
-                                fontSize: 13,
-                                color: AppColors.ctText)),
+                            style: AppTextStyles.body),
                       ),
                     ],
                     onChanged: (v) {
@@ -1707,13 +1660,9 @@ class _FieldDialogState extends State<_FieldDialog> {
                       isExpanded: true,
                       underline: const SizedBox.shrink(),
                       dropdownColor: AppColors.ctSurface,
-                      hint: const Text(
+                      hint: Text(
                         'Selecciona un catálogo',
-                        style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 13,
-                          color: AppColors.ctText2,
-                        ),
+                        style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                       ),
                       items: _availableCatalogs.map((cat) {
                         final slug = cat['slug'] as String? ?? '';
@@ -1722,11 +1671,7 @@ class _FieldDialogState extends State<_FieldDialog> {
                           value: slug,
                           child: Text(
                             name,
-                            style: const TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 13,
-                              color: AppColors.ctText,
-                            ),
+                            style: AppTextStyles.body,
                           ),
                         );
                       }).toList(),
@@ -1798,11 +1743,9 @@ class _FieldDialogState extends State<_FieldDialog> {
                         const Icon(Icons.visibility_outlined,
                             size: 14, color: AppColors.ctText2),
                         const SizedBox(width: 6),
-                        const Text(
+                        Text(
                           'Condición de visibilidad',
-                          style: TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 13,
+                          style: AppTextStyles.body.copyWith(
                             fontWeight: FontWeight.w500,
                             color: AppColors.ctText2,
                           ),
@@ -1816,14 +1759,9 @@ class _FieldDialogState extends State<_FieldDialog> {
                               color: AppColors.ctTeal.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: const Text(
+                            child: Text(
                               'activa',
-                              style: TextStyle(
-                                fontFamily: 'Geist',
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.ctTeal,
-                              ),
+                              style: AppTextStyles.kpiLabel.copyWith(color: AppColors.ctTeal),
                             ),
                           ),
                         ],
@@ -1832,13 +1770,9 @@ class _FieldDialogState extends State<_FieldDialog> {
                     children: [
                       const SizedBox(height: 8),
                       // Field selector
-                      const Text(
+                      Text(
                         'Mostrar este campo solo si…',
-                        style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 12,
-                          color: AppColors.ctText2,
-                        ),
+                        style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                       ),
                       const SizedBox(height: 6),
                       Container(
@@ -1855,24 +1789,16 @@ class _FieldDialogState extends State<_FieldDialog> {
                           isExpanded: true,
                           underline: const SizedBox.shrink(),
                           dropdownColor: AppColors.ctSurface,
-                          hint: const Text(
+                          hint: Text(
                             'Selecciona un campo',
-                            style: TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 13,
-                              color: AppColors.ctText2,
-                            ),
+                            style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                           ),
                           items: [
-                            const DropdownMenuItem<String>(
+                            DropdownMenuItem<String>(
                               value: null,
                               child: Text(
                                 '— Sin condición —',
-                                style: TextStyle(
-                                  fontFamily: 'Geist',
-                                  fontSize: 13,
-                                  color: AppColors.ctText2,
-                                ),
+                                style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                               ),
                             ),
                             ...widget.flowFields.map((f) {
@@ -1882,11 +1808,7 @@ class _FieldDialogState extends State<_FieldDialog> {
                                 value: key,
                                 child: Text(
                                   label,
-                                  style: const TextStyle(
-                                    fontFamily: 'Geist',
-                                    fontSize: 13,
-                                    color: AppColors.ctText,
-                                  ),
+                                  style: AppTextStyles.body,
                                 ),
                               );
                             }),
@@ -1914,46 +1836,30 @@ class _FieldDialogState extends State<_FieldDialog> {
                             isExpanded: true,
                             underline: const SizedBox.shrink(),
                             dropdownColor: AppColors.ctSurface,
-                            hint: const Text(
+                            hint: Text(
                               'Operador',
-                              style: TextStyle(
-                                fontFamily: 'Geist',
-                                fontSize: 13,
-                                color: AppColors.ctText2,
-                              ),
+                              style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                             ),
                             items: const [
                               DropdownMenuItem(
                                 value: 'eq',
                                 child: Text('es igual a',
-                                    style: TextStyle(
-                                        fontFamily: 'Geist',
-                                        fontSize: 13,
-                                        color: AppColors.ctText)),
+                                    style: AppTextStyles.body),
                               ),
                               DropdownMenuItem(
                                 value: 'neq',
                                 child: Text('es distinto de',
-                                    style: TextStyle(
-                                        fontFamily: 'Geist',
-                                        fontSize: 13,
-                                        color: AppColors.ctText)),
+                                    style: AppTextStyles.body),
                               ),
                               DropdownMenuItem(
                                 value: 'in',
                                 child: Text('está entre (separado por comas)',
-                                    style: TextStyle(
-                                        fontFamily: 'Geist',
-                                        fontSize: 13,
-                                        color: AppColors.ctText)),
+                                    style: AppTextStyles.body),
                               ),
                               DropdownMenuItem(
                                 value: 'not_in',
                                 child: Text('no está entre (separado por comas)',
-                                    style: TextStyle(
-                                        fontFamily: 'Geist',
-                                        fontSize: 13,
-                                        color: AppColors.ctText)),
+                                    style: AppTextStyles.body),
                               ),
                             ],
                             onChanged: (v) =>
@@ -1974,13 +1880,9 @@ class _FieldDialogState extends State<_FieldDialog> {
                           child: TextField(
                             controller: _showIfValueCtrl,
                             style: AppTextStyles.body,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               hintText: 'Valor…',
-                              hintStyle: TextStyle(
-                                fontFamily: 'Geist',
-                                fontSize: 13,
-                                color: AppColors.ctText3,
-                              ),
+                              hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                               border: InputBorder.none,
                               isDense: true,
                               contentPadding:
@@ -1999,19 +1901,15 @@ class _FieldDialogState extends State<_FieldDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  AppButton(
+                  _GhostButton(
                     label: 'Cancelar',
-                    variant: AppButtonVariant.ghost,
-                    size: AppButtonSize.sm,
-                    onPressed: () => Navigator.pop(context),
+                    onTap: () => Navigator.pop(context),
                   ),
                   const SizedBox(width: 10),
-                  AppButton(
+                  _PrimaryButton(
                     label: 'Guardar',
-                    variant: AppButtonVariant.teal,
-                    size: AppButtonSize.sm,
-                    onPressed: _submit,
-                    isDisabled: !(_fieldKeyValid && _selectValid),
+                    onTap: (_fieldKeyValid && _selectValid) ? _submit : () {},
+                    enabled: _fieldKeyValid && _selectValid,
                   ),
                 ],
               ),
@@ -2185,34 +2083,21 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
         backgroundColor: AppColors.ctSurface,
         title: const Text(
           'Eliminar condición',
-          style: TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppColors.ctText,
-          ),
+          style: AppTextStyles.pageTitle,
         ),
-        content: const Text(
+        content: Text(
           '¿Eliminar esta condición de branching?',
-          style: TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            color: AppColors.ctText2,
-          ),
+          style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
         ),
         actions: [
-          AppButton(
+          _GhostButton(
             label: 'Cancelar',
-            variant: AppButtonVariant.ghost,
-            size: AppButtonSize.sm,
-            onPressed: () => Navigator.pop(ctx),
+            onTap: () => Navigator.pop(ctx),
           ),
           const SizedBox(width: 8),
-          AppButton(
+          _PrimaryButton(
             label: 'Eliminar',
-            variant: AppButtonVariant.danger,
-            size: AppButtonSize.sm,
-            onPressed: () {
+            onTap: () {
               Navigator.pop(ctx);
               setState(() {
                 _conditions.removeWhere((c) => c['id'] == condition['id']);
@@ -2298,24 +2183,15 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
+                      children: [
                         Text(
                           'Enviar mensaje proactivo al operador al iniciar este flujo',
-                          style: TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.ctText,
-                          ),
+                          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Text(
                           'Si está activado, la plataforma envía un mensaje automático al operador cuando se abre este flujo',
-                          style: TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 12,
-                            color: AppColors.ctText2,
-                          ),
+                          style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                         ),
                       ],
                     ),
@@ -2355,33 +2231,20 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Roles con acceso',
-                  style: TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ctText,
-                  ),
+                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   'Solo los operadores con estos roles podrán iniciar este flujo. Si no se selecciona ninguno, todos los roles tienen acceso.',
-                  style: TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 12,
-                    color: AppColors.ctText2,
-                  ),
+                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                 ),
                 const SizedBox(height: 12),
                 if (widget.availableRoles.isEmpty)
-                  const Text(
+                  Text(
                     'No hay roles definidos. Crea roles en Operadores → Roles.',
-                    style: TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 12,
-                      color: AppColors.ctText3,
-                    ),
+                    style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctText3),
                   )
                 else
                   Wrap(
@@ -2395,9 +2258,9 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                       return FilterChip(
                         label: Text(
                           label,
-                          style: const TextStyle(
-                            fontFamily: 'Geist',
+                          style: AppTextStyles.bodySmall.copyWith(
                             fontSize: 12,
+                            color: AppColors.ctText,
                           ),
                         ),
                         selected: selected,
@@ -2496,8 +2359,7 @@ class _ConditionCard extends StatelessWidget {
                           ),
                           child: Text(
                             operator,
-                            style: const TextStyle(
-                              fontFamily: 'Geist',
+                            style: AppTextStyles.bodySmall.copyWith(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                               color: AppColors.ctTealDark,
@@ -2508,11 +2370,7 @@ class _ConditionCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             '$field $operator "$value"',
-                            style: const TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 13,
-                              color: AppColors.ctText,
-                            ),
+                            style: AppTextStyles.body,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -2522,11 +2380,7 @@ class _ConditionCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         label,
-                        style: const TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 11,
-                          color: AppColors.ctText2,
-                        ),
+                        style: AppTextStyles.bodySmall,
                       ),
                     ],
                     if (canManage) ...[
@@ -2684,24 +2538,14 @@ class _ConditionDialogState extends State<_ConditionDialog> {
             children: [
               Text(
                 _isEdit ? 'Condición' : 'Nueva condición',
-                style: const TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.pageTitle,
               ),
               const SizedBox(height: 20),
 
               // Campo
-              const Text(
+              Text(
                 'Campo',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 6),
               _DropdownContainer(
@@ -2709,12 +2553,9 @@ class _ConditionDialogState extends State<_ConditionDialog> {
                   value: _selectedFieldId,
                   isExpanded: true,
                   underline: const SizedBox.shrink(),
-                  hint: const Text(
+                  hint: Text(
                     'Selecciona un campo',
-                    style: TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 13,
-                        color: AppColors.ctText3),
+                    style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                   ),
                   dropdownColor: AppColors.ctSurface,
                   items: widget.flowFields.map((f) {
@@ -2724,10 +2565,7 @@ class _ConditionDialogState extends State<_ConditionDialog> {
                       value: 'fields.$id',
                       child: Text(
                         lbl,
-                        style: const TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 13,
-                            color: AppColors.ctText),
+                        style: AppTextStyles.body,
                       ),
                     );
                   }).toList(),
@@ -2737,14 +2575,9 @@ class _ConditionDialogState extends State<_ConditionDialog> {
               const SizedBox(height: 14),
 
               // Operador
-              const Text(
+              Text(
                 'Operador',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 6),
               _DropdownContainer(
@@ -2759,10 +2592,7 @@ class _ConditionDialogState extends State<_ConditionDialog> {
                       value: val,
                       child: Text(
                         '$val — $lbl',
-                        style: const TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 13,
-                            color: AppColors.ctText),
+                        style: AppTextStyles.body,
                       ),
                     );
                   }).toList(),
@@ -2798,11 +2628,7 @@ class _ConditionDialogState extends State<_ConditionDialog> {
                   }
                   return Text(
                     'Expresión: $_selectedFieldId $_operator "${_valueCtrl.text}"',
-                    style: const TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 11,
-                      color: AppColors.ctText2,
-                    ),
+                    style: AppTextStyles.bodySmall,
                   );
                 },
               ),
@@ -2811,17 +2637,11 @@ class _ConditionDialogState extends State<_ConditionDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  AppButton(
+                  _GhostButton(
                       label: 'Cancelar',
-                      variant: AppButtonVariant.ghost,
-                      size: AppButtonSize.sm,
-                      onPressed: () => Navigator.pop(context)),
+                      onTap: () => Navigator.pop(context)),
                   const SizedBox(width: 10),
-                  AppButton(
-                      label: 'Guardar',
-                      variant: AppButtonVariant.teal,
-                      size: AppButtonSize.sm,
-                      onPressed: _submit),
+                  _PrimaryButton(label: 'Guardar', onTap: _submit),
                 ],
               ),
             ],
@@ -2910,33 +2730,19 @@ class _AlCerrarTabState extends State<_AlCerrarTab> {
         backgroundColor: AppColors.ctSurface,
         title: const Text(
           'Eliminar acción',
-          style: TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppColors.ctText,
-          ),
+          style: AppTextStyles.pageTitle,
         ),
-        content: const Text(
+        content: Text(
           '¿Eliminar esta acción?',
-          style: TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            color: AppColors.ctText2,
-          ),
+          style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
         ),
         actions: [
-          AppButton(
-              label: 'Cancelar',
-              variant: AppButtonVariant.ghost,
-              size: AppButtonSize.sm,
-              onPressed: () => Navigator.pop(ctx)),
+          _GhostButton(
+              label: 'Cancelar', onTap: () => Navigator.pop(ctx)),
           const SizedBox(width: 8),
-          AppButton(
+          _PrimaryButton(
             label: 'Eliminar',
-            variant: AppButtonVariant.danger,
-            size: AppButtonSize.sm,
-            onPressed: () {
+            onTap: () {
               Navigator.pop(ctx);
               setState(() {
                 _actions.removeWhere((a) => a['id'] == action['id']);
@@ -2960,31 +2766,25 @@ class _AlCerrarTabState extends State<_AlCerrarTab> {
             children: [
               const Text(
                 'Acciones al completar el flujo',
-                style: TextStyle(
-                  fontFamily: 'Onest',
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.pageTitle,
               ),
               const Spacer(),
               if (widget.canManage)
-                AppButton(
-                  label: '+ Agregar acción',
-                  variant: AppButtonVariant.ghost,
-                  size: AppButtonSize.sm,
+                TextButton(
                   onPressed: () => _openActionDialog(null),
+                  style: TextButton.styleFrom(
+                      foregroundColor: AppColors.ctTeal),
+                  child: const Text(
+                    '+ Agregar acción',
+                    style: AppTextStyles.formLabel,
+                  ),
                 ),
             ],
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Se ejecutan en orden cuando el flujo se marca como completado.',
-            style: TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 12,
-              color: AppColors.ctText2,
-            ),
+            style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
           ),
           const SizedBox(height: 16),
           if (_actions.isEmpty)
@@ -3100,20 +2900,11 @@ class _ActionCard extends StatelessWidget {
               children: [
                 Text(
                   _actionLabel(type),
-                  style: const TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ctText,
-                  ),
+                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                 ),
                 Text(
                   _actionSubtitle(action),
-                  style: const TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 12,
-                    color: AppColors.ctText2,
-                  ),
+                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                 ),
               ],
             ),
@@ -3387,24 +3178,14 @@ class _ActionDialogState extends State<_ActionDialog> {
             children: [
               Text(
                 _isEdit ? 'Acción' : 'Nueva acción',
-                style: const TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.pageTitle,
               ),
               const SizedBox(height: 20),
 
               // Tipo
-              const Text(
+              Text(
                 'Tipo de acción',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 6),
               _DropdownContainer(
@@ -3417,34 +3198,22 @@ class _ActionDialogState extends State<_ActionDialog> {
                     DropdownMenuItem(
                       value: 'open_flow',
                       child: Text('Abrir flujo',
-                          style: TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 13,
-                              color: AppColors.ctText)),
+                          style: AppTextStyles.body),
                     ),
                     DropdownMenuItem(
                       value: 'webhook_out',
                       child: Text('Webhook saliente',
-                          style: TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 13,
-                              color: AppColors.ctText)),
+                          style: AppTextStyles.body),
                     ),
                     DropdownMenuItem(
                       value: 'emit_event',
                       child: Text('Emitir evento',
-                          style: TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 13,
-                              color: AppColors.ctText)),
+                          style: AppTextStyles.body),
                     ),
                     DropdownMenuItem(
                       value: 'google_sheets_append_row',
                       child: Text('Google Sheets — Agregar fila',
-                          style: TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 13,
-                              color: AppColors.ctText)),
+                          style: AppTextStyles.body),
                     ),
                   ],
                   onChanged: (v) {
@@ -3456,14 +3225,9 @@ class _ActionDialogState extends State<_ActionDialog> {
 
               // Campos condicionales
               if (_type == 'open_flow') ...[
-                const Text(
+                Text(
                   'Flujo destino',
-                  style: TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.ctText,
-                  ),
+                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 6),
                 if (_loadingFlows)
@@ -3482,12 +3246,9 @@ class _ActionDialogState extends State<_ActionDialog> {
                       border: Border.all(color: AppColors.ctBorder),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Text(
+                    child: Text(
                       'No hay flujos disponibles para este worker',
-                      style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 13,
-                          color: AppColors.ctText2),
+                      style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                     ),
                   )
                 else
@@ -3497,21 +3258,15 @@ class _ActionDialogState extends State<_ActionDialog> {
                       isExpanded: true,
                       underline: const SizedBox.shrink(),
                       dropdownColor: AppColors.ctSurface,
-                      hint: const Text('Selecciona un flujo',
-                          style: TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 13,
-                              color: AppColors.ctText2)),
+                      hint: Text('Selecciona un flujo',
+                          style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
                       items: _availableFlows.map((f) {
                         final slug = f['slug'] as String? ?? '';
                         final name = f['name'] as String? ?? slug;
                         return DropdownMenuItem<String>(
                           value: slug,
                           child: Text(name,
-                              style: const TextStyle(
-                                  fontFamily: 'Geist',
-                                  fontSize: 13,
-                                  color: AppColors.ctText)),
+                              style: AppTextStyles.body),
                         );
                       }).toList(),
                       onChanged: (v) =>
@@ -3523,10 +3278,7 @@ class _ActionDialogState extends State<_ActionDialog> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text(
                     'Heredar todos los ancestros',
-                    style: TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 13,
-                        color: AppColors.ctText),
+                    style: AppTextStyles.body,
                   ),
                   value: _carryAncestors,
                   onChanged: (v) => setState(() => _carryAncestors = v),
@@ -3544,10 +3296,7 @@ class _ActionDialogState extends State<_ActionDialog> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text(
                     'Incluir datos de ancestros',
-                    style: TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 13,
-                        color: AppColors.ctText),
+                    style: AppTextStyles.body,
                   ),
                   value: _includeAncestors,
                   onChanged: (v) => setState(() => _includeAncestors = v),
@@ -3576,19 +3325,11 @@ class _ActionDialogState extends State<_ActionDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'Mapeo de columnas',
-                      style: TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.ctText,
-                      ),
+                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
                     ),
-                    AppButton(
-                      label: '+ Agregar columna',
-                      variant: AppButtonVariant.ghost,
-                      size: AppButtonSize.sm,
+                    TextButton.icon(
                       onPressed: () => setState(() {
                         _columnMappingRows.add((
                           TextEditingController(),
@@ -3596,6 +3337,17 @@ class _ActionDialogState extends State<_ActionDialog> {
                         ));
                         _columnMappingKeys.add(null);
                       }),
+                      icon: const Icon(Icons.add, size: 14,
+                          color: AppColors.ctTeal),
+                      label: Text(
+                        '+ Agregar columna',
+                        style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctTeal),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
                     ),
                   ],
                 ),
@@ -3625,13 +3377,10 @@ class _ActionDialogState extends State<_ActionDialog> {
                                 onChanged: () => setState(() {}),
                               ),
                             ),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 6),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
                               child: Text('→',
-                                  style: TextStyle(
-                                      fontFamily: 'Geist',
-                                      fontSize: 13,
-                                      color: AppColors.ctText2)),
+                                  style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
                             ),
                             if (hasFields)
                               Expanded(
@@ -3641,24 +3390,16 @@ class _ActionDialogState extends State<_ActionDialog> {
                                     isExpanded: true,
                                     underline: const SizedBox.shrink(),
                                     dropdownColor: AppColors.ctSurface,
-                                    hint: const Text(
+                                    hint: Text(
                                       'Campo del flujo…',
-                                      style: TextStyle(
-                                        fontFamily: 'Geist',
-                                        fontSize: 13,
-                                        color: AppColors.ctText3,
-                                      ),
+                                      style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                                     ),
                                     items: [
-                                      const DropdownMenuItem<String?>(
+                                      DropdownMenuItem<String?>(
                                         value: null,
                                         child: Text(
                                           'Personalizado…',
-                                          style: TextStyle(
-                                            fontFamily: 'Geist',
-                                            fontSize: 13,
-                                            color: AppColors.ctText2,
-                                          ),
+                                          style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                                         ),
                                       ),
                                       ...widget.flowFields.map((f) {
@@ -3668,11 +3409,7 @@ class _ActionDialogState extends State<_ActionDialog> {
                                           value: key,
                                           child: Text(
                                             label,
-                                            style: const TextStyle(
-                                              fontFamily: 'Geist',
-                                              fontSize: 13,
-                                              color: AppColors.ctText,
-                                            ),
+                                            style: AppTextStyles.body,
                                           ),
                                         );
                                       }),
@@ -3735,31 +3472,21 @@ class _ActionDialogState extends State<_ActionDialog> {
               const SizedBox(height: 20),
               const Divider(color: AppColors.ctBorder, height: 1),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Condición (opcional)',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.ctText,
-                ),
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'La acción solo se ejecuta si se cumple la condición.',
-                style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontSize: 12,
-                  color: AppColors.ctText2,
-                ),
+                style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
               ),
               const SizedBox(height: 10),
 
               // Campo
-              const Text(
+              Text(
                 'Campo',
-                style: TextStyle(
-                  fontFamily: 'Geist',
+                style: AppTextStyles.bodySmall.copyWith(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: AppColors.ctText2,
@@ -3773,15 +3500,11 @@ class _ActionDialogState extends State<_ActionDialog> {
                   underline: const SizedBox.shrink(),
                   dropdownColor: AppColors.ctSurface,
                   items: [
-                    const DropdownMenuItem<String?>(
+                    DropdownMenuItem<String?>(
                       value: null,
                       child: Text(
                         'Sin condición',
-                        style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 13,
-                          color: AppColors.ctText2,
-                        ),
+                        style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                       ),
                     ),
                     ...widget.flowFields.map((f) {
@@ -3791,11 +3514,7 @@ class _ActionDialogState extends State<_ActionDialog> {
                         value: key,
                         child: Text(
                           label,
-                          style: const TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 13,
-                            color: AppColors.ctText,
-                          ),
+                          style: AppTextStyles.body,
                         ),
                       );
                     }),
@@ -3821,12 +3540,12 @@ class _ActionDialogState extends State<_ActionDialog> {
                           underline: const SizedBox.shrink(),
                           dropdownColor: AppColors.ctSurface,
                           items: const [
-                            DropdownMenuItem(value: '==', child: Text('== igual', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText))),
-                            DropdownMenuItem(value: '!=', child: Text('!= distinto', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText))),
-                            DropdownMenuItem(value: '>',  child: Text('>  mayor', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText))),
-                            DropdownMenuItem(value: '<',  child: Text('<  menor', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText))),
-                            DropdownMenuItem(value: '>=', child: Text('>= mayor o igual', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText))),
-                            DropdownMenuItem(value: '<=', child: Text('<= menor o igual', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText))),
+                            DropdownMenuItem(value: '==', child: Text('== igual', style: AppTextStyles.body)),
+                            DropdownMenuItem(value: '!=', child: Text('!= distinto', style: AppTextStyles.body)),
+                            DropdownMenuItem(value: '>',  child: Text('>  mayor', style: AppTextStyles.body)),
+                            DropdownMenuItem(value: '<',  child: Text('<  menor', style: AppTextStyles.body)),
+                            DropdownMenuItem(value: '>=', child: Text('>= mayor o igual', style: AppTextStyles.body)),
+                            DropdownMenuItem(value: '<=', child: Text('<= menor o igual', style: AppTextStyles.body)),
                           ],
                           onChanged: (v) {
                             if (v != null) setState(() => _conditionOp = v);
@@ -3847,16 +3566,10 @@ class _ActionDialogState extends State<_ActionDialog> {
                         ),
                         child: TextField(
                           controller: _conditionValueCtrl,
-                          style: const TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 13,
-                              color: AppColors.ctText),
-                          decoration: const InputDecoration(
+                          style: AppTextStyles.body,
+                          decoration: InputDecoration(
                             hintText: 'ej. Si, Granjas, 5',
-                            hintStyle: TextStyle(
-                                fontFamily: 'Geist',
-                                fontSize: 13,
-                                color: AppColors.ctText3),
+                            hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                             border: InputBorder.none,
                             isDense: true,
                             contentPadding:
@@ -3880,16 +3593,10 @@ class _ActionDialogState extends State<_ActionDialog> {
                   ),
                   child: TextField(
                     controller: _conditionValueCtrl,
-                    style: const TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 13,
-                        color: AppColors.ctText),
-                    decoration: const InputDecoration(
+                    style: AppTextStyles.body,
+                    decoration: InputDecoration(
                       hintText: 'ej. fields.receta == "Si"',
-                      hintStyle: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 13,
-                          color: AppColors.ctText3),
+                      hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                       border: InputBorder.none,
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(vertical: 8),
@@ -3907,11 +3614,7 @@ class _ActionDialogState extends State<_ActionDialog> {
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     'Expresión: $expr',
-                    style: const TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 11,
-                      color: AppColors.ctText3,
-                    ),
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                   ),
                 );
               }),
@@ -3920,18 +3623,14 @@ class _ActionDialogState extends State<_ActionDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  AppButton(
+                  _GhostButton(
                       label: 'Cancelar',
-                      variant: AppButtonVariant.ghost,
-                      size: AppButtonSize.sm,
-                      onPressed: () => Navigator.pop(context)),
+                      onTap: () => Navigator.pop(context)),
                   const SizedBox(width: 10),
-                  AppButton(
+                  _PrimaryButton(
                     label: 'Guardar',
-                    variant: AppButtonVariant.teal,
-                    size: AppButtonSize.sm,
-                    onPressed: _submit,
-                    isDisabled: !switch (_type) {
+                    onTap: _submit,
+                    enabled: switch (_type) {
                       'open_flow' => _selectedFlowSlug != null,
                       'google_sheets_append_row' =>
                         _spreadsheetIdCtrl.text.trim().isNotEmpty &&
@@ -3972,12 +3671,10 @@ class _ColMappingField extends StatelessWidget {
       ),
       child: TextField(
         controller: controller,
-        style: const TextStyle(
-            fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText),
+        style: AppTextStyles.body,
         decoration: InputDecoration(
           hintText: placeholder,
-          hintStyle: const TextStyle(
-              fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText3),
+          hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
           border: InputBorder.none,
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -4034,22 +3731,13 @@ class _FormField extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: AppColors.ctText,
-          ),
+          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
         ),
         if (subtitle != null) ...[
           const SizedBox(height: 2),
           Text(
             subtitle!,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 11,
-              color: AppColors.ctText3,
-            ),
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
           ),
         ],
         const SizedBox(height: 6),
@@ -4057,18 +3745,10 @@ class _FormField extends StatelessWidget {
           controller: controller,
           maxLines: maxLines,
           minLines: maxLines,
-          style: const TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            color: AppColors.ctText,
-          ),
+          style: AppTextStyles.body,
           decoration: InputDecoration(
             hintText: placeholder,
-            hintStyle: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 13,
-              color: AppColors.ctText3,
-            ),
+            hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
             filled: true,
             fillColor: AppColors.ctSurface2,
             contentPadding:
@@ -4110,15 +3790,75 @@ class _FieldKeyPreview extends StatelessWidget {
         Expanded(
           child: Text(
             valid ? fieldKey : (fieldKey.isEmpty ? 'Clave inválida' : 'Clave inválida: "$fieldKey"'),
-            style: TextStyle(
-              fontFamily: 'Geist',
+            style: AppTextStyles.bodySmall.copyWith(
               fontSize: 12,
-              color: valid ? const Color(0xFF107C41) : const Color(0xFFE24C4B),
+              color: valid ? AppColors.ctOkText : AppColors.ctDanger,
             ),
             overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PrimaryButton extends StatelessWidget {
+  const _PrimaryButton({
+    required this.label,
+    required this.onTap,
+    this.enabled = true,
+  });
+  final String label;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.45,
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.ctTeal,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            label,
+            style: AppTextStyles.body.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppColors.ctNavy,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GhostButton extends StatelessWidget {
+  const _GhostButton({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.ctBorder2),
+        ),
+        child: Text(
+          label,
+          style: AppTextStyles.btnSecondary.copyWith(color: AppColors.ctText2),
+        ),
+      ),
     );
   }
 }
@@ -4204,28 +3944,16 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.ctSurface,
-        title: const Text('Eliminar regla',
-            style: TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: AppColors.ctText)),
-        content: const Text('¿Eliminar esta regla de inicio?',
-            style: TextStyle(
-                fontFamily: 'Geist', fontSize: 13, color: AppColors.ctText2)),
+        title: Text('Eliminar regla',
+            style: AppTextStyles.pageTitle),
+        content: Text('¿Eliminar esta regla de inicio?',
+            style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
         actions: [
-          AppButton(
-            label: 'Cancelar',
-            variant: AppButtonVariant.ghost,
-            size: AppButtonSize.sm,
-            onPressed: () => Navigator.pop(ctx),
-          ),
+          _GhostButton(label: 'Cancelar', onTap: () => Navigator.pop(ctx)),
           const SizedBox(width: 8),
-          AppButton(
+          _PrimaryButton(
             label: 'Eliminar',
-            variant: AppButtonVariant.danger,
-            size: AppButtonSize.sm,
-            onPressed: () {
+            onTap: () {
               Navigator.pop(ctx);
               setState(() {
                 _rules.removeWhere((r) => r['id'] == rule['id']);
@@ -4249,27 +3977,25 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
             children: [
               const Text(
                 'Reglas de inicio',
-                style: TextStyle(
-                    fontFamily: 'Onest',
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.ctText),
+                style: AppTextStyles.pageTitle,
               ),
               const Spacer(),
               if (widget.canManage)
-                AppButton(
-                  label: '+ Agregar regla',
-                  variant: AppButtonVariant.ghost,
-                  size: AppButtonSize.sm,
+                TextButton(
                   onPressed: () => _openRuleDialog(null),
+                  style:
+                      TextButton.styleFrom(foregroundColor: AppColors.ctTeal),
+                  child: const Text(
+                    '+ Agregar regla',
+                    style: AppTextStyles.formLabel,
+                  ),
                 ),
             ],
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Se verifican antes de iniciar el flujo. Si alguna falla, el flow no se ejecuta.',
-            style: TextStyle(
-                fontFamily: 'Geist', fontSize: 12, color: AppColors.ctText2),
+            style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctText2),
           ),
           const SizedBox(height: 16),
           if (_rules.isEmpty)
@@ -4352,11 +4078,7 @@ class _RuleCard extends StatelessWidget {
               ),
               child: Text(
                 typeLabel,
-                style: const TextStyle(
-                    fontFamily: 'Geist',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ctInfoText),
+                style: AppTextStyles.badge.copyWith(color: AppColors.ctInfoText),
               ),
             ),
             const SizedBox(width: 8),
@@ -4370,11 +4092,7 @@ class _RuleCard extends StatelessWidget {
                 ),
                 child: Text(
                   windowLabel,
-                  style: const TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.ctText2),
+                  style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w500),
                 ),
               ),
               const SizedBox(width: 8),
@@ -4382,8 +4100,7 @@ class _RuleCard extends StatelessWidget {
             Expanded(
               child: Text(
                 bodyText,
-                style: TextStyle(
-                    fontFamily: 'Geist',
+                style: AppTextStyles.bodySmall.copyWith(
                     fontSize: 12,
                     color: (isSibling && siblingSlug.isEmpty)
                         ? AppColors.ctDanger
@@ -4581,29 +4298,19 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
               const SizedBox(height: 20),
 
               // Tipo
-              const Text('Tipo de regla',
-                  style: TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.ctText2)),
+              Text('Tipo de regla',
+                  style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(
                 value: _type,
                 decoration: _inputDecoration,
-                hint: const Text('Seleccionar tipo',
-                    style: TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 13,
-                        color: AppColors.ctText3)),
+                hint: Text('Seleccionar tipo',
+                    style: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
                 items: _kPreconditionTypes
                     .map((t) => DropdownMenuItem(
                           value: t.$1,
                           child: Text(t.$2,
-                              style: const TextStyle(
-                                  fontFamily: 'Geist',
-                                  fontSize: 13,
-                                  color: AppColors.ctText)),
+                              style: AppTextStyles.body),
                         ))
                     .toList(),
                 onChanged: (val) => setState(() {
@@ -4629,30 +4336,19 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
 
                 // Slug + scope (no_active, requires_active, no_concurrent)
                 if (_hasSlugScope || _hasConcurrentScope) ...[
-                  const Text('Slug del flow',
-                      style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ctText2)),
+                  Text('Slug del flow',
+                      style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _slugCtrl,
-                    style: const TextStyle(
-                        fontFamily: 'Geist', fontSize: 13),
+                    style: AppTextStyles.body,
                     decoration: _inputDecoration.copyWith(
                         hintText: 'ej: turno-matutino',
-                        hintStyle: const TextStyle(
-                            fontFamily: 'Geist',
-                            color: AppColors.ctText3)),
+                        hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Alcance',
-                      style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ctText2)),
+                  Text('Alcance',
+                      style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: _scope,
@@ -4663,8 +4359,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                         .map((o) => DropdownMenuItem(
                               value: o.$1,
                               child: Text(o.$2,
-                                  style: const TextStyle(
-                                      fontFamily: 'Geist', fontSize: 13)),
+                                  style: AppTextStyles.body),
                             ))
                         .toList(),
                     onChanged: (val) =>
@@ -4674,30 +4369,19 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
 
                 // Field + scope + window (field_unique_in_window)
                 if (_isFieldUnique) ...[
-                  const Text('Campo (field_key)',
-                      style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ctText2)),
+                  Text('Campo (field_key)',
+                      style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _fieldCtrl,
-                    style: const TextStyle(
-                        fontFamily: 'Geist', fontSize: 13),
+                    style: AppTextStyles.body,
                     decoration: _inputDecoration.copyWith(
                         hintText: 'ej: numero_pedido',
-                        hintStyle: const TextStyle(
-                            fontFamily: 'Geist',
-                            color: AppColors.ctText3)),
+                        hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Alcance',
-                      style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ctText2)),
+                  Text('Alcance',
+                      style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: _scope,
@@ -4706,20 +4390,15 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                         .map((o) => DropdownMenuItem(
                               value: o.$1,
                               child: Text(o.$2,
-                                  style: const TextStyle(
-                                      fontFamily: 'Geist', fontSize: 13)),
+                                  style: AppTextStyles.body),
                             ))
                         .toList(),
                     onChanged: (val) =>
                         setState(() => _scope = val ?? _scope),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Ventana de tiempo',
-                      style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ctText2)),
+                  Text('Ventana de tiempo',
+                      style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: _window,
@@ -4728,8 +4407,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                         .map((o) => DropdownMenuItem(
                               value: o.$1,
                               child: Text(o.$2,
-                                  style: const TextStyle(
-                                      fontFamily: 'Geist', fontSize: 13)),
+                                  style: AppTextStyles.body),
                             ))
                         .toList(),
                     onChanged: (val) =>
@@ -4739,19 +4417,12 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
 
                 // Roles (operator_role_in)
                 if (_isRoleIn) ...[
-                  const Text('Roles requeridos',
-                      style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ctText2)),
+                  Text('Roles requeridos',
+                      style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
                   const SizedBox(height: 6),
                   if (widget.availableRoles.isEmpty)
-                    const Text('No hay roles disponibles',
-                        style: TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 12,
-                            color: AppColors.ctText3))
+                    Text('No hay roles disponibles',
+                        style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctText3))
                   else
                     ...widget.availableRoles.map((role) {
                       final id = role['id'] as String? ?? '';
@@ -4762,10 +4433,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                         value: _selectedRoleIds.contains(id),
                         activeColor: AppColors.ctTeal,
                         title: Text(name,
-                            style: const TextStyle(
-                                fontFamily: 'Geist',
-                                fontSize: 13,
-                                color: AppColors.ctText)),
+                            style: AppTextStyles.body),
                         onChanged: (val) => setState(() {
                           if (val == true) {
                             if (!_selectedRoleIds.contains(id)) {
@@ -4781,12 +4449,8 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
 
                 // Sibling slug + window type (requires_completed_sibling)
                 if (_isSiblingFlow) ...[
-                  const Text('Flow prerequisito',
-                      style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ctText2)),
+                  Text('Flow prerequisito',
+                      style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
                   const SizedBox(height: 6),
                   if (_loadingFlows)
                     const Padding(
@@ -4807,11 +4471,8 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                           ? _selectedSiblingSlug
                           : null,
                       decoration: _inputDecoration,
-                      hint: const Text('Seleccionar flow',
-                          style: TextStyle(
-                              fontFamily: 'Geist',
-                              fontSize: 13,
-                              color: AppColors.ctText3)),
+                      hint: Text('Seleccionar flow',
+                          style: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
                       items: [
                         ..._availableFlows.map((f) {
                           final slug = f['slug'] as String? ?? '';
@@ -4823,15 +4484,9 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(name,
-                                    style: const TextStyle(
-                                        fontFamily: 'Geist',
-                                        fontSize: 13,
-                                        color: AppColors.ctText)),
+                                    style: AppTextStyles.body),
                                 Text(slug,
-                                    style: const TextStyle(
-                                        fontFamily: 'Geist',
-                                        fontSize: 11,
-                                        color: AppColors.ctText2)),
+                                    style: AppTextStyles.bodySmall),
                               ],
                             ),
                           );
@@ -4845,10 +4500,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                             enabled: false,
                             child: Text(
                               '$_selectedSiblingSlug (no encontrado)',
-                              style: const TextStyle(
-                                  fontFamily: 'Geist',
-                                  fontSize: 13,
-                                  color: AppColors.ctText2),
+                              style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                             ),
                           ),
                       ],
@@ -4856,12 +4508,8 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                           setState(() => _selectedSiblingSlug = val),
                     ),
                   const SizedBox(height: 16),
-                  const Text('Tipo de ventana',
-                      style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.ctText2)),
+                  Text('Tipo de ventana',
+                      style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: _windowType,
@@ -4870,75 +4518,55 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                       DropdownMenuItem(
                           value: 'calendar_day',
                           child: Text('Día calendario',
-                              style: TextStyle(
-                                  fontFamily: 'Geist', fontSize: 13))),
+                              style: AppTextStyles.body)),
                       DropdownMenuItem(
                           value: 'rolling',
                           child: Text('Ventana móvil',
-                              style: TextStyle(
-                                  fontFamily: 'Geist', fontSize: 13))),
+                              style: AppTextStyles.body)),
                     ],
                     onChanged: (val) =>
                         setState(() => _windowType = val ?? _windowType),
                   ),
                   if (_windowType == 'rolling') ...[
                     const SizedBox(height: 16),
-                    const Text('Duración de ventana',
-                        style: TextStyle(
-                            fontFamily: 'Geist',
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.ctText2)),
+                    Text('Duración de ventana',
+                        style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _windowDurationCtrl,
-                      style:
-                          const TextStyle(fontFamily: 'Geist', fontSize: 13),
+                      style: AppTextStyles.body,
                       decoration: _inputDecoration.copyWith(
                           hintText: 'ej: 24h, 7d',
-                          hintStyle: const TextStyle(
-                              fontFamily: 'Geist',
-                              color: AppColors.ctText3)),
+                          hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
                     ),
                   ],
                 ],
               ],
 
               const SizedBox(height: 16),
-              const Text('Mensaje al operador si falla',
-                  style: TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.ctText2)),
+              Text('Mensaje al operador si falla',
+                  style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
               const SizedBox(height: 6),
               TextField(
                 controller: _messageCtrl,
-                style:
-                    const TextStyle(fontFamily: 'Geist', fontSize: 13),
+                style: AppTextStyles.body,
                 maxLines: 2,
                 decoration: _inputDecoration.copyWith(
                     hintText:
                         'Ej: Ya iniciaste turno hoy. Espera mañana para iniciar de nuevo.',
-                    hintStyle: const TextStyle(
-                        fontFamily: 'Geist', color: AppColors.ctText3)),
+                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
               ),
 
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  AppButton(
+                  _GhostButton(
                       label: 'Cancelar',
-                      variant: AppButtonVariant.ghost,
-                      size: AppButtonSize.sm,
-                      onPressed: () => Navigator.of(context).pop()),
+                      onTap: () => Navigator.of(context).pop()),
                   const SizedBox(width: 8),
-                  AppButton(
-                      label: 'Guardar regla',
-                      variant: AppButtonVariant.teal,
-                      size: AppButtonSize.sm,
-                      onPressed: _submit),
+                  _PrimaryButton(
+                      label: 'Guardar regla', onTap: _submit),
                 ],
               ),
             ],
