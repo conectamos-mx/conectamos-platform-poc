@@ -25,6 +25,12 @@ class AiWorkersApi {
     return Map<String, dynamic>.from(response.data);
   }
 
+  /// Workers contratados por el tenant (alias explícito de listWorkers).
+  static Future<List<Map<String, dynamic>>> listTenantWorkers() async {
+    final response = await ApiClient.instance.get('/workers');
+    return List<Map<String, dynamic>>.from(response.data);
+  }
+
   /// Actualizar nombre personalizado o estado activo de un tenant_worker.
   static Future<Map<String, dynamic>> updateWorker({
     required String tenantWorkerId,

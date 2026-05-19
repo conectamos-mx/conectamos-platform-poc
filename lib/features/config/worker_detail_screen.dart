@@ -46,7 +46,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
       _error = null;
     });
     try {
-      final workers = await AiWorkersApi.listWorkers();
+      final workers = await AiWorkersApi.listTenantWorkers();
       final worker = workers.firstWhere(
         (w) => (w['id'] as String?) == widget.workerId,
         orElse: () => <String, dynamic>{},
@@ -71,7 +71,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
       'Worker';
 
   Widget _buildAvatar() {
-    final avatarUrl = _worker?['icon_url'] as String?;
+    final avatarUrl = _worker?['catalog_icon_url'] as String?;
     if (avatarUrl != null) {
       return Image.network(
         avatarUrl,
