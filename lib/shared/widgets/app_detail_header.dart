@@ -2,12 +2,52 @@ import 'package:flutter/material.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/text_styles.dart';
 
+// ── Status pill interno ────────────────────────────────────────────────────────
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.label, required this.active});
+
+  final String label;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = active ? AppColors.ctOkBg : AppColors.ctSurface2;
+    final fg = active ? AppColors.ctOkText : AppColors.ctText2;
+    final dot = active ? AppColors.ctOk : AppColors.ctText3;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: AppTextStyles.formLabel.copyWith(color: fg),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── AppDetailHeader ────────────────────────────────────────────────────────────
+
 /// Cabecera canónica de pantalla de detalle (DS §2.10).
 ///
 /// PreferredSizeWidget — úsalo como appBar en Scaffold.
-/// Layout: fila de navegación (← back + acciones) / fila de identidad
-/// (avatar + título + subtítulo) / fila de chips opcionales / divider /
-/// bottom opcional (TabBar).
+/// Layout: fila horizontal única con back-button, identidad (avatar +
+/// título + subtítulo) y status pill / acciones opcionales + bottom slot.
 class AppDetailHeader extends StatelessWidget implements PreferredSizeWidget {
   const AppDetailHeader({
     super.key,
@@ -16,7 +56,8 @@ class AppDetailHeader extends StatelessWidget implements PreferredSizeWidget {
     required this.onBack,
     this.subtitle,
     this.avatar,
-    this.chips,
+    this.statusLabel,
+    this.statusActive,
     this.actions = const [],
     this.bottom,
   });
@@ -26,18 +67,16 @@ class AppDetailHeader extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onBack;
   final String? subtitle;
   final Widget? avatar;
-  final List<Widget>? chips;
+  final String? statusLabel;
+  final bool? statusActive;
   final List<Widget> actions;
   final PreferredSizeWidget? bottom;
 
-  bool get _hasChips => chips != null && chips!.isNotEmpty;
-
   @override
   Size get preferredSize {
-    double height = 52 + 56 + 1; // row1 + row2 + divider
-    if (_hasChips) height += 36;
-    if (bottom != null) height += bottom!.preferredSize.height;
-    return Size.fromHeight(height);
+    double h = 72;
+    if (bottom != null) h += bottom!.preferredSize.height;
+    return Size.fromHeight(h);
   }
 
   @override
@@ -45,93 +84,106 @@ class AppDetailHeader extends StatelessWidget implements PreferredSizeWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // ── Fila 1: navegación ─────────────────────────────────────────────
+        // ── Fila principal ───────────────────────────────────────────────
         Container(
-          height: 52,
           color: AppColors.ctSurface,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Row(
-            children: [
-              TextButton(
-                onPressed: onBack,
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(
-                  '← $backLabel',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.ctText2,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              for (int i = 0; i < actions.length; i++) ...[
-                actions[i],
-                if (i < actions.length - 1) const SizedBox(width: 8),
-              ],
-            ],
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+          decoration: const BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: AppColors.ctBorder, width: 1),
+            ),
           ),
-        ),
-        // ── Fila 2: identidad ──────────────────────────────────────────────
-        Container(
-          height: 56,
-          color: AppColors.ctSurface,
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              if (avatar != null) ...[
-                SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: ClipRRect(
+              // Back button
+              GestureDetector(
+                onTap: onBack,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: AppColors.ctSurface2,
+                    border: Border.all(color: AppColors.ctBorder, width: 1),
                     borderRadius: BorderRadius.circular(10),
-                    child: avatar,
+                  ),
+                  child: Text(
+                    '← $backLabel',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.ctText2,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
-              ],
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: AppTextStyles.pageTitle),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle!,
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.ctText2,
+              ),
+              const SizedBox(width: 16),
+              // Identidad — Expanded
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (avatar != null) ...[
+                      Container(
+                        width: 40,
+                        height: 40,
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: AppColors.ctTeal.withValues(alpha: 0.25),
+                            width: 2,
+                          ),
+                        ),
+                        child: avatar,
                       ),
+                      const SizedBox(width: 12),
+                    ],
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          style: AppTextStyles.cardTitle.copyWith(
+                            fontFamily: 'Onest',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.ctText,
+                          ),
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 1),
+                          Text(
+                            subtitle!,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.ctText3,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
-                ],
+                ),
               ),
+              // Derecha: actions y/o status pill
+              if (actions.isNotEmpty || statusLabel != null)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (int i = 0; i < actions.length; i++) ...[
+                      actions[i],
+                      const SizedBox(width: 8),
+                    ],
+                    if (statusLabel != null)
+                      _StatusPill(
+                        label: statusLabel!,
+                        active: statusActive ?? false,
+                      ),
+                  ],
+                ),
             ],
           ),
         ),
-        // ── Fila 3: chips (opcional) ───────────────────────────────────────
-        if (_hasChips)
-          Container(
-            height: 36,
-            color: AppColors.ctSurface,
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                for (int i = 0; i < chips!.length; i++) ...[
-                  chips![i],
-                  if (i < chips!.length - 1) const SizedBox(width: 6),
-                ],
-              ],
-            ),
-          ),
-        // ── Divider ────────────────────────────────────────────────────────
-        const Divider(height: 1, thickness: 1, color: AppColors.ctBorder),
-        // ── Bottom (TabBar opcional) ───────────────────────────────────────
+        // ── Bottom (TabBar opcional) ─────────────────────────────────────
         ?bottom,
       ],
     );

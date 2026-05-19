@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/ai_workers_api.dart';
 import '../../core/theme/app_theme.dart';
-import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_header.dart';
 import '../../shared/widgets/app_loading_state.dart';
@@ -73,64 +72,47 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
 
   Widget _buildAvatar() {
     final avatarUrl = _worker?['avatar_url'] as String?;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: avatarUrl != null
-          ? Image.network(avatarUrl, width: 40, height: 40, fit: BoxFit.cover)
-          : Container(
-              width: 40,
-              height: 40,
-              color: AppColors.ctSurface2,
-              child: const Icon(
-                Icons.smart_toy_rounded,
-                size: 22,
-                color: AppColors.ctText2,
-              ),
-            ),
-    );
+    if (avatarUrl != null) {
+      return Image.network(avatarUrl, fit: BoxFit.cover, width: 40, height: 40);
+    }
+    return const Icon(Icons.smart_toy_rounded, size: 22, color: AppColors.ctText2);
   }
 
-  AppDetailHeader _buildHeader() {
-    final tabBar = TabBar(
-      controller: _tabCtrl,
-      labelColor: AppColors.ctTeal,
-      unselectedLabelColor: AppColors.ctText2,
-      indicatorColor: AppColors.ctTeal,
-      indicatorWeight: 2,
-      labelStyle: AppTextStyles.formLabel,
-      unselectedLabelStyle: AppTextStyles.navItem,
-      tabs: const [
-        Tab(text: 'Flujos'),
-        Tab(text: 'Canales'),
-      ],
-    );
+  TabBar get _tabBar => TabBar(
+        controller: _tabCtrl,
+        labelColor: AppColors.ctTeal,
+        unselectedLabelColor: AppColors.ctText2,
+        indicatorColor: AppColors.ctTeal,
+        indicatorWeight: 2,
+        labelStyle: AppTextStyles.formLabel,
+        unselectedLabelStyle: AppTextStyles.navItem,
+        tabs: const [
+          Tab(text: 'Flujos'),
+          Tab(text: 'Canales'),
+        ],
+      );
 
+  AppDetailHeader _buildHeader() {
     if (_loading) {
       return AppDetailHeader(
         title: '',
-        backLabel: 'Workers',
+        backLabel: 'Mis Workers',
         onBack: () => context.go('/workers'),
-        bottom: tabBar,
+        bottom: _tabBar,
       );
     }
 
     final isActive = _worker?['is_active'] == true;
-    final catalogName = _worker?['catalog_name'] as String?;
 
     return AppDetailHeader(
       title: _workerName,
-      backLabel: 'Workers',
+      backLabel: 'Mis Workers',
       onBack: () => context.go('/workers'),
-      subtitle: catalogName,
+      subtitle: _worker?['catalog_name'] as String?,
       avatar: _buildAvatar(),
-      chips: [
-        AppBadge(
-          label: isActive ? 'Activo' : 'Inactivo',
-          variant: isActive ? AppBadgeVariant.ok : AppBadgeVariant.neutral,
-          dot: true,
-        ),
-      ],
-      bottom: tabBar,
+      statusLabel: isActive ? 'Activo' : 'Inactivo',
+      statusActive: isActive,
+      bottom: _tabBar,
     );
   }
 
