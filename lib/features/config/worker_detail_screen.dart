@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/ai_workers_api.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_detail_header.dart';
+import '../../shared/widgets/app_loading_state.dart';
 import 'channels_screen.dart';
 import 'workflows_screen.dart';
 
@@ -68,42 +71,66 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
       _worker?['catalog_name'] as String? ??
       'Worker';
 
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: AppColors.ctSurface,
-      elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: AppColors.ctText),
-        onPressed: () => context.go('/workers'),
-      ),
-      title: _loading
-          ? const SizedBox(
-              width: 120,
-              height: 12,
-              child: LinearProgressIndicator(
-                backgroundColor: AppColors.ctBorder,
-                color: AppColors.ctTeal,
-              ),
-            )
-          : Text(
-              _workerName,
-              style: AppTextStyles.pageTitle.copyWith(
-                fontFamily: 'Geist',
-                fontWeight: FontWeight.w600,
+  Widget _buildAvatar() {
+    final avatarUrl = _worker?['avatar_url'] as String?;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: avatarUrl != null
+          ? Image.network(avatarUrl, width: 40, height: 40, fit: BoxFit.cover)
+          : Container(
+              width: 40,
+              height: 40,
+              color: AppColors.ctSurface2,
+              child: const Icon(
+                Icons.smart_toy_rounded,
+                size: 22,
+                color: AppColors.ctText2,
               ),
             ),
-      bottom: TabBar(
-        controller: _tabCtrl,
-        labelColor: AppColors.ctTeal,
-        unselectedLabelColor: AppColors.ctText2,
-        indicatorColor: AppColors.ctTeal,
-        labelStyle: AppTextStyles.formLabel,
-        unselectedLabelStyle: AppTextStyles.navItem,
-        tabs: const [
-          Tab(text: 'FLUJOS'),
-          Tab(text: 'CANALES'),
-        ],
-      ),
+    );
+  }
+
+  AppDetailHeader _buildHeader() {
+    final tabBar = TabBar(
+      controller: _tabCtrl,
+      labelColor: AppColors.ctTeal,
+      unselectedLabelColor: AppColors.ctText2,
+      indicatorColor: AppColors.ctTeal,
+      indicatorWeight: 2,
+      labelStyle: AppTextStyles.formLabel,
+      unselectedLabelStyle: AppTextStyles.navItem,
+      tabs: const [
+        Tab(text: 'Flujos'),
+        Tab(text: 'Canales'),
+      ],
+    );
+
+    if (_loading) {
+      return AppDetailHeader(
+        title: '',
+        backLabel: 'Workers',
+        onBack: () => context.go('/workers'),
+        bottom: tabBar,
+      );
+    }
+
+    final isActive = _worker?['is_active'] == true;
+    final catalogName = _worker?['catalog_name'] as String?;
+
+    return AppDetailHeader(
+      title: _workerName,
+      backLabel: 'Workers',
+      onBack: () => context.go('/workers'),
+      subtitle: catalogName,
+      avatar: _buildAvatar(),
+      chips: [
+        AppBadge(
+          label: isActive ? 'Activo' : 'Inactivo',
+          variant: isActive ? AppBadgeVariant.ok : AppBadgeVariant.neutral,
+          dot: true,
+        ),
+      ],
+      bottom: tabBar,
     );
   }
 
@@ -112,7 +139,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
     if (_error != null) {
       return Scaffold(
         backgroundColor: AppColors.ctBg,
-        appBar: _buildAppBar(),
+        appBar: _buildHeader(),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -136,9 +163,17 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
       );
     }
 
+    if (_loading) {
+      return Scaffold(
+        backgroundColor: AppColors.ctBg,
+        appBar: _buildHeader(),
+        body: const AppLoadingState(),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.ctBg,
-      appBar: _buildAppBar(),
+      appBar: _buildHeader(),
       body: TabBarView(
         controller: _tabCtrl,
         children: [
