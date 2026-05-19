@@ -47,7 +47,7 @@ class _StatusPill extends StatelessWidget {
 ///
 /// PreferredSizeWidget — úsalo como appBar en Scaffold.
 /// Layout: fila horizontal única con back-button, identidad (avatar +
-/// título + subtítulo) y status pill / acciones opcionales + bottom slot.
+/// título + subtítulo + chips opcionales) y status pill / acciones + bottom slot.
 class AppDetailHeader extends StatelessWidget implements PreferredSizeWidget {
   const AppDetailHeader({
     super.key,
@@ -56,6 +56,7 @@ class AppDetailHeader extends StatelessWidget implements PreferredSizeWidget {
     required this.onBack,
     this.subtitle,
     this.avatar,
+    this.chips,
     this.statusLabel,
     this.statusActive,
     this.actions = const [],
@@ -67,14 +68,18 @@ class AppDetailHeader extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onBack;
   final String? subtitle;
   final Widget? avatar;
+  final List<Widget>? chips;
   final String? statusLabel;
   final bool? statusActive;
   final List<Widget> actions;
   final PreferredSizeWidget? bottom;
 
+  bool get _hasChips => chips != null && chips!.isNotEmpty;
+
   @override
   Size get preferredSize {
-    double h = 72;
+    double h = 80;
+    if (_hasChips) h += 28;
     if (bottom != null) h += bottom!.preferredSize.height;
     return Size.fromHeight(h);
   }
@@ -86,7 +91,7 @@ class AppDetailHeader extends StatelessWidget implements PreferredSizeWidget {
       children: [
         // ── Fila principal ───────────────────────────────────────────────
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
           decoration: const BoxDecoration(
             color: AppColors.ctSurface,
             border: Border(
@@ -157,6 +162,19 @@ class AppDetailHeader extends StatelessWidget implements PreferredSizeWidget {
                             style: AppTextStyles.bodySmall.copyWith(
                               color: AppColors.ctText3,
                             ),
+                          ),
+                        ],
+                        if (_hasChips) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (int i = 0; i < chips!.length; i++) ...[
+                                chips![i],
+                                if (i < chips!.length - 1)
+                                  const SizedBox(width: 6),
+                              ],
+                            ],
                           ),
                         ],
                       ],

@@ -78,18 +78,32 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
     return const Icon(Icons.smart_toy_rounded, size: 22, color: AppColors.ctText2);
   }
 
-  TabBar get _tabBar => TabBar(
-        controller: _tabCtrl,
-        labelColor: AppColors.ctTeal,
-        unselectedLabelColor: AppColors.ctText2,
-        indicatorColor: AppColors.ctTeal,
-        indicatorWeight: 2,
-        labelStyle: AppTextStyles.formLabel,
-        unselectedLabelStyle: AppTextStyles.navItem,
-        tabs: const [
-          Tab(text: 'Flujos'),
-          Tab(text: 'Canales'),
-        ],
+  PreferredSize get _tabBar => PreferredSize(
+        preferredSize: const Size.fromHeight(44),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: AppColors.ctSurface,
+            border: Border(
+              bottom: BorderSide(color: AppColors.ctBorder, width: 1),
+            ),
+          ),
+          child: TabBar(
+            controller: _tabCtrl,
+            isScrollable: true,
+            labelColor: AppColors.ctTeal,
+            unselectedLabelColor: AppColors.ctText2,
+            indicatorColor: AppColors.ctTeal,
+            indicatorWeight: 2,
+            dividerColor: Colors.transparent,
+            labelStyle: AppTextStyles.formLabel,
+            unselectedLabelStyle: AppTextStyles.navItem,
+            tabAlignment: TabAlignment.start,
+            tabs: const [
+              Tab(text: 'Flujos'),
+              Tab(text: 'Canales'),
+            ],
+          ),
+        ),
       );
 
   AppDetailHeader _buildHeader() {
