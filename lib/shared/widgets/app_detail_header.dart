@@ -109,20 +109,23 @@ class AppDetailHeader extends StatelessWidget implements PreferredSizeWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Back button
-              GestureDetector(
-                onTap: onBack,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: AppColors.ctSurface2,
-                    border: Border.all(color: AppColors.ctBorder, width: 1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '← $backLabel',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.ctText2,
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: onBack,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: AppColors.ctSurface2,
+                      border: Border.all(color: AppColors.ctBorder, width: 1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '← $backLabel',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.ctText2,
+                      ),
                     ),
                   ),
                 ),
