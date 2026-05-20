@@ -14,6 +14,7 @@ import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/identity_config.dart';
+import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_header.dart';
 import 'widgets/operator_form_dialog.dart';
@@ -47,8 +48,6 @@ String _fmtDate(String? iso) {
       return (label: 'Sin inicio', bg: AppColors.ctSurface2, fg: AppColors.ctText2);
   }
 }
-
-enum _MenuAction { edit, suspend, reactivate, delete }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -297,62 +296,28 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
             : const Icon(Icons.person_rounded, size: 22, color: AppColors.ctText2),
         statusLabel: _statusStyle(status).label,
         statusActive: status == 'active',
-        actions: canManage
-            ? [
-                PopupMenuButton<_MenuAction>(
-                  icon: const Icon(Icons.more_vert, color: AppColors.ctText),
-                  color: AppColors.ctSurface,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                  onSelected: (action) async {
-                    switch (action) {
-                      case _MenuAction.edit:
-                        await _openEdit();
-                      case _MenuAction.suspend:
-                        await _patchStatus('suspended');
-                      case _MenuAction.reactivate:
-                        await _patchStatus('active');
-                      case _MenuAction.delete:
-                        await _delete();
-                    }
-                  },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(
-                      value: _MenuAction.edit,
-                      child: _MenuItem(
-                          icon: Icons.edit_outlined, label: 'Editar'),
-                    ),
-                    if (status == 'active' || status == 'incident')
-                      const PopupMenuItem(
-                        value: _MenuAction.suspend,
-                        child: _MenuItem(
-                          icon: Icons.pause_circle_outline,
-                          label: 'Suspender',
-                          danger: true,
-                        ),
-                      )
-                    else
-                      const PopupMenuItem(
-                        value: _MenuAction.reactivate,
-                        child: _MenuItem(
-                          icon: Icons.play_circle_outline,
-                          label: 'Reactivar',
-                          success: true,
-                        ),
-                      ),
-                    const PopupMenuDivider(),
-                    const PopupMenuItem(
-                      value: _MenuAction.delete,
-                      child: _MenuItem(
-                        icon: Icons.delete_outline,
-                        label: 'Eliminar',
-                        danger: true,
-                      ),
-                    ),
-                  ],
-                ),
-              ]
-            : [],
+        actions: [
+          if (canManage) ...[
+            AppActionButton(
+              variant: AppActionVariant.edit,
+              onPressed: _openEdit,
+            ),
+            if (status == 'active' || status == 'incident')
+              AppActionButton(
+                variant: AppActionVariant.suspend,
+                onPressed: () => _patchStatus('suspended'),
+              )
+            else
+              AppActionButton(
+                variant: AppActionVariant.reactivate,
+                onPressed: () => _patchStatus('active'),
+              ),
+            AppActionButton(
+              variant: AppActionVariant.delete,
+              onPressed: _delete,
+            ),
+          ],
+        ],
         bottom: _tabBar,
       ),
       body: Column(
@@ -1530,36 +1495,6 @@ class _ConfirmDialog extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   color: confirmColor)),
         ),
-      ],
-    );
-  }
-}
-
-class _MenuItem extends StatelessWidget {
-  const _MenuItem({
-    required this.icon,
-    required this.label,
-    this.danger = false,
-    this.success = false,
-  });
-  final IconData icon;
-  final String label;
-  final bool danger;
-  final bool success;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = danger
-        ? AppColors.ctDanger
-        : success
-            ? AppColors.ctOk
-            : AppColors.ctText;
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 10),
-        Text(label,
-            style: AppTextStyles.body.copyWith(fontSize: 14, color: color)),
       ],
     );
   }
