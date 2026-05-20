@@ -351,7 +351,7 @@ class _WorkerCardState extends State<_WorkerCard> {
             children: [
               // Row 1 — Avatar + nombre + badges
               Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(24),
@@ -385,35 +385,31 @@ class _WorkerCardState extends State<_WorkerCard> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            _TypeBadge(
-                              label: typeEntry.label,
-                              bg: typeEntry.bg,
-                              fg: typeEntry.fg,
-                            ),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: isActive
-                                    ? AppColors.ctOkBg
-                                    : AppColors.ctSurface2,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                isActive ? 'Activo' : 'Inactivo',
-                                style: AppTextStyles.badge.copyWith(
-                                  color: isActive
-                                      ? AppColors.ctOkText
-                                      : AppColors.ctText2,
-                                ),
-                              ),
-                            ),
-                          ],
+                        _TypeBadge(
+                          label: typeEntry.label,
+                          bg: typeEntry.bg,
+                          fg: typeEntry.fg,
                         ),
                       ],
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? AppColors.ctOkBg
+                          : AppColors.ctSurface2,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      isActive ? 'Activo' : 'Inactivo',
+                      style: AppTextStyles.badge.copyWith(
+                        color: isActive
+                            ? AppColors.ctOkText
+                            : AppColors.ctText2,
+                      ),
                     ),
                   ),
                 ],
@@ -423,7 +419,7 @@ class _WorkerCardState extends State<_WorkerCard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _KpiCell(value: runningNow.toString(), label: 'Activos'),
+                  _KpiCell(value: runningNow.toString(), label: 'Ejecuciones'),
                   _KpiCell(value: channelCount.toString(), label: 'Canales'),
                   _KpiCell(value: flowCount.toString(), label: 'Flujos'),
                 ],
