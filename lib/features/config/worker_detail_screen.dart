@@ -1237,27 +1237,29 @@ class _SkillsCard extends StatelessWidget {
               Text('Sin habilidades definidas',
                   style: AppTextStyles.navItem.copyWith(color: AppColors.ctText3))
             else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final skill in skills)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: AppColors.ctTeal.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: AppColors.ctTeal.withValues(alpha: 0.25)),
+              Column(
+                children: skills.map((skill) => Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.ctBg,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: AppColors.ctTeal,
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                      child: Text(
-                        skill,
-                        style: AppTextStyles.formLabel
-                            .copyWith(color: AppColors.ctTeal),
-                      ),
-                    ),
-                ],
+                      const SizedBox(width: 10),
+                      Text(skill, style: AppTextStyles.body.copyWith(color: AppColors.ctText)),
+                    ],
+                  ),
+                )).toList(),
               ),
           ],
         ),
