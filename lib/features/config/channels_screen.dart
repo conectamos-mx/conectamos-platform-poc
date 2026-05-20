@@ -61,9 +61,15 @@ String _dioError(Object e) {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class ChannelsScreen extends ConsumerStatefulWidget {
-  const ChannelsScreen({super.key, this.tenantWorkerId, this.onChannelSelected});
+  const ChannelsScreen({
+    super.key,
+    this.tenantWorkerId,
+    this.onChannelSelected,
+    this.onActiveCountChanged,
+  });
   final String? tenantWorkerId;
   final ValueChanged<String>? onChannelSelected;
+  final ValueChanged<int>? onActiveCountChanged;
 
   @override
   ConsumerState<ChannelsScreen> createState() => _ChannelsScreenState();
@@ -91,17 +97,21 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
       ]);
       if (!mounted) return;
       final allChannels = results[0];
+      final filtered = widget.tenantWorkerId != null
+          ? allChannels
+              .where((c) =>
+                  (c['tenant_worker_id'] as String?) ==
+                  widget.tenantWorkerId)
+              .toList()
+          : allChannels;
+      final activeCount =
+          filtered.where((c) => c['is_active'] as bool? ?? false).length;
       setState(() {
-        _channels  = widget.tenantWorkerId != null
-            ? allChannels
-                .where((c) =>
-                    (c['tenant_worker_id'] as String?) ==
-                    widget.tenantWorkerId)
-                .toList()
-            : allChannels;
-        _workers   = results[1];
-        _loading   = false;
+        _channels = filtered;
+        _workers  = results[1];
+        _loading  = false;
       });
+      widget.onActiveCountChanged?.call(activeCount);
     } catch (e) {
       if (!mounted) return;
       setState(() { _loading = false; _error = _dioError(e); });
@@ -337,28 +347,7 @@ class _ChannelCardState extends State<_ChannelCard> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Logo real 40x40
-              channelType == 'whatsapp'
-                  ? Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                          color: const Color(0xFF25D366),
-                          borderRadius: BorderRadius.circular(16)),
-                      padding: const EdgeInsets.all(6),
-                      child: SvgPicture.asset('assets/logos/whatsapp.svg',
-                          colorFilter: const ColorFilter.mode(
-                              Colors.white, BlendMode.srcIn)),
-                    )
-                  : Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                          color: AppColors.ctTg,
-                          borderRadius: BorderRadius.circular(16)),
-                      padding: const EdgeInsets.all(6),
-                      child: Image.asset('assets/logos/telegram.png'),
-                    ),
+              _ChannelLogo(channelType: channelType),
               const SizedBox(width: 14),
               // Nombre + badge tipo + identifier + icono copiar
               Expanded(
@@ -447,6 +436,42 @@ class _ChannelCardState extends State<_ChannelCard> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Channel logo ──────────────────────────────────────────────────────────────
+
+class _ChannelLogo extends StatelessWidget {
+  const _ChannelLogo({required this.channelType});
+  final String channelType;
+
+  @override
+  Widget build(BuildContext context) {
+    if (channelType == 'whatsapp') {
+      return Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: AppColors.ctWa,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        padding: const EdgeInsets.all(6),
+        child: SvgPicture.asset(
+          'assets/logos/whatsapp.svg',
+          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+        ),
+      );
+    }
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: AppColors.ctTg,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      padding: const EdgeInsets.all(6),
+      child: Image.asset('assets/logos/telegram.png'),
     );
   }
 }

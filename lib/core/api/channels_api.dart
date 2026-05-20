@@ -85,8 +85,14 @@ class ChannelsApi {
     return Map<String, dynamic>.from(response.data);
   }
 
-  static Future<void> deleteChannel({required String channelId}) async {
-    await ApiClient.instance.delete('/channels/$channelId');
+  static Future<Map<String, dynamic>> deleteChannel({
+    required String tenantWorkerId,
+    required String channelId,
+  }) async {
+    final resp = await ApiClient.instance.delete(
+      '/workers/$tenantWorkerId/channels/$channelId',
+    );
+    return resp.data as Map<String, dynamic>;
   }
 
   static Future<void> verifyCredentials({

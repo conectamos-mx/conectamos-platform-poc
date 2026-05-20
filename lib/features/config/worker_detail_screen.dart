@@ -64,6 +64,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
   bool _loading = true;
   String? _error;
   String? _selectedChannelId;
+  int _activeChannelCount = 0;
 
   @override
   void initState() {
@@ -233,10 +234,45 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
                   channelId: _selectedChannelId!,
                   onBack: () => setState(() => _selectedChannelId = null),
                 )
-              : ChannelsScreen(
-                  tenantWorkerId: widget.workerId,
-                  onChannelSelected: (id) =>
-                      setState(() => _selectedChannelId = id),
+              : Column(
+                  children: [
+                    if (_activeChannelCount == 0)
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.ctWarnBg,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppColors.ctWarnText.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded,
+                                color: AppColors.ctWarnText, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Este worker no tiene canales activos — los operadores no pueden recibir ni enviar mensajes.',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.ctWarnText),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Expanded(
+                      child: ChannelsScreen(
+                        tenantWorkerId: widget.workerId,
+                        onChannelSelected: (id) =>
+                            setState(() => _selectedChannelId = id),
+                        onActiveCountChanged: (count) =>
+                            setState(() => _activeChannelCount = count),
+                      ),
+                    ),
+                  ],
                 ),
           WorkflowsScreen(tenantWorkerId: widget.workerId),
         ],

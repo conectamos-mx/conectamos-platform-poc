@@ -1,12 +1,15 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/api/ai_workers_api.dart';
 import '../../core/api/channels_api.dart';
 import '../../core/api/operators_api.dart';
 import '../../core/api/templates_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
 import 'template_create_dialog.dart';
 
@@ -71,9 +74,10 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
   Map<String, dynamic>? _channel;
   List<Map<String, dynamic>> _workers   = [];
   List<Map<String, dynamic>> _operators = [];
-  bool    _loading = true;
+  bool    _loading  = true;
   String? _error;
   bool    _toggling = false;
+  bool    _deleting = false;
   String  _tenantId = '';
 
   TabController? _tabCtrl;
@@ -153,6 +157,32 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
     }
   }
 
+  Future<void> _deleteChannel() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _DeleteChannelDialog(
+        channelName: _channel!['display_name'] as String? ?? '',
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _deleting = true);
+    try {
+      await ChannelsApi.deleteChannel(
+        tenantWorkerId: _channel!['tenant_worker_id'] as String,
+        channelId: widget.channelId,
+      );
+      if (!mounted) return;
+      widget.onBack();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_dioError(e)),
+        backgroundColor: AppColors.ctDanger,
+      ));
+    }
+  }
+
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -193,77 +223,85 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
     final isActive = ch['is_active'] as bool? ?? true;
     final tabs = _isWhatsApp ? _kTemplateTabs : _kInfoOnlyTabs;
 
-    return Column(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── Header band ──
-        _ChannelDetailHeader(
+        // ── Zona izquierda — side panel fijo ──
+        _ChannelSidePanel(
           channel: ch,
           isActive: isActive,
           toggling: _toggling,
+          deleting: _deleting,
           onBack: widget.onBack,
           onToggle: _toggleActive,
+          onDelete: _deleteChannel,
         ),
-
-        // ── Tab bar ──
-        Container(
-          color: AppColors.ctSurface,
+        // ── Divisor vertical ──
+        Container(width: 1, color: AppColors.ctBorder),
+        // ── Zona derecha — tabs ──
+        Expanded(
           child: Column(
             children: [
-              const Divider(height: 1, color: AppColors.ctBorder),
-              TabBar(
-                controller: _tabCtrl,
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                labelStyle: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
-                unselectedLabelStyle: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
-                labelColor: AppColors.ctTeal,
-                unselectedLabelColor: AppColors.ctText2,
-                indicatorColor: AppColors.ctTeal,
-                indicatorWeight: 2,
-                tabs: [for (final t in tabs) Tab(text: t)],
+              Container(
+                color: AppColors.ctSurface,
+                child: Column(
+                  children: [
+                    const Divider(height: 1, color: AppColors.ctBorder),
+                    TabBar(
+                      controller: _tabCtrl,
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
+                      labelStyle: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+                      unselectedLabelStyle: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+                      labelColor: AppColors.ctTeal,
+                      unselectedLabelColor: AppColors.ctText2,
+                      indicatorColor: AppColors.ctTeal,
+                      indicatorWeight: 2,
+                      tabs: [for (final t in tabs) Tab(text: t)],
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-        ),
-
-        // ── Tab views ──
-        Expanded(
-          child: TabBarView(
-            controller: _tabCtrl,
-            children: [
-              _InfoTab(
-                channel: _channel!,
-                workers: _workers,
-                operators: _operators,
-                onUpdated: (updated) {
-                  if (mounted) setState(() => _channel = updated);
-                },
-                onError: _showError,
-                onSuccess: _showSuccess,
+              Expanded(
+                child: TabBarView(
+                  controller: _tabCtrl,
+                  children: [
+                    _InfoTab(
+                      channel: _channel!,
+                      workers: _workers,
+                      operators: _operators,
+                      onUpdated: (updated) {
+                        if (mounted) setState(() => _channel = updated);
+                      },
+                      onError: _showError,
+                      onSuccess: _showSuccess,
+                    ),
+                    if (_isWhatsApp) ...[
+                      _CredentialsTab(
+                        channel: _channel!,
+                        tenantId: _tenantId,
+                        onUpdated: (updated) {
+                          if (mounted) setState(() => _channel = updated);
+                        },
+                        onError: _showError,
+                        onSuccess: _showSuccess,
+                      ),
+                      _TemplatesTab(
+                        channelId: widget.channelId,
+                        tenantId: _tenantId,
+                        onError: _showError,
+                        onSuccess: _showSuccess,
+                      ),
+                      _WelcomeTab(
+                        channel: _channel!,
+                        tenantId: _tenantId,
+                        onError: _showError,
+                        onSuccess: _showSuccess,
+                      ),
+                    ],
+                  ],
+                ),
               ),
-              if (_isWhatsApp) ...[
-                _CredentialsTab(
-                  channel: _channel!,
-                  tenantId: _tenantId,
-                  onUpdated: (updated) {
-                    if (mounted) setState(() => _channel = updated);
-                  },
-                  onError: _showError,
-                  onSuccess: _showSuccess,
-                ),
-                _TemplatesTab(
-                  channelId: widget.channelId,
-                  tenantId: _tenantId,
-                  onError: _showError,
-                  onSuccess: _showSuccess,
-                ),
-                _WelcomeTab(
-                  channel: _channel!,
-                  tenantId: _tenantId,
-                  onError: _showError,
-                  onSuccess: _showSuccess,
-                ),
-              ],
             ],
           ),
         ),
@@ -272,88 +310,299 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
   }
 }
 
-// ── Header del panel ──────────────────────────────────────────────────────────
+// ── Channel logo ──────────────────────────────────────────────────────────────
 
-class _ChannelDetailHeader extends StatelessWidget {
-  const _ChannelDetailHeader({
+class _ChannelLogo extends StatelessWidget {
+  const _ChannelLogo({required this.channelType, this.size = 40});
+  final String channelType;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    if (channelType == 'whatsapp') {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: AppColors.ctWa,
+          borderRadius: BorderRadius.circular(size * 0.35),
+        ),
+        padding: EdgeInsets.all(size * 0.15),
+        child: SvgPicture.asset(
+          'assets/logos/whatsapp.svg',
+          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+        ),
+      );
+    }
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.ctTg,
+        borderRadius: BorderRadius.circular(size * 0.35),
+      ),
+      padding: EdgeInsets.all(size * 0.15),
+      child: Image.asset('assets/logos/telegram.png'),
+    );
+  }
+}
+
+// ── Side panel ────────────────────────────────────────────────────────────────
+
+class _ChannelSidePanel extends StatelessWidget {
+  const _ChannelSidePanel({
     required this.channel,
     required this.isActive,
     required this.toggling,
+    required this.deleting,
     required this.onBack,
     required this.onToggle,
+    required this.onDelete,
   });
   final Map<String, dynamic> channel;
   final bool isActive;
   final bool toggling;
+  final bool deleting;
   final VoidCallback onBack;
   final VoidCallback onToggle;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
+    final channelType = channel['channel_type'] as String? ?? 'whatsapp';
+    final name = channel['display_name'] as String? ?? '';
+    final credentials =
+        (channel['channel_config'] as Map<String, dynamic>?)?['credentials']
+            as Map<String, dynamic>? ??
+        {};
+    final rawPhone = credentials['display_phone_number'] as String? ??
+        credentials['phone_number_id'] as String? ??
+        '';
+    final rawHandle = credentials['bot_username'] as String? ?? '';
+    final identifier = channelType == 'whatsapp'
+        ? rawPhone
+        : (rawHandle.isNotEmpty ? '@$rawHandle' : '');
+    final inviteUrl = channelType == 'whatsapp' && rawPhone.isNotEmpty
+        ? 'https://wa.me/${rawPhone.replaceAll('+', '').replaceAll(' ', '').replaceAll('-', '')}'
+        : (rawHandle.isNotEmpty
+            ? 'https://t.me/${rawHandle.replaceAll('@', '')}'
+            : '');
+
     return Container(
-      color: AppColors.ctSurface,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
+      width: 220,
+      color: AppColors.ctSurface2,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, size: 18, color: AppColors.ctText2),
+          AppButton(
+            label: '← Volver a canales',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
             onPressed: onBack,
-            tooltip: 'Volver',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
-          const SizedBox(width: 8),
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: _hexColor(channel['color'] as String?),
-              shape: BoxShape.circle,
+          const SizedBox(height: 20),
+
+          Center(child: _ChannelLogo(channelType: channelType, size: 64)),
+          const SizedBox(height: 12),
+
+          Center(
+            child: Text(
+              name,
+              style: AppTextStyles.cardTitle,
+              textAlign: TextAlign.center,
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  channel['display_name'] as String? ?? '',
-                  style: AppTextStyles.body.copyWith(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    _TypeChip(channel['channel_type'] as String? ?? ''),
-                    const SizedBox(width: 6),
-                    _StatusChip(isActive),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          toggling
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : isActive
-                  ? AppButton(
-                      label: 'Desactivar',
-                      onPressed: onToggle,
-                      variant: AppButtonVariant.danger,
-                      size: AppButtonSize.sm,
+          const SizedBox(height: 6),
+
+          Center(child: _TypeChip(channelType)),
+          const SizedBox(height: 20),
+
+          const Divider(color: AppColors.ctBorder, height: 1),
+          const SizedBox(height: 16),
+
+          Text('ESTADO', style: AppTextStyles.kpiLabel),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              AppBadge(
+                label: isActive ? 'Activo' : 'Inactivo',
+                variant:
+                    isActive ? AppBadgeVariant.ok : AppBadgeVariant.neutral,
+              ),
+              const Spacer(),
+              toggling
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.ctTeal),
                     )
-                  : AppButton(
-                      label: 'Activar',
-                      onPressed: onToggle,
-                      variant: AppButtonVariant.outline,
-                      size: AppButtonSize.sm,
+                  : Switch(
+                      value: isActive,
+                      onChanged: (_) => onToggle(),
+                      activeColor: AppColors.ctTeal,
+                      activeTrackColor: AppColors.ctTealLight,
                     ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          if (identifier.isNotEmpty) ...[
+            Text('IDENTIFICADOR', style: AppTextStyles.kpiLabel),
+            const SizedBox(height: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.ctSurface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.ctBorder),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child:
+                        Text(identifier, style: AppTextStyles.bodySmall),
+                  ),
+                  if (inviteUrl.isNotEmpty)
+                    GestureDetector(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: inviteUrl));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('URL copiada'),
+                            duration: Duration(seconds: 2),
+                            backgroundColor: AppColors.ctOk,
+                          ),
+                        );
+                      },
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: Icon(
+                          Icons.link_rounded,
+                          size: 14,
+                          color: AppColors.ctText3,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          const Spacer(),
+
+          AppButton(
+            label: deleting ? 'Eliminando...' : 'Eliminar canal',
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.sm,
+            expand: true,
+            isDisabled: deleting,
+            onPressed: onDelete,
+          ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Delete dialog ─────────────────────────────────────────────────────────────
+
+class _DeleteChannelDialog extends StatefulWidget {
+  const _DeleteChannelDialog({required this.channelName});
+  final String channelName;
+
+  @override
+  State<_DeleteChannelDialog> createState() => _DeleteChannelDialogState();
+}
+
+class _DeleteChannelDialogState extends State<_DeleteChannelDialog> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController();
+    _ctrl.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canConfirm = _ctrl.text.trim() == widget.channelName;
+    return Dialog(
+      backgroundColor: AppColors.ctSurface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Eliminar canal', style: AppTextStyles.cardTitle),
+              const SizedBox(height: 8),
+              Text(
+                'Esta acción es irreversible. Escribe el nombre del canal para confirmar:',
+                style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _ctrl,
+                autofocus: true,
+                style: AppTextStyles.body,
+                decoration: InputDecoration(
+                  hintText: widget.channelName,
+                  hintStyle:
+                      AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.ctBorder),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.ctBorder),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide:
+                        const BorderSide(color: AppColors.ctTeal),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  AppButton(
+                    label: 'Cancelar',
+                    variant: AppButtonVariant.outline,
+                    size: AppButtonSize.sm,
+                    onPressed: () => Navigator.of(context).pop(false),
+                  ),
+                  const SizedBox(width: 8),
+                  AppButton(
+                    label: 'Eliminar',
+                    variant: AppButtonVariant.danger,
+                    size: AppButtonSize.sm,
+                    isDisabled: !canConfirm,
+                    onPressed: () => Navigator.of(context).pop(true),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1473,26 +1722,6 @@ class _TypeChip extends StatelessWidget {
       child: Text(
         cfg.label,
         style: AppTextStyles.badge.copyWith(color: cfg.fg),
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip(this.isActive);
-  final bool isActive;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: isActive ? AppColors.ctOkBg : AppColors.ctSurface2,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        isActive ? 'Activo' : 'Inactivo',
-        style: AppTextStyles.badge.copyWith(color: isActive ? AppColors.ctOkText : AppColors.ctText2),
       ),
     );
   }
