@@ -328,6 +328,7 @@ class _WorkerCardState extends State<_WorkerCard> {
     final runningNow  = w['running_now'] as int? ?? 0;
     final channelCount = w['channel_count'] as int? ?? 0;
     final createdAt   = w['created_at'] as String?;
+    final workerColor = _hexColor(colorHex);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -337,7 +338,6 @@ class _WorkerCardState extends State<_WorkerCard> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: AppColors.ctSurface,
             borderRadius: BorderRadius.circular(12),
@@ -349,28 +349,55 @@ class _WorkerCardState extends State<_WorkerCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Línea superior coloreada
+              Container(
+                height: 4,
+                decoration: BoxDecoration(
+                  color: workerColor,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
               // Row 1 — Avatar + nombre + badges
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: iconUrl != null
-                          ? Image.network(
-                              iconUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context2, err, stack) => _InitialAvatar(
-                                color: _hexColor(colorHex),
-                                initials: _initials(displayName),
-                              ),
-                            )
-                          : _InitialAvatar(
-                              color: _hexColor(colorHex),
-                              initials: _initials(displayName),
-                            ),
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: workerColor, width: 2),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: iconUrl != null
+                              ? Image.network(
+                                  iconUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context2, err, stack) => _InitialAvatar(
+                                    color: workerColor,
+                                    initials: _initials(displayName),
+                                  ),
+                                )
+                              : _InitialAvatar(
+                                  color: workerColor,
+                                  initials: _initials(displayName),
+                                ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -417,11 +444,12 @@ class _WorkerCardState extends State<_WorkerCard> {
               const SizedBox(height: 16),
               // Row 2 — KPIs
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _KpiCell(value: runningNow.toString(), label: 'Ejecuciones'),
-                  _KpiCell(value: channelCount.toString(), label: 'Canales'),
-                  _KpiCell(value: flowCount.toString(), label: 'Flujos'),
+                  Expanded(child: _KpiCell(value: runningNow.toString(), label: 'Ejecuciones', valueColor: workerColor)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _KpiCell(value: channelCount.toString(), label: 'Canales', valueColor: workerColor)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _KpiCell(value: flowCount.toString(), label: 'Flujos', valueColor: workerColor)),
                 ],
               ),
               const SizedBox(height: 16),
@@ -445,6 +473,9 @@ class _WorkerCardState extends State<_WorkerCard> {
                     ),
                   ),
                 ],
+              ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -481,22 +512,30 @@ class _InitialAvatar extends StatelessWidget {
 // ── KPI cell ──────────────────────────────────────────────────────────────────
 
 class _KpiCell extends StatelessWidget {
-  const _KpiCell({required this.value, required this.label});
+  const _KpiCell({required this.value, required this.label, this.valueColor});
   final String value;
   final String label;
+  final Color? valueColor;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          value,
-          style: AppTextStyles.cardTitle.copyWith(
-              fontSize: 18, fontWeight: FontWeight.w700),
-        ),
-        Text(label, style: AppTextStyles.navItem),
-      ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.ctBorder),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            value,
+            style: AppTextStyles.cardTitle.copyWith(
+                fontSize: 18, fontWeight: FontWeight.w700, color: valueColor),
+          ),
+          Text(label, style: AppTextStyles.navItem),
+        ],
+      ),
     );
   }
 }
