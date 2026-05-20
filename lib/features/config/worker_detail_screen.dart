@@ -9,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_header.dart';
 import '../../shared/widgets/app_loading_state.dart';
+import '../../shared/widgets/app_stacked_metric_card.dart';
 import 'channels_screen.dart';
 import 'workflows_screen.dart';
 
@@ -221,6 +222,8 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
           _ConfigTab(
             worker: _worker ?? {},
             onWorkerUpdated: _load,
+            onTabCanales: () => _tabCtrl.animateTo(1),
+            onTabFlujos: () => _tabCtrl.animateTo(2),
           ),
           ChannelsScreen(tenantWorkerId: widget.workerId),
           WorkflowsScreen(tenantWorkerId: widget.workerId),
@@ -233,10 +236,17 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
 // ── _ConfigTab ─────────────────────────────────────────────────────────────────
 
 class _ConfigTab extends StatefulWidget {
-  const _ConfigTab({required this.worker, required this.onWorkerUpdated});
+  const _ConfigTab({
+    required this.worker,
+    required this.onWorkerUpdated,
+    this.onTabCanales,
+    this.onTabFlujos,
+  });
 
   final Map<String, dynamic> worker;
   final VoidCallback onWorkerUpdated;
+  final VoidCallback? onTabCanales;
+  final VoidCallback? onTabFlujos;
 
   @override
   State<_ConfigTab> createState() => _ConfigTabState();
@@ -312,7 +322,11 @@ class _ConfigTabState extends State<_ConfigTab> {
           flex: 7,
           child: Column(
             children: [
-              _MetricsCard(worker: widget.worker),
+              _MetricsCard(
+                worker: widget.worker,
+                onTabCanales: widget.onTabCanales,
+                onTabFlujos: widget.onTabFlujos,
+              ),
               const SizedBox(height: 16),
               _SkillsCard(worker: widget.worker),
             ],
@@ -926,112 +940,85 @@ class _DangerZoneCard extends StatelessWidget {
 // ── _MetricsCard ──────────────────────────────────────────────────────────────
 
 class _MetricsCard extends StatelessWidget {
-  const _MetricsCard({required this.worker});
+  const _MetricsCard({
+    required this.worker,
+    this.onTabCanales,
+    this.onTabFlujos,
+  });
 
   final Map<String, dynamic> worker;
+  final VoidCallback? onTabCanales;
+  final VoidCallback? onTabFlujos;
 
   @override
   Widget build(BuildContext context) {
     final flows = (worker['flows'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final channelCount = worker['channel_count'] as int? ?? 0;
+    final channelCount   = worker['channel_count'] as int? ?? 0;
     final executionCount = worker['execution_count'] as int? ?? 0;
+    final flowCount      = flows.length;
     final completedToday = flows.fold<int>(
         0, (sum, f) => sum + ((f['completed_today'] as int?) ?? 0));
+    final colorHex   = worker['catalog_color'] as String? ?? '#59E0CC';
+    final workerColor = _hexColor(colorHex);
 
-    return _SectionCard(
-      title: 'Métricas',
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.ctSurface2,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.ctBorder),
-          ),
-          child: IntrinsicHeight(
-            child: Row(
-              children: [
-                Expanded(
-                  child: _MetricCell(
-                    label: 'Flujos activos',
-                    value: flows.length.toString(),
-                  ),
-                ),
-                const VerticalDivider(
-                    width: 1, thickness: 1, color: AppColors.ctBorder),
-                Expanded(
-                  child: _MetricCell(
-                    label: 'Canales',
-                    value: channelCount.toString(),
-                  ),
-                ),
-                const VerticalDivider(
-                    width: 1, thickness: 1, color: AppColors.ctBorder),
-                Expanded(
-                  child: _MetricCell(
-                    label: 'Completadas hoy',
-                    value: completedToday.toString(),
-                    valueColor: completedToday > 0
-                        ? AppColors.ctTeal
-                        : AppColors.ctText2,
-                  ),
-                ),
-                const VerticalDivider(
-                    width: 1, thickness: 1, color: AppColors.ctBorder),
-                Expanded(
-                  child: _MetricCell(
-                    label: 'Total ejecuciones',
-                    value: executionCount.toString(),
-                    valueColor: executionCount > 0
-                        ? AppColors.ctOkText
-                        : AppColors.ctText2,
-                  ),
-                ),
-              ],
-            ),
-          ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Métricas de operación',
+          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
         ),
-      ),
-    );
-  }
-}
-
-// ── _MetricCell ───────────────────────────────────────────────────────────────
-
-class _MetricCell extends StatelessWidget {
-  const _MetricCell({
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
-
-  final String label;
-  final String value;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: AppTextStyles.cardTitle.copyWith(
-              fontFamily: 'Onest',
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: valueColor ?? AppColors.ctText,
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: AppStackedMetricCard(
+                value: executionCount.toString(),
+                label: 'Total ejecuciones',
+                icon: Icons.bolt_rounded,
+                accentColor: workerColor,
+                accentBgColor: workerColor.withValues(alpha: 0.12),
+              ),
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
-          ),
-        ],
-      ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: AppStackedMetricCard(
+                value: completedToday.toString(),
+                label: 'Completadas hoy',
+                icon: Icons.check_circle_outline_rounded,
+                accentColor: AppColors.ctOk,
+                accentBgColor: AppColors.ctOkBg,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: AppStackedMetricCard(
+                value: channelCount.toString(),
+                label: 'Canales activos',
+                icon: Icons.hub_outlined,
+                accentColor: AppColors.ctInfo,
+                accentBgColor: AppColors.ctInfoBg,
+                onTap: onTabCanales,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: AppStackedMetricCard(
+                value: flowCount.toString(),
+                label: 'Flujos activos',
+                icon: Icons.account_tree_outlined,
+                accentColor: AppColors.ctWarn,
+                accentBgColor: AppColors.ctWarnBg,
+                onTap: onTabFlujos,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
