@@ -46,4 +46,9 @@ class AiWorkersApi {
     );
     return Map<String, dynamic>.from(response.data);
   }
+
+  /// Dar de baja (soft delete) un tenant_worker.
+  static Future<void> fireWorker(String tenantWorkerId) async {
+    await ApiClient.instance.delete('/workers/$tenantWorkerId');
+  }
 }
