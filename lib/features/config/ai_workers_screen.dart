@@ -472,6 +472,7 @@ class _WorkerCardState extends State<_WorkerCard> {
               // Row 2 — KPIs
               Container(
                 decoration: BoxDecoration(
+                  color: AppColors.ctSurface2,
                   border: Border.all(color: AppColors.ctBorder),
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -488,8 +489,6 @@ class _WorkerCardState extends State<_WorkerCard> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Divider(height: 1, color: AppColors.ctBorder),
-              const SizedBox(height: 12),
               // Row 3 — Footer
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -594,18 +593,31 @@ class _AddWorkerCardState extends State<_AddWorkerCard> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          height: 188,
+          constraints: const BoxConstraints(minHeight: 200),
           decoration: BoxDecoration(
-            color: _hovered ? AppColors.ctSurface2 : AppColors.ctSurface,
+            color: _hovered
+                ? AppColors.ctTeal.withValues(alpha: 0.06)
+                : AppColors.ctSurface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.ctBorder, width: 1.5),
+            border: Border.all(
+              color: _hovered
+                  ? AppColors.ctTeal
+                  : AppColors.ctText3.withValues(alpha: 0.4),
+              width: 1.5,
+            ),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.add, size: 24, color: AppColors.ctText3),
+              Icon(Icons.add,
+                  size: 24,
+                  color: _hovered ? AppColors.ctTeal : AppColors.ctText3),
               const SizedBox(height: 8),
-              Text('Contratar worker', style: AppTextStyles.body),
+              Text(
+                'Contratar worker',
+                style: AppTextStyles.body.copyWith(
+                    color: _hovered ? AppColors.ctText : null),
+              ),
               Text(
                 'Explorar catálogo',
                 style: AppTextStyles.navItem.copyWith(color: AppColors.ctText3),
