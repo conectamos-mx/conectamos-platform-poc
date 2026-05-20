@@ -591,43 +591,84 @@ class _AddWorkerCardState extends State<_AddWorkerCard> {
       onExit:  (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          constraints: const BoxConstraints(minHeight: 200),
-          decoration: BoxDecoration(
+        child: CustomPaint(
+          painter: _DashedBorderPainter(
             color: _hovered
-                ? AppColors.ctTeal.withValues(alpha: 0.06)
-                : AppColors.ctSurface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _hovered
-                  ? AppColors.ctTeal
-                  : AppColors.ctText3.withValues(alpha: 0.4),
-              width: 1.5,
-            ),
+                ? AppColors.ctTeal
+                : AppColors.ctText3.withValues(alpha: 0.4),
+            isHovered: _hovered,
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add,
-                  size: 24,
-                  color: _hovered ? AppColors.ctTeal : AppColors.ctText3),
-              const SizedBox(height: 8),
-              Text(
-                'Contratar worker',
-                style: AppTextStyles.body.copyWith(
-                    color: _hovered ? AppColors.ctText : null),
-              ),
-              Text(
-                'Explorar catálogo',
-                style: AppTextStyles.navItem.copyWith(color: AppColors.ctText3),
-              ),
-            ],
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            constraints: const BoxConstraints(minHeight: 200),
+            decoration: BoxDecoration(
+              color: _hovered
+                  ? AppColors.ctTeal.withValues(alpha: 0.06)
+                  : AppColors.ctSurface,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.add,
+                    size: 24,
+                    color: _hovered ? AppColors.ctTeal : AppColors.ctText3),
+                const SizedBox(height: 8),
+                Text(
+                  'Contratar worker',
+                  style: AppTextStyles.body.copyWith(
+                      color: _hovered ? AppColors.ctText : null),
+                ),
+                Text(
+                  'Explorar catálogo',
+                  style:
+                      AppTextStyles.navItem.copyWith(color: AppColors.ctText3),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+// ── Dashed border painter ─────────────────────────────────────────────────────
+
+class _DashedBorderPainter extends CustomPainter {
+  const _DashedBorderPainter({required this.color, required this.isHovered});
+  final Color color;
+  final bool isHovered;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    const dashWidth = 6.0;
+    const dashSpace = 4.0;
+    const radius = 12.0;
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0.75, 0.75, size.width - 1.5, size.height - 1.5),
+      const Radius.circular(radius),
+    );
+    final path = Path()..addRRect(rect);
+    final pathMetrics = path.computeMetrics();
+    for (final metric in pathMetrics) {
+      double distance = 0;
+      while (distance < metric.length) {
+        final extractPath =
+            metric.extractPath(distance, distance + dashWidth);
+        canvas.drawPath(extractPath, paint);
+        distance += dashWidth + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter old) =>
+      old.color != color || old.isHovered != isHovered;
 }
 
 // ── Rename dialog ─────────────────────────────────────────────────────────────
