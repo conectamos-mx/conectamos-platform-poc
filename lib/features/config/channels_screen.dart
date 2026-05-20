@@ -5,7 +5,9 @@ import 'dart:js_interop';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/ai_workers_api.dart';
@@ -15,7 +17,6 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_button.dart';
-import '../../shared/widgets/app_section_header.dart';
 import '../../shared/widgets/page_header.dart';
 
 /// JS bridge injected by [_CreateChannelStepperState._initFbSdk].
@@ -171,13 +172,27 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
     return Column(
       children: [
         widget.tenantWorkerId != null
-          ? AppSectionHeader(
-              title: 'Canales de comunicación',
-              description: 'Conecta números de WhatsApp y bots de Telegram al worker',
-              actions: [
-                if (hasPermission(ref, 'settings', 'manage'))
-                  AppButton(label: '+ Nuevo canal', variant: AppButtonVariant.teal, size: AppButtonSize.sm, isDisabled: _loading, onPressed: _openCreate),
-              ],
+          ? Padding(
+              padding: const EdgeInsets.fromLTRB(22, 20, 22, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Canales de comunicación', style: AppTextStyles.pageTitle),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Conecta números de WhatsApp y bots de Telegram al worker',
+                          style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (hasPermission(ref, 'settings', 'manage'))
+                    AppButton(label: '+ Nuevo canal', variant: AppButtonVariant.teal, size: AppButtonSize.sm, isDisabled: _loading, onPressed: _openCreate),
+                ],
+              ),
             )
           : PageHeader(
               eyebrow: 'Canales',
@@ -232,29 +247,31 @@ class _ChannelsBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (channels.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 60),
-          child: Text('No hay canales configurados aún.'),
-        ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 16,
-        children: channels.map((ch) => SizedBox(
-          width: 380,
-          child: _ChannelCard(
-            channel: ch,
-            onEdit: () => onEdit(ch),
-            onToggleActive: () => onToggleActive(ch),
-            canManage: canManage,
-          ),
-        )).toList(),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.ctSurface,
+        border: Border.all(color: AppColors.ctBorder),
+        borderRadius: BorderRadius.circular(10),
       ),
+      child: channels.isEmpty
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: Center(child: Text('No hay canales configurados aún.')),
+            )
+          : Column(
+              children: channels.asMap().entries.map((entry) {
+                final isLast = entry.key == channels.length - 1;
+                return Column(children: [
+                  _ChannelCard(
+                    channel: entry.value,
+                    onEdit: () => onEdit(entry.value),
+                    onToggleActive: () => onToggleActive(entry.value),
+                    canManage: canManage,
+                  ),
+                  if (!isLast) const Divider(height: 1, color: AppColors.ctBorder),
+                ]);
+              }).toList(),
+            ),
     );
   }
 }
@@ -286,171 +303,150 @@ class _ChannelCardState extends State<_ChannelCard> {
     final name        = ch['display_name'] as String? ?? ch['name'] as String? ?? '—';
     final channelType = ch['channel_type'] as String? ?? 'whatsapp';
     final isActive    = ch['is_active'] as bool? ?? false;
-    final workerName  = ch['worker_name'] as String? ?? '';
-    final workerColor = ch['worker_color'] as String? ?? '#9CA3AF';
     final typeEntry   = _kChannelTypeConfig[channelType] ?? _kChannelTypeConfig['whatsapp']!;
-    final phone       = ch['phone_number'] as String? ?? ch['phone_number_id'] as String? ?? '';
-    final botHandle   = ch['bot_username'] as String? ?? ch['handle'] as String? ?? '';
-    final identifier  = channelType == 'whatsapp' ? phone : botHandle;
+
+    final rawPhone  = ch['phone_number'] as String? ?? ch['phone_number_id'] as String? ?? '';
+    final rawHandle = ch['bot_username'] as String? ?? ch['handle'] as String? ?? '';
+    final identifier = channelType == 'whatsapp'
+        ? rawPhone
+        : (rawHandle.isNotEmpty ? '@$rawHandle' : '');
+
+    final inviteUrl = identifier.isNotEmpty
+        ? (channelType == 'whatsapp'
+            ? 'https://wa.me/${identifier.replaceAll('+', '').replaceAll(' ', '')}'
+            : 'https://t.me/${identifier.replaceAll('@', '')}')
+        : '';
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit:  (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 100),
-        decoration: BoxDecoration(
-          color: AppColors.ctSurface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _hovered ? AppColors.ctTeal : AppColors.ctBorder,
-          ),
-        ),
-        padding: const EdgeInsets.all(20),
+        color: _hovered ? AppColors.ctBg : AppColors.ctSurface,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Opacity(
-          opacity: isActive ? 1.0 : 0.55,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          opacity: isActive ? 1.0 : 0.5,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Row 1 — icon + name + status pill
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: channelType == 'whatsapp'
-                          ? const Color(0xFF25D366)
-                          : const Color(0xFF229ED9),
-                      borderRadius: BorderRadius.circular(12),
+              // Logo real 40x40
+              channelType == 'whatsapp'
+                  ? Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                          color: const Color(0xFF25D366),
+                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.all(6),
+                      child: SvgPicture.asset('assets/logos/whatsapp.svg',
+                          colorFilter: const ColorFilter.mode(
+                              Colors.white, BlendMode.srcIn)),
+                    )
+                  : Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                          color: const Color(0xFF229ED9),
+                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.all(6),
+                      child: Image.asset('assets/logos/telegram.png'),
                     ),
-                    child: Icon(
-                      channelType == 'whatsapp'
-                          ? Icons.chat_rounded
-                          : Icons.send_rounded,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name,
-                            style: AppTextStyles.cardTitle,
-                            overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                              color: typeEntry.bg,
-                              borderRadius: BorderRadius.circular(20)),
-                          child: Text(
-                            typeEntry.label,
-                            style: AppTextStyles.badge.copyWith(
-                                color: typeEntry.fg,
-                                fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? AppColors.ctOkBg
-                          : AppColors.ctSurface2,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      isActive ? 'Activo' : 'Inactivo',
-                      style: AppTextStyles.badge.copyWith(
-                          color: isActive
-                              ? AppColors.ctOkText
-                              : AppColors.ctText2),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Divider(height: 1, color: AppColors.ctBorder),
-              const SizedBox(height: 12),
-              // Row 2 — identifier
-              if (identifier.isNotEmpty)
-                Row(
+              const SizedBox(width: 14),
+              // Nombre + identifier
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      channelType == 'whatsapp'
-                          ? Icons.phone_outlined
-                          : Icons.alternate_email,
-                      size: 14,
-                      color: AppColors.ctText3,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(identifier,
-                        style: AppTextStyles.navItem
-                            .copyWith(color: AppColors.ctText2)),
+                    Text(name,
+                        style: AppTextStyles.body
+                            .copyWith(fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis),
+                    if (identifier.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(identifier,
+                          style: AppTextStyles.navItem
+                              .copyWith(color: AppColors.ctText2),
+                          overflow: TextOverflow.ellipsis),
+                    ],
                   ],
                 ),
-              const SizedBox(height: 8),
-              // Row 3 — worker
-              Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                        color: _hexColor(workerColor),
-                        shape: BoxShape.circle),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    workerName.isEmpty ? 'Sin worker asignado' : workerName,
-                    style: AppTextStyles.navItem.copyWith(
-                        color: workerName.isEmpty
-                            ? AppColors.ctText3
-                            : AppColors.ctText2),
-                  ),
-                ],
               ),
-              const SizedBox(height: 12),
-              const Divider(height: 1, color: AppColors.ctBorder),
-              const SizedBox(height: 12),
-              // Row 4 — footer actions
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  GestureDetector(
-                    onTap: widget.onEdit,
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: Text('Ver detalle →',
-                          style: AppTextStyles.navItem
-                              .copyWith(color: AppColors.ctTeal)),
+              // Badge tipo
+              Container(
+                margin: const EdgeInsets.only(right: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                    color: typeEntry.bg,
+                    borderRadius: BorderRadius.circular(20)),
+                child: Text(
+                  typeEntry.label,
+                  style: AppTextStyles.badge.copyWith(
+                      color: typeEntry.fg, fontWeight: FontWeight.w600),
+                ),
+              ),
+              // Status pill
+              Container(
+                margin: const EdgeInsets.only(right: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                    color: isActive ? AppColors.ctOkBg : AppColors.ctSurface2,
+                    borderRadius: BorderRadius.circular(20)),
+                child: Text(
+                  isActive ? 'Activo' : 'Inactivo',
+                  style: AppTextStyles.badge.copyWith(
+                      color: isActive ? AppColors.ctOkText : AppColors.ctText2),
+                ),
+              ),
+              const Spacer(),
+              // Icono copiar URL
+              if (inviteUrl.isNotEmpty) ...[
+                GestureDetector(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: inviteUrl));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('URL copiada'),
+                        duration: Duration(seconds: 2),
+                        backgroundColor: AppColors.ctOk,
+                      ),
+                    );
+                  },
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Tooltip(
+                      message: 'Copiar URL de invitación',
+                      child: const Icon(Icons.link_rounded,
+                          size: 16, color: AppColors.ctText3),
                     ),
                   ),
-                  if (widget.canManage)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        AppActionButton(
-                            variant: AppActionVariant.edit,
-                            onPressed: widget.onEdit),
-                        const SizedBox(width: 4),
-                        AppActionButton(
-                          variant: isActive
-                              ? AppActionVariant.suspend
-                              : AppActionVariant.reactivate,
-                          onPressed: widget.onToggleActive,
-                        ),
-                      ],
-                    ),
-                ],
+                ),
+                const SizedBox(width: 8),
+              ],
+              // Ver detalle
+              GestureDetector(
+                onTap: widget.onEdit,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Text('Ver detalle →',
+                      style: AppTextStyles.navItem
+                          .copyWith(color: AppColors.ctTeal)),
+                ),
               ),
+              if (widget.canManage) ...[
+                const SizedBox(width: 8),
+                AppActionButton(
+                    variant: AppActionVariant.edit,
+                    onPressed: widget.onEdit),
+                const SizedBox(width: 4),
+                AppActionButton(
+                  variant: isActive
+                      ? AppActionVariant.suspend
+                      : AppActionVariant.reactivate,
+                  onPressed: widget.onToggleActive,
+                ),
+              ],
             ],
           ),
         ),
