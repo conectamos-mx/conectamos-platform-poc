@@ -260,10 +260,10 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
 
     final Widget avatar;
     if (sourceType == 'google_sheets') {
-      avatar = Image.asset('assets/logos/drive.png', width: 40, height: 40);
+      avatar = Image.asset('assets/logos/drive.png', width: 28, height: 28);
     } else if (sourceType == 'onedrive_excel') {
       avatar = SvgPicture.asset('assets/logos/onedrive.svg',
-          width: 40, height: 40);
+          width: 28, height: 28);
     } else {
       avatar = const Icon(Icons.table_chart_outlined,
           size: 24, color: AppColors.ctText2);
