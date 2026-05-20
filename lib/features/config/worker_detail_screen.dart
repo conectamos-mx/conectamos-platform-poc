@@ -10,6 +10,7 @@ import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_header.dart';
 import '../../shared/widgets/app_loading_state.dart';
 import '../../shared/widgets/app_stacked_metric_card.dart';
+import 'channel_detail_screen.dart';
 import 'channels_screen.dart';
 import 'workflows_screen.dart';
 
@@ -62,6 +63,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
   Map<String, dynamic>? _worker;
   bool _loading = true;
   String? _error;
+  String? _selectedChannelId;
 
   @override
   void initState() {
@@ -225,7 +227,17 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
             onTabCanales: () => _tabCtrl.animateTo(1),
             onTabFlujos: () => _tabCtrl.animateTo(2),
           ),
-          ChannelsScreen(tenantWorkerId: widget.workerId),
+          _selectedChannelId != null
+              ? ChannelDetailPanel(
+                  key: ValueKey(_selectedChannelId),
+                  channelId: _selectedChannelId!,
+                  onBack: () => setState(() => _selectedChannelId = null),
+                )
+              : ChannelsScreen(
+                  tenantWorkerId: widget.workerId,
+                  onChannelSelected: (id) =>
+                      setState(() => _selectedChannelId = id),
+                ),
           WorkflowsScreen(tenantWorkerId: widget.workerId),
         ],
       ),

@@ -61,8 +61,9 @@ String _dioError(Object e) {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class ChannelsScreen extends ConsumerStatefulWidget {
-  const ChannelsScreen({super.key, this.tenantWorkerId});
+  const ChannelsScreen({super.key, this.tenantWorkerId, this.onChannelSelected});
   final String? tenantWorkerId;
+  final ValueChanged<String>? onChannelSelected;
 
   @override
   ConsumerState<ChannelsScreen> createState() => _ChannelsScreenState();
@@ -153,13 +154,22 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
     }
     if (result != null && result.isNotEmpty) {
       _fetchAll();
-      context.go('/channels/$result');
+      if (widget.onChannelSelected != null) {
+        widget.onChannelSelected!(result);
+      } else {
+        context.go('/channels/$result');
+      }
     }
   }
 
   void _openEdit(Map<String, dynamic> channel) {
     final id = channel['id'] as String? ?? '';
-    if (id.isNotEmpty) context.go('/channels/$id');
+    if (id.isEmpty) return;
+    if (widget.onChannelSelected != null) {
+      widget.onChannelSelected!(id);
+    } else {
+      context.go('/channels/$id');
+    }
   }
 
 
