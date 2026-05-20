@@ -4,6 +4,7 @@ import 'dart:html' as html;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/catalogs_api.dart';
@@ -13,6 +14,7 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_detail_header.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -250,41 +252,89 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
     }
 
     final catalog = _catalog!;
+    final sourceType = catalog['source_type'] as String? ?? '';
+    final slug = catalog['slug'] as String? ?? '';
+    final label = catalog['label'] as String? ?? slug;
+    final isSyncable =
+        sourceType == 'google_sheets' || sourceType == 'onedrive_excel';
+
+    final Widget avatar;
+    if (sourceType == 'google_sheets') {
+      avatar = Image.asset('assets/logos/drive.png', width: 40, height: 40);
+    } else if (sourceType == 'onedrive_excel') {
+      avatar = SvgPicture.asset('assets/logos/onedrive.svg',
+          width: 40, height: 40);
+    } else {
+      avatar = const Icon(Icons.table_chart_outlined,
+          size: 24, color: AppColors.ctText2);
+    }
+
     return Column(
       children: [
-          _CatalogHeader(
-            catalog: catalog,
-            canManage: _canManage,
-            syncing: _syncing,
-            saving: _saving,
-            hasChanges: _hasChanges,
-            onSync: _doSync,
-            onSave: _doSave,
-            onDelete: _doDelete,
-            deleting: _deleting,
-          ),
-          Container(
-            decoration: const BoxDecoration(
-              color: AppColors.ctSurface,
-              border: Border(bottom: BorderSide(color: AppColors.ctBorder)),
-            ),
-            child: TabBar(
-              controller: _tabCtrl,
-              isScrollable: true,
-              labelColor: AppColors.ctTeal,
-              unselectedLabelColor: AppColors.ctText2,
-              indicatorColor: AppColors.ctTeal,
-              indicatorWeight: 2,
-              dividerColor: Colors.transparent,
-              labelStyle: AppTextStyles.formLabel,
-              unselectedLabelStyle: AppTextStyles.navItem,
-              tabs: const [
-                Tab(text: 'Configuración'),
-                Tab(text: 'Fuente'),
-                Tab(text: 'Items'),
-                Tab(text: 'Sincronización'),
-                Tab(text: 'Uso'),
+          AppDetailHeader(
+            title: label,
+            subtitle: slug,
+            backLabel: 'Catálogos',
+            onBack: () => context.go('/catalogs'),
+            avatar: avatar,
+            actions: [
+              if (_canManage)
+                AppActionButton(
+                  variant: AppActionVariant.delete,
+                  onPressed: _doDelete,
+                  isLoading: _deleting,
+                  isDisabled: _deleting,
+                ),
+              if (_canManage && isSyncable) ...[
+                const SizedBox(width: 4),
+                AppButton(
+                  label: 'Sincronizar ahora',
+                  variant: AppButtonVariant.outline,
+                  size: AppButtonSize.sm,
+                  isLoading: _syncing,
+                  prefixIcon: const Icon(Icons.sync_rounded,
+                      size: 14, color: AppColors.ctInk700),
+                  onPressed: _doSync,
+                ),
+                const SizedBox(width: 8),
               ],
+              if (_canManage)
+                AppButton(
+                  label: 'Guardar',
+                  variant: AppButtonVariant.teal,
+                  size: AppButtonSize.sm,
+                  isLoading: _saving,
+                  isDisabled: !_hasChanges,
+                  onPressed: _doSave,
+                ),
+            ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(44),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: AppColors.ctSurface,
+                  border:
+                      Border(bottom: BorderSide(color: AppColors.ctBorder)),
+                ),
+                child: TabBar(
+                  controller: _tabCtrl,
+                  isScrollable: true,
+                  labelColor: AppColors.ctTeal,
+                  unselectedLabelColor: AppColors.ctText2,
+                  indicatorColor: AppColors.ctTeal,
+                  indicatorWeight: 2,
+                  dividerColor: Colors.transparent,
+                  labelStyle: AppTextStyles.formLabel,
+                  unselectedLabelStyle: AppTextStyles.navItem,
+                  tabs: const [
+                    Tab(text: 'Configuración'),
+                    Tab(text: 'Fuente'),
+                    Tab(text: 'Items'),
+                    Tab(text: 'Sincronización'),
+                    Tab(text: 'Uso'),
+                  ],
+                ),
+              ),
             ),
           ),
           Expanded(
@@ -319,267 +369,6 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
     );
   }
 }
-
-// ── _CatalogHeader ─────────────────────────────────────────────────────────────
-
-class _CatalogHeader extends StatelessWidget {
-  const _CatalogHeader({
-    required this.catalog,
-    required this.canManage,
-    required this.syncing,
-    required this.saving,
-    required this.hasChanges,
-    required this.onSync,
-    required this.onSave,
-    required this.onDelete,
-    required this.deleting,
-  });
-
-  final Map<String, dynamic> catalog;
-  final bool canManage;
-  final bool syncing;
-  final bool saving;
-  final bool hasChanges;
-  final VoidCallback onSync;
-  final VoidCallback onSave;
-  final VoidCallback onDelete;
-  final bool deleting;
-
-  @override
-  Widget build(BuildContext context) {
-    final sourceType = catalog['source_type'] as String? ?? '';
-    final slug = catalog['slug'] as String? ?? '';
-    final label = catalog['label'] as String? ?? slug;
-    final itemsCount = catalog['item_count'] as int? ?? 0;
-    final lastSynced = catalog['last_synced_at'] as String?;
-    final isSyncable =
-        sourceType == 'google_sheets' || sourceType == 'onedrive_excel';
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 10, 16, 12),
-      decoration: const BoxDecoration(
-        color: AppColors.ctSurface,
-        border: Border(bottom: BorderSide(color: AppColors.ctBorder)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Row 1 — breadcrumb + botones
-          Row(
-            mainAxisSize: MainAxisSize.max,
-            children: [
-              GestureDetector(
-                onTap: () => context.go('/catalogs'),
-                child: Text(
-                  '← Catálogos',
-                  style: AppFonts.geist(
-                      fontSize: 12, color: AppColors.ctText3),
-                ),
-              ),
-              Text(
-                ' / ',
-                style: AppFonts.geist(
-                    fontSize: 12, color: AppColors.ctText3),
-              ),
-              Flexible(
-                child: Text(
-                  label,
-                  style: AppFonts.geist(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.ctText2),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const Spacer(),
-              if (canManage) ...[
-                AppActionButton(
-                  variant: AppActionVariant.delete,
-                  onPressed: onDelete,
-                  isLoading: deleting,
-                  isDisabled: deleting,
-                ),
-                const SizedBox(width: 4),
-              ],
-              if (canManage && isSyncable) ...[
-                AppButton(
-                  label: 'Sincronizar ahora',
-                  variant: AppButtonVariant.outline,
-                  size: AppButtonSize.sm,
-                  isLoading: syncing,
-                  prefixIcon: const Icon(Icons.sync_rounded, size: 14, color: AppColors.ctInk700),
-                  onPressed: onSync,
-                ),
-                const SizedBox(width: 8),
-              ],
-              if (canManage)
-                AppButton(
-                  label: 'Guardar',
-                  variant: AppButtonVariant.teal,
-                  size: AppButtonSize.sm,
-                  isLoading: saving,
-                  isDisabled: !hasChanges,
-                  onPressed: onSave,
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          // Row 2 — título + badge
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                label,
-                style: AppFonts.onest(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ctText),
-              ),
-              const SizedBox(width: 10),
-              _SyncStatusBadge(
-                  lastSynced: lastSynced, sourceType: sourceType),
-            ],
-          ),
-          const SizedBox(height: 6),
-          // Row 3 — metadata inline
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                Text(
-                  slug,
-                  style: AppFonts.geist(
-                      fontSize: 12, color: AppColors.ctText3),
-                ),
-                const _MetaDot(),
-                _SourcePill(sourceType: sourceType),
-                if (itemsCount > 0) ...[
-                  const _MetaDot(),
-                  Text(
-                    '$itemsCount items',
-                    style: AppFonts.geist(
-                        fontSize: 12, color: AppColors.ctText2),
-                  ),
-                ],
-                if (lastSynced != null) ...[
-                  const _MetaDot(),
-                  Text(
-                    'Sync ${_fmtSync(lastSynced)}',
-                    style: AppFonts.geist(
-                        fontSize: 12, color: AppColors.ctText3),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Header widgets ─────────────────────────────────────────────────────────────
-
-class _SyncStatusBadge extends StatelessWidget {
-  const _SyncStatusBadge(
-      {required this.lastSynced, required this.sourceType});
-  final String? lastSynced;
-  final String sourceType;
-
-  @override
-  Widget build(BuildContext context) {
-    if (sourceType == 'manual' ||
-        sourceType == 'webhook_push' ||
-        sourceType == 'api_pull') {
-      return _badge(AppColors.ctSurface2, AppColors.ctText2, 'Manual');
-    }
-    if (lastSynced == null) {
-      return _badge(
-          AppColors.ctWarnBg, AppColors.ctWarnText, 'Sin sincronizar');
-    }
-    try {
-      final dt = DateTime.parse(lastSynced!).toLocal();
-      final diff = DateTime.now().difference(dt);
-      if (diff.inHours < 2) {
-        return _badge(AppColors.ctOkBg, AppColors.ctOkText, 'Sincronizado');
-      }
-      if (diff.inDays < 1) {
-        return _badge(
-            AppColors.ctWarnBg, AppColors.ctWarnText, 'Sync antiguo');
-      }
-      return _badge(AppColors.ctRedBg, AppColors.ctRedText, 'Necesita sync');
-    } catch (_) {
-      return _badge(AppColors.ctSurface2, AppColors.ctText2, '—');
-    }
-  }
-
-  Widget _badge(Color bg, Color fg, String label) => Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-            color: bg, borderRadius: BorderRadius.circular(10)),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 5,
-              height: 5,
-              decoration: BoxDecoration(color: fg, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 5),
-            Text(label,
-                style: AppFonts.geist(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: fg)),
-          ],
-        ),
-      );
-}
-
-class _SourcePill extends StatelessWidget {
-  const _SourcePill({required this.sourceType});
-  final String sourceType;
-
-  @override
-  Widget build(BuildContext context) {
-    final (icon, label) = switch (sourceType) {
-      'manual'         => (Icons.edit_note_rounded, 'Manual'),
-      'google_sheets'  => (Icons.table_chart_outlined, 'Google Sheets'),
-      'onedrive_excel' => (Icons.grid_on_outlined, 'OneDrive Excel'),
-      'webhook_push'   => (Icons.webhook_outlined, 'Webhook Push'),
-      'api_pull'       => (Icons.cloud_download_outlined, 'API Pull'),
-      _ => (Icons.storage_rounded,
-          sourceType.isEmpty ? 'Sin fuente' : sourceType),
-    };
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 12, color: AppColors.ctText2),
-        const SizedBox(width: 4),
-        Text(label,
-            style: AppFonts.geist(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: AppColors.ctText2)),
-      ],
-    );
-  }
-}
-
-class _MetaDot extends StatelessWidget {
-  const _MetaDot();
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      ' · ',
-      style: AppFonts.geist(fontSize: 12, color: AppColors.ctText3),
-    );
-  }
-}
-
 
 // ── Tab 0 — CONFIGURACIÓN ─────────────────────────────────────────────────────
 
