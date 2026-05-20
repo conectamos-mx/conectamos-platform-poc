@@ -327,7 +327,7 @@ class _WorkerCardState extends State<_WorkerCard> {
     final flowCount   = (w['flows'] as List? ?? []).length;
     final runningNow  = w['running_now'] as int? ?? 0;
     final channelCount = w['channel_count'] as int? ?? 0;
-    final createdAt   = w['created_at'] as String?;
+    final contractedAt = w['contracted_at'] as String?;
     final workerColor = _hexColor(colorHex);
 
     return MouseRegion(
@@ -342,26 +342,53 @@ class _WorkerCardState extends State<_WorkerCard> {
             color: AppColors.ctSurface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: _hovered ? AppColors.ctTeal : AppColors.ctBorder,
+              color: _hovered ? workerColor : AppColors.ctBorder,
               width: 1.5,
             ),
+            boxShadow: _hovered
+                ? [
+                    BoxShadow(
+                      color: workerColor.withValues(alpha: 0.15),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Línea superior coloreada
+              // Gradiente superior
               Container(
-                height: 4,
+                height: 80,
                 decoration: BoxDecoration(
-                  color: workerColor,
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(12),
                     topRight: Radius.circular(12),
                   ),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      workerColor.withValues(alpha: 0.18),
+                      workerColor.withValues(alpha: 0.0),
+                    ],
+                  ),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -443,14 +470,22 @@ class _WorkerCardState extends State<_WorkerCard> {
               ),
               const SizedBox(height: 16),
               // Row 2 — KPIs
-              Row(
-                children: [
-                  Expanded(child: _KpiCell(value: runningNow.toString(), label: 'Ejecuciones', valueColor: workerColor)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _KpiCell(value: channelCount.toString(), label: 'Canales', valueColor: workerColor)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _KpiCell(value: flowCount.toString(), label: 'Flujos', valueColor: workerColor)),
-                ],
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.ctBorder),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: IntrinsicHeight(
+                  child: Row(
+                    children: [
+                      Expanded(child: _KpiCell(value: runningNow.toString(), label: 'Ejecuciones', valueColor: workerColor)),
+                      const VerticalDivider(width: 1, color: AppColors.ctBorder),
+                      Expanded(child: _KpiCell(value: channelCount.toString(), label: 'Canales', valueColor: workerColor)),
+                      const VerticalDivider(width: 1, color: AppColors.ctBorder),
+                      Expanded(child: _KpiCell(value: flowCount.toString(), label: 'Flujos', valueColor: workerColor)),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               const Divider(height: 1, color: AppColors.ctBorder),
@@ -460,7 +495,7 @@ class _WorkerCardState extends State<_WorkerCard> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Desde ${_fmtDate(createdAt)}',
+                    'Desde ${_fmtDate(contractedAt)}',
                     style: AppTextStyles.navItem.copyWith(
                         color: AppColors.ctText3),
                   ),
@@ -519,12 +554,8 @@ class _KpiCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.ctBorder),
-        borderRadius: BorderRadius.circular(8),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
