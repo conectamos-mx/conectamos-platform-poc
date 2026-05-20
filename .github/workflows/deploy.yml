@@ -46,8 +46,8 @@ jobs:
         run: |
           flutter build web --release \
             --dart-define=API_BASE_URL=${{ env.IS_PROD == 'true' && 'https://platform-api.conectamos.mx' || 'https://platform-api-dev.conectamos.mx' }} \
-            --dart-define=SUPABASE_URL=${{ secrets.DART_DEFINE_SUPABASE_URL }} \
-            --dart-define=SUPABASE_ANON_KEY=${{ secrets.DART_DEFINE_SUPABASE_ANON_KEY }} \
+            --dart-define=SUPABASE_URL=${{ env.IS_PROD == 'true' && secrets.DART_DEFINE_SUPABASE_URL || secrets.DART_DEFINE_SUPABASE_URL_DEV }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ env.IS_PROD == 'true' && secrets.DART_DEFINE_SUPABASE_ANON_KEY || secrets.DART_DEFINE_SUPABASE_ANON_KEY_DEV }} \
             --dart-define=MOCK_MODE=false
 
       # ── AWS credentials (OIDC) ────────────────────────────────────────────────
