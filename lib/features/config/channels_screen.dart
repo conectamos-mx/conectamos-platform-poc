@@ -17,7 +17,6 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_button.dart';
-import '../../shared/widgets/app_section_header.dart';
 import '../../shared/widgets/page_header.dart';
 
 /// JS bridge injected by [_CreateChannelStepperState._initFbSdk].
@@ -173,13 +172,27 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
     return Column(
       children: [
         widget.tenantWorkerId != null
-          ? AppSectionHeader(
-              title: 'Canales de comunicación',
-              description: 'Conecta números de WhatsApp y bots de Telegram al worker',
-              actions: [
-                if (hasPermission(ref, 'settings', 'manage'))
-                  AppButton(label: '+ Nuevo canal', variant: AppButtonVariant.teal, size: AppButtonSize.sm, isDisabled: _loading, onPressed: _openCreate),
-              ],
+          ? Padding(
+              padding: const EdgeInsets.fromLTRB(22, 20, 22, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Canales de comunicación', style: AppTextStyles.pageTitle),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Conecta números de WhatsApp y bots de Telegram al worker',
+                          style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (hasPermission(ref, 'settings', 'manage'))
+                    AppButton(label: '+ Nuevo canal', variant: AppButtonVariant.teal, size: AppButtonSize.sm, isDisabled: _loading, onPressed: _openCreate),
+                ],
+              ),
             )
           : PageHeader(
               eyebrow: 'Canales',
@@ -317,14 +330,27 @@ class _ChannelCardState extends State<_ChannelCard> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Logo real 40x40
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: channelType == 'whatsapp'
-                    ? SvgPicture.asset('assets/logos/whatsapp.svg',
-                        width: 40, height: 40)
-                    : Image.asset('assets/logos/telegram.png',
-                        width: 40, height: 40),
-              ),
+              channelType == 'whatsapp'
+                  ? Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                          color: const Color(0xFF25D366),
+                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.all(6),
+                      child: SvgPicture.asset('assets/logos/whatsapp.svg',
+                          colorFilter: const ColorFilter.mode(
+                              Colors.white, BlendMode.srcIn)),
+                    )
+                  : Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                          color: const Color(0xFF229ED9),
+                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.all(6),
+                      child: Image.asset('assets/logos/telegram.png'),
+                    ),
               const SizedBox(width: 14),
               // Nombre + identifier
               Expanded(
@@ -337,11 +363,13 @@ class _ChannelCardState extends State<_ChannelCard> {
                         style: AppTextStyles.body
                             .copyWith(fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis),
-                    if (identifier.isNotEmpty)
+                    if (identifier.isNotEmpty) ...[
+                      const SizedBox(height: 2),
                       Text(identifier,
                           style: AppTextStyles.navItem
                               .copyWith(color: AppColors.ctText2),
                           overflow: TextOverflow.ellipsis),
+                    ],
                   ],
                 ),
               ),
