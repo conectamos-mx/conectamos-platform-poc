@@ -32,6 +32,16 @@ String _initials(String name) {
   return name.isEmpty ? '?' : name[0].toUpperCase();
 }
 
+String _fmtDate(String? iso) {
+  if (iso == null) return '—';
+  try {
+    final dt = DateTime.parse(iso).toLocal();
+    return '${dt.day}/${dt.month}/${dt.year}';
+  } catch (_) {
+    return '—';
+  }
+}
+
 String _dioError(Object e) {
   if (e is DioException) {
     final data = e.response?.data;
@@ -192,7 +202,6 @@ class _AiWorkersScreenState extends ConsumerState<AiWorkersScreen> {
                       ),
                     )
                   : SingleChildScrollView(
-                      padding: const EdgeInsets.all(22),
                       child: _myWorkers.isEmpty
                           ? _EmptyState(onOpenCatalog: _openCatalog, canManage: canManage)
                           : _WorkersBody(
@@ -256,126 +265,115 @@ class _WorkersBody extends StatelessWidget {
   final void Function(Map<String, dynamic>) onTap;
   final bool canManage;
 
-  static TextStyle get _headerStyle =>
-      AppTextStyles.kpiLabel.copyWith(letterSpacing: 0.4);
-
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.ctSurface,
-        border: Border.all(color: AppColors.ctBorder),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 16,
         children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: const BoxDecoration(
-              color: AppColors.ctSurface2,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(9),
-                topRight: Radius.circular(9),
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(flex: 3, child: Text('WORKER',      style: _headerStyle)),
-                Expanded(flex: 2, child: Text('TIPO',        style: _headerStyle)),
-                Expanded(flex: 3, child: Text('WEBHOOK',     style: _headerStyle)),
-                Expanded(flex: 1, child: Text('ESTADO',      style: _headerStyle)),
-                Expanded(flex: 2, child: Text('ACCIONES',    style: _headerStyle)),
-              ],
+          ...workers.map((w) => SizedBox(
+                width: 380,
+                child: _WorkerCard(
+                  worker: w,
+                  onTap: () => onTap(w),
+                  onToggle: canManage ? () => onToggle(w) : null,
+                  onRename: canManage ? () => onRename(w) : null,
+                ),
+              )),
+          SizedBox(
+            width: 380,
+            child: _AddWorkerCard(
+              onTap: () => context.go('/catalog/workers'),
             ),
           ),
-          // Rows
-          ...workers.asMap().entries.map((entry) {
-            final isLast = entry.key == workers.length - 1;
-            return Column(
-              children: [
-                _WorkerRow(
-                  worker: entry.value,
-                  onToggle: canManage ? () => onToggle(entry.value) : null,
-                  onRename: canManage ? () => onRename(entry.value) : null,
-                  onTap: () => onTap(entry.value),
-                ),
-                if (!isLast)
-                  const Divider(height: 1, color: AppColors.ctBorder),
-              ],
-            );
-          }),
         ],
       ),
     );
   }
 }
 
-// ── Worker row ────────────────────────────────────────────────────────────────
+// ── Worker card ───────────────────────────────────────────────────────────────
 
-class _WorkerRow extends StatefulWidget {
-  const _WorkerRow({
+class _WorkerCard extends StatefulWidget {
+  const _WorkerCard({
     required this.worker,
+    this.onTap,
     this.onToggle,
     this.onRename,
-    this.onTap,
   });
   final Map<String, dynamic> worker;
+  final VoidCallback? onTap;
   final VoidCallback? onToggle;
   final VoidCallback? onRename;
-  final VoidCallback? onTap;
 
   @override
-  State<_WorkerRow> createState() => _WorkerRowState();
+  State<_WorkerCard> createState() => _WorkerCardState();
 }
 
-class _WorkerRowState extends State<_WorkerRow> {
+class _WorkerCardState extends State<_WorkerCard> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final w            = widget.worker;
-    final displayName  = w['display_name'] as String? ?? w['catalog_name'] as String? ?? '—';
-    final description  = w['catalog_description'] as String? ?? '';
-    final colorHex     = w['catalog_color'] as String? ?? '#59E0CC';
-    final workerType   = w['catalog_worker_type'] as String? ?? 'custom';
-    final webhookUrl   = w['catalog_webhook_url'] as String? ?? '';
-    final isActive     = w['is_active'] as bool? ?? false;
-    final typeEntry    = _kTypeConfig[workerType] ?? _kTypeConfig['custom']!;
+    final w           = widget.worker;
+    final displayName = w['display_name'] as String? ?? w['catalog_name'] as String? ?? '—';
+    final colorHex    = w['catalog_color'] as String? ?? '#59E0CC';
+    final workerType  = w['catalog_worker_type'] as String? ?? 'custom';
+    final isActive    = w['is_active'] as bool? ?? false;
+    final iconUrl     = w['catalog_icon_url'] as String?;
+    final typeEntry   = _kTypeConfig[workerType] ?? _kTypeConfig['custom']!;
+    final flowCount   = (w['flows'] as List? ?? []).length;
+    final runningNow  = w['running_now'] as int? ?? 0;
+    final channelCount = w['channel_count'] as int? ?? 0;
+    final createdAt   = w['created_at'] as String?;
 
     return MouseRegion(
+      cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit:  (_) => setState(() => _hovered = false),
-      cursor: widget.onTap != null
-          ? SystemMouseCursors.click
-          : MouseCursor.defer,
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        color: _hovered ? AppColors.ctBg : AppColors.ctSurface,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // ── WORKER ────────────────────────────────────────────────────────
-            Expanded(
-              flex: 3,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.ctSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _hovered ? AppColors.ctTeal : AppColors.ctBorder,
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Row 1 — Avatar + nombre + badges
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 3),
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: _hexColor(colorHex),
-                        shape: BoxShape.circle,
-                      ),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: iconUrl != null
+                          ? Image.network(
+                              iconUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context2, err, stack) => _InitialAvatar(
+                                color: _hexColor(colorHex),
+                                initials: _initials(displayName),
+                              ),
+                            )
+                          : _InitialAvatar(
+                              color: _hexColor(colorHex),
+                              initials: _initials(displayName),
+                            ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -383,91 +381,172 @@ class _WorkerRowState extends State<_WorkerRow> {
                       children: [
                         Text(
                           displayName,
-                          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+                          style: AppTextStyles.cardTitle,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (description.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            description,
-                            style: AppTextStyles.navItem,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            _TypeBadge(
+                              label: typeEntry.label,
+                              bg: typeEntry.bg,
+                              fg: typeEntry.fg,
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isActive
+                                    ? AppColors.ctOkBg
+                                    : AppColors.ctSurface2,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                isActive ? 'Activo' : 'Inactivo',
+                                style: AppTextStyles.badge.copyWith(
+                                  color: isActive
+                                      ? AppColors.ctOkText
+                                      : AppColors.ctText2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
                 ],
               ),
-            ),
-
-            // ── TIPO ──────────────────────────────────────────────────────────
-            Expanded(
-              flex: 2,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: _TypeBadge(
-                  label: typeEntry.label,
-                  bg: typeEntry.bg,
-                  fg: typeEntry.fg,
-                ),
-              ),
-            ),
-
-            // ── WEBHOOK ───────────────────────────────────────────────────────
-            Expanded(
-              flex: 3,
-              child: Text(
-                webhookUrl,
-                style: AppTextStyles.navItem,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-
-            // ── ESTADO ────────────────────────────────────────────────────────
-            Expanded(
-              flex: 1,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: isActive ? AppColors.ctOkBg : AppColors.ctSurface2,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    isActive ? 'Activo' : 'Inactivo',
-                    style: AppTextStyles.badge.copyWith(
-                      color: isActive ? AppColors.ctOkText : AppColors.ctText2,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // ── ACCIONES ──────────────────────────────────────────────────────
-            Expanded(
-              flex: 2,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              const SizedBox(height: 16),
+              // Row 2 — KPIs
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _ActionBtn(
-                    label: 'Renombrar',
-                    color: AppColors.ctInfo,
-                    onTap: widget.onRename,
+                  _KpiCell(value: runningNow.toString(), label: 'Activos'),
+                  _KpiCell(value: channelCount.toString(), label: 'Canales'),
+                  _KpiCell(value: flowCount.toString(), label: 'Flujos'),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(height: 1, color: AppColors.ctBorder),
+              const SizedBox(height: 12),
+              // Row 3 — Footer
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Desde ${_fmtDate(createdAt)}',
+                    style: AppTextStyles.navItem.copyWith(
+                        color: AppColors.ctText3),
                   ),
-                  const SizedBox(width: 6),
-                  _ActionBtn(
-                    label: isActive ? 'Desactivar' : 'Activar',
-                    color: isActive ? AppColors.ctDanger : AppColors.ctOk,
-                    onTap: widget.onToggle,
+                  GestureDetector(
+                    onTap: widget.onTap,
+                    child: Text(
+                      'Abrir workspace →',
+                      style: AppTextStyles.navItem.copyWith(
+                          color: AppColors.ctTeal),
+                    ),
                   ),
                 ],
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+// ── Initial avatar fallback ───────────────────────────────────────────────────
+
+class _InitialAvatar extends StatelessWidget {
+  const _InitialAvatar({required this.color, required this.initials});
+  final Color color;
+  final String initials;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: color.withValues(alpha: 0.18),
+      alignment: Alignment.center,
+      child: Text(
+        initials,
+        style: AppTextStyles.badge.copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 16,
+        ),
+      ),
+    );
+  }
+}
+
+// ── KPI cell ──────────────────────────────────────────────────────────────────
+
+class _KpiCell extends StatelessWidget {
+  const _KpiCell({required this.value, required this.label});
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          value,
+          style: AppTextStyles.cardTitle.copyWith(
+              fontSize: 18, fontWeight: FontWeight.w700),
+        ),
+        Text(label, style: AppTextStyles.navItem),
+      ],
+    );
+  }
+}
+
+// ── Add worker card ───────────────────────────────────────────────────────────
+
+class _AddWorkerCard extends StatefulWidget {
+  const _AddWorkerCard({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_AddWorkerCard> createState() => _AddWorkerCardState();
+}
+
+class _AddWorkerCardState extends State<_AddWorkerCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit:  (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          height: 188,
+          decoration: BoxDecoration(
+            color: _hovered ? AppColors.ctSurface2 : AppColors.ctSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.ctBorder, width: 1.5),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add, size: 24, color: AppColors.ctText3),
+              const SizedBox(height: 8),
+              Text('Contratar worker', style: AppTextStyles.body),
+              Text(
+                'Explorar catálogo',
+                style: AppTextStyles.navItem.copyWith(color: AppColors.ctText3),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1044,50 +1123,3 @@ class _GhostBtnState extends State<_GhostBtn> {
   }
 }
 
-class _ActionBtn extends StatefulWidget {
-  const _ActionBtn({
-    required this.label,
-    required this.color,
-    this.onTap,
-  });
-  final String label;
-  final Color color;
-  final VoidCallback? onTap;
-
-  @override
-  State<_ActionBtn> createState() => _ActionBtnState();
-}
-
-class _ActionBtnState extends State<_ActionBtn> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit:  (_) => setState(() => _hovered = false),
-      cursor: widget.onTap == null ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 100),
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-          decoration: BoxDecoration(
-            color: _hovered
-                ? widget.color.withValues(alpha: 0.08)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            widget.label,
-            style: AppTextStyles.bodySmall.copyWith(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: widget.color,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
