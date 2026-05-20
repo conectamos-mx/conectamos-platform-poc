@@ -11,6 +11,7 @@ import '../../core/api/connections_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_button.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -275,16 +276,14 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
               indicatorColor: AppColors.ctTeal,
               indicatorWeight: 2,
               dividerColor: Colors.transparent,
-              labelStyle: AppFonts.geist(
-                  fontSize: 12, fontWeight: FontWeight.w600),
-              unselectedLabelStyle:
-                  AppFonts.geist(fontSize: 12, fontWeight: FontWeight.w400),
+              labelStyle: AppTextStyles.formLabel,
+              unselectedLabelStyle: AppTextStyles.navItem,
               tabs: const [
-                Tab(text: 'CONFIGURACIÓN'),
-                Tab(text: 'FUENTE'),
-                Tab(text: 'ITEMS'),
-                Tab(text: 'SINCRONIZACIÓN'),
-                Tab(text: 'USO'),
+                Tab(text: 'Configuración'),
+                Tab(text: 'Fuente'),
+                Tab(text: 'Items'),
+                Tab(text: 'Sincronización'),
+                Tab(text: 'Uso'),
               ],
             ),
           ),
@@ -395,19 +394,11 @@ class _CatalogHeader extends StatelessWidget {
               ),
               const Spacer(),
               if (canManage) ...[
-                IconButton(
-                  icon: deleting
-                      ? const SizedBox(
-                          width: 16, height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: AppColors.ctDanger))
-                      : const Icon(Icons.delete_outline_rounded,
-                          size: 18, color: AppColors.ctDanger),
-                  tooltip: 'Eliminar catálogo',
-                  onPressed: deleting ? null : onDelete,
-                  style: IconButton.styleFrom(
-                    foregroundColor: AppColors.ctDanger,
-                  ),
+                AppActionButton(
+                  variant: AppActionVariant.delete,
+                  onPressed: onDelete,
+                  isLoading: deleting,
+                  isDisabled: deleting,
                 ),
                 const SizedBox(width: 4),
               ],
