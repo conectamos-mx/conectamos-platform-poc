@@ -275,6 +275,7 @@ class _WorkersBody extends StatelessWidget {
         children: [
           ...workers.map((w) => SizedBox(
                 width: 380,
+                height: 240,
                 child: _WorkerCard(
                   worker: w,
                   onTap: () => onTap(w),
@@ -284,6 +285,7 @@ class _WorkersBody extends StatelessWidget {
               )),
           SizedBox(
             width: 380,
+            height: 240,
             child: _AddWorkerCard(
               onTap: () => context.go('/catalog/workers'),
             ),
@@ -591,37 +593,42 @@ class _AddWorkerCardState extends State<_AddWorkerCard> {
       onExit:  (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
-        child: CustomPaint(
-          painter: _DashedBorderPainter(
-            color: AppColors.ctText3.withValues(alpha: 0.4),
-          ),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            constraints: const BoxConstraints(minHeight: 220, maxHeight: 220),
-            decoration: BoxDecoration(
-              color: _hovered
-                  ? AppColors.ctTeal.withValues(alpha: 0.06)
-                  : AppColors.ctSurface,
-              borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: double.infinity,
+          height: double.infinity,
+          child: CustomPaint(
+            painter: _DashedBorderPainter(
+              color: AppColors.ctText3.withValues(alpha: 0.5),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.add,
-                    size: 24,
-                    color: _hovered ? AppColors.ctTeal : AppColors.ctText3),
-                const SizedBox(height: 8),
-                Text(
-                  'Contratar worker',
-                  style: AppTextStyles.body.copyWith(
-                      color: _hovered ? AppColors.ctText : null),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              decoration: BoxDecoration(
+                color: _hovered
+                    ? AppColors.ctTeal.withValues(alpha: 0.06)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add,
+                        size: 24,
+                        color: _hovered ? AppColors.ctTeal : AppColors.ctText3),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Contratar worker',
+                      style: AppTextStyles.body.copyWith(
+                          color: _hovered ? AppColors.ctText : null),
+                    ),
+                    Text(
+                      'Explorar catálogo',
+                      style: AppTextStyles.navItem
+                          .copyWith(color: AppColors.ctText3),
+                    ),
+                  ],
                 ),
-                Text(
-                  'Explorar catálogo',
-                  style:
-                      AppTextStyles.navItem.copyWith(color: AppColors.ctText3),
-                ),
-              ],
+              ),
             ),
           ),
         ),
