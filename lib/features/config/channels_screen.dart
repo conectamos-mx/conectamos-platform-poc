@@ -218,6 +218,7 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
                       ),
                     )
                   : SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
                       child: _ChannelsBody(
                         channels: _channels,
                         onEdit: _openEdit,
@@ -308,11 +309,12 @@ class _ChannelCardState extends State<_ChannelCard> {
         ? rawPhone
         : (rawHandle.isNotEmpty ? '@$rawHandle' : '');
 
-    final inviteUrl = identifier.isNotEmpty
-        ? (channelType == 'whatsapp'
-            ? 'https://wa.me/${identifier.replaceAll('+', '').replaceAll(' ', '')}'
-            : 'https://t.me/${identifier.replaceAll('@', '')}')
-        : '';
+    final displayName = ch['display_name'] as String? ?? '';
+    final inviteUrl = channelType == 'whatsapp' && displayName.isNotEmpty
+        ? 'https://wa.me/${displayName.replaceAll('+', '').replaceAll(' ', '').replaceAll('-', '')}'
+        : (rawHandle.isNotEmpty
+            ? 'https://t.me/${rawHandle.replaceAll('@', '')}'
+            : '');
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -360,9 +362,8 @@ class _ChannelCardState extends State<_ChannelCard> {
                       ),
                     ),
               const SizedBox(width: 14),
-              // Nombre + identifier
+              // Nombre + badge tipo + identifier + icono copiar
               Expanded(
-                flex: 3,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -371,29 +372,56 @@ class _ChannelCardState extends State<_ChannelCard> {
                         style: AppTextStyles.body
                             .copyWith(fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis),
-                    if (identifier.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(identifier,
-                          style: AppTextStyles.navItem
-                              .copyWith(color: AppColors.ctText2),
-                          overflow: TextOverflow.ellipsis),
-                    ],
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                              color: typeEntry.bg,
+                              borderRadius: BorderRadius.circular(20)),
+                          child: Text(typeEntry.label,
+                              style: AppTextStyles.caption.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: typeEntry.fg)),
+                        ),
+                        if (identifier.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(identifier,
+                              style: AppTextStyles.navItem
+                                  .copyWith(color: AppColors.ctText2)),
+                          if (inviteUrl.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () {
+                                Clipboard.setData(
+                                    ClipboardData(text: inviteUrl));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('URL copiada'),
+                                    duration: Duration(seconds: 2),
+                                    backgroundColor: AppColors.ctOk,
+                                  ),
+                                );
+                              },
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: Tooltip(
+                                  message: 'Copiar URL de invitación',
+                                  child: const Icon(Icons.link_rounded,
+                                      size: 14, color: AppColors.ctText3),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               ),
-              // Badge tipo
-              Container(
-                margin: const EdgeInsets.only(right: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                    color: typeEntry.bg,
-                    borderRadius: BorderRadius.circular(20)),
-                child: Text(
-                  typeEntry.label,
-                  style: AppTextStyles.badge.copyWith(
-                      color: typeEntry.fg, fontWeight: FontWeight.w600),
-                ),
-              ),
+              const SizedBox(width: 12),
               // Status pill
               Container(
                 margin: const EdgeInsets.only(right: 12),
@@ -407,31 +435,6 @@ class _ChannelCardState extends State<_ChannelCard> {
                       color: isActive ? AppColors.ctOkText : AppColors.ctText2),
                 ),
               ),
-              const Spacer(),
-              // Icono copiar URL
-              if (inviteUrl.isNotEmpty) ...[
-                GestureDetector(
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: inviteUrl));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('URL copiada'),
-                        duration: Duration(seconds: 2),
-                        backgroundColor: AppColors.ctOk,
-                      ),
-                    );
-                  },
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Tooltip(
-                      message: 'Copiar URL de invitación',
-                      child: const Icon(Icons.link_rounded,
-                          size: 16, color: AppColors.ctText3),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
               // Ver detalle
               GestureDetector(
                 onTap: widget.onEdit,
