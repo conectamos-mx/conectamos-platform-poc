@@ -247,31 +247,27 @@ class _ChannelsBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.ctSurface,
-        border: Border.all(color: AppColors.ctBorder),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: channels.isEmpty
-          ? const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: Center(child: Text('No hay canales configurados aún.')),
-            )
-          : Column(
-              children: channels.asMap().entries.map((entry) {
-                final isLast = entry.key == channels.length - 1;
-                return Column(children: [
-                  _ChannelCard(
-                    channel: entry.value,
-                    onEdit: () => onEdit(entry.value),
-                    onToggleActive: () => onToggleActive(entry.value),
-                    canManage: canManage,
-                  ),
-                  if (!isLast) const Divider(height: 1, color: AppColors.ctBorder),
-                ]);
-              }).toList(),
-            ),
+    if (channels.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: Center(child: Text('No hay canales configurados aún.')),
+      );
+    }
+    return Column(
+      children: channels.map((ch) => Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: AppColors.ctSurface,
+          border: Border.all(color: AppColors.ctBorder),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: _ChannelCard(
+          channel: ch,
+          onEdit: () => onEdit(ch),
+          onToggleActive: () => onToggleActive(ch),
+          canManage: canManage,
+        ),
+      )).toList(),
     );
   }
 }
@@ -305,8 +301,9 @@ class _ChannelCardState extends State<_ChannelCard> {
     final isActive    = ch['is_active'] as bool? ?? false;
     final typeEntry   = _kChannelTypeConfig[channelType] ?? _kChannelTypeConfig['whatsapp']!;
 
-    final rawPhone  = ch['phone_number'] as String? ?? ch['phone_number_id'] as String? ?? '';
-    final rawHandle = ch['bot_username'] as String? ?? ch['handle'] as String? ?? '';
+    final credentials = (ch['channel_config'] as Map<String, dynamic>?)?['credentials'] as Map<String, dynamic>? ?? {};
+    final rawPhone  = credentials['phone_number_id'] as String? ?? '';
+    final rawHandle = credentials['bot_username'] as String? ?? '';
     final identifier = channelType == 'whatsapp'
         ? rawPhone
         : (rawHandle.isNotEmpty ? '@$rawHandle' : '');
@@ -349,7 +346,18 @@ class _ChannelCardState extends State<_ChannelCard> {
                           color: const Color(0xFF229ED9),
                           borderRadius: BorderRadius.circular(10)),
                       padding: const EdgeInsets.all(6),
-                      child: Image.asset('assets/logos/telegram.png'),
+                      child: Image.asset(
+                        'assets/logos/telegram.png',
+                        errorBuilder: (context2, err, stack) => Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                              color: const Color(0xFF229ED9),
+                              borderRadius: BorderRadius.circular(10)),
+                          child: const Icon(Icons.send_rounded,
+                              color: Colors.white, size: 20),
+                        ),
+                      ),
                     ),
               const SizedBox(width: 14),
               // Nombre + identifier
