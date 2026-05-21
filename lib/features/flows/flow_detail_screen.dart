@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -116,6 +118,7 @@ const _kTriggerSources = [
   ('conversational', 'Conversacional'),
   ('api', 'API / Sistema'),
   ('dashboard', 'Dashboard'),
+  ('scheduled', 'Programado'),
 ];
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -162,6 +165,9 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
   // Roles autorizados
   List<String> _allowedRoleIds = [];
   List<Map<String, dynamic>> _availableRoles = [];
+
+  // Worker flows (for delete reference check)
+  List<Map<String, dynamic>> _workerFlows = [];
 
   @override
   void initState() {
@@ -250,6 +256,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         _descCtrl.text = flow['description'] as String? ?? '';
         _loading = false;
       });
+      _loadWorkerFlows();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -257,6 +264,15 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         _loading = false;
       });
     }
+  }
+
+  Future<void> _loadWorkerFlows() async {
+    final twId = _flow?['tenant_worker_id'] as String? ?? '';
+    if (twId.isEmpty) return;
+    try {
+      final flows = await FlowsApi.getFlowsByWorker(tenantWorkerId: twId);
+      if (mounted) setState(() => _workerFlows = flows);
+    } catch (_) {}
   }
 
   Future<void> _save({bool silent = false}) async {
@@ -414,32 +430,6 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
     }
   }
 
-  Future<void> _saveField({String? name, String? description}) async {
-    if (_saving) return;
-    setState(() => _saving = true);
-    try {
-      final updated = await FlowsApi.updateFlow(
-        flowId: widget.flowId,
-        name: name ?? (_flow!['name'] as String?),
-        description: description ?? (_flow!['description'] as String?),
-      );
-      if (!mounted) return;
-      if (name != null) _nameCtrl.text = name;
-      if (description != null) _descCtrl.text = description;
-      setState(() { _flow = updated; _saving = false; });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Guardado'), backgroundColor: AppColors.ctOk,
-        duration: Duration(seconds: 2),
-      ));
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(_dioError(e)), backgroundColor: AppColors.ctDanger,
-      ));
-    }
-  }
-
   Future<void> _confirmDelete() async {
     final name = _flow?['name'] as String? ?? 'este flujo';
     final confirmed = await showDialog<bool>(
@@ -523,8 +513,11 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
           onBack: widget.onBack,
           onToggleActive: _toggleActive,
           onDelete: _confirmDelete,
-          onSaveName: (name) => _saveField(name: name),
-          onSaveDescription: (desc) => _saveField(description: desc),
+          workerFlows: _workerFlows,
+          onTriggerSourcesChanged: (updated) {
+            setState(() => _triggerSources = updated);
+            _save(silent: true);
+          },
         ),
         Container(width: 1, color: AppColors.ctBorder),
         Expanded(
@@ -624,8 +617,8 @@ class _FlowSidePanel extends StatefulWidget {
     required this.onBack,
     required this.onToggleActive,
     required this.onDelete,
-    required this.onSaveName,
-    required this.onSaveDescription,
+    required this.workerFlows,
+    required this.onTriggerSourcesChanged,
   });
 
   final Map<String, dynamic> flow;
@@ -634,335 +627,544 @@ class _FlowSidePanel extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onToggleActive;
   final VoidCallback onDelete;
-  final ValueChanged<String> onSaveName;
-  final ValueChanged<String> onSaveDescription;
+  final List<Map<String, dynamic>> workerFlows;
+  final ValueChanged<List<String>> onTriggerSourcesChanged;
 
   @override
   State<_FlowSidePanel> createState() => _FlowSidePanelState();
 }
 
 class _FlowSidePanelState extends State<_FlowSidePanel> {
-  bool _editingName = false;
-  bool _editingDesc = false;
-  late TextEditingController _nameCtrl;
-  late TextEditingController _descCtrl;
+  late List<String> _triggerSources;
+  bool _showDeleteModal = false;
+  bool _deleting = false;
+  final _confirmCtrl = TextEditingController();
+  List<String> _referencingFlows = [];
 
   @override
   void initState() {
     super.initState();
-    _nameCtrl = TextEditingController(text: widget.flow['name'] as String? ?? '');
-    _descCtrl = TextEditingController(text: widget.flow['description'] as String? ?? '');
+    _triggerSources = List<String>.from(
+      (widget.flow['trigger_sources'] as List? ?? []).map((s) => s.toString()),
+    );
   }
 
   @override
   void didUpdateWidget(_FlowSidePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final newName = widget.flow['name'] as String? ?? '';
-    final newDesc = widget.flow['description'] as String? ?? '';
-    if (oldWidget.flow['name'] != newName && !_editingName) {
-      _nameCtrl.text = newName;
-    }
-    if (oldWidget.flow['description'] != newDesc && !_editingDesc) {
-      _descCtrl.text = newDesc;
+    if (oldWidget.flow['trigger_sources'] != widget.flow['trigger_sources']) {
+      _triggerSources = List<String>.from(
+        (widget.flow['trigger_sources'] as List? ?? []).map((s) => s.toString()),
+      );
     }
   }
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _descCtrl.dispose();
+    _confirmCtrl.dispose();
     super.dispose();
   }
 
-  List<Widget> _buildTriggerChips() {
-    const labels = {
-      'conversational': 'Conversacional',
-      'api': 'API',
-      'dashboard': 'Dashboard',
-    };
-    final sources = (widget.flow['trigger_sources'] as List? ?? [])
-        .map((s) => s.toString())
-        .toList();
-    if (sources.isEmpty) {
-      return [Text('—', style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3))];
+  void _checkReferences() {
+    final currentSlug = widget.flow['slug'] as String? ?? '';
+    final refs = <String>[];
+    for (final f in widget.workerFlows) {
+      if ((f['slug'] as String?) == currentSlug) continue;
+      final precs = (f['preconditions'] as List? ?? []);
+      for (final p in precs) {
+        final pMap = p as Map?;
+        final params = (pMap?['params'] ?? pMap?['config']) as Map? ?? {};
+        final slugVal = params['sibling_slug'] as String?
+            ?? params['flow_slug'] as String?
+            ?? params['parent_flow_slug'] as String?
+            ?? params['child_flow_slug'] as String? ?? '';
+        if (slugVal == currentSlug) {
+          refs.add(f['name'] as String? ?? f['slug'] as String? ?? '');
+        }
+      }
+      final onComplete = (f['on_complete'] as Map<String, dynamic>?) ?? {};
+      final actions = (onComplete['actions'] as List? ?? []);
+      for (final a in actions) {
+        final aMap = a as Map? ?? {};
+        final slugVal = aMap['target_flow_slug'] as String?
+            ?? aMap['flow_slug'] as String? ?? '';
+        if (slugVal == currentSlug) {
+          refs.add(f['name'] as String? ?? f['slug'] as String? ?? '');
+        }
+      }
     }
-    return sources.map((s) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.ctTealLight,
-        borderRadius: BorderRadius.circular(20),
+    setState(() => _referencingFlows = refs.toSet().toList());
+  }
+
+  Future<void> _executeDelete() async {
+    setState(() => _deleting = true);
+    try {
+      widget.onDelete();
+    } catch (_) {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  Widget _buildDeleteModal() {
+    final flowName = widget.flow['name'] as String? ?? 'este flujo';
+    final canConfirm = _confirmCtrl.text.trim() == flowName;
+
+    return Positioned.fill(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+        child: Container(
+          color: AppColors.ctDanger.withValues(alpha: 0.08),
+          child: Center(
+            child: Container(
+              width: 500,
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.85,
+              ),
+              margin: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppColors.ctSurface,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.ctDanger.withValues(alpha: 0.15),
+                    blurRadius: 32,
+                    offset: const Offset(0, 8),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        Container(
+                          width: 40, height: 40,
+                          decoration: BoxDecoration(
+                            color: AppColors.ctRedBg,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.warning_amber_rounded,
+                              color: AppColors.ctDanger, size: 22),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('¿Eliminar "$flowName"?',
+                                  style: AppTextStyles.cardTitle),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Esta acción es permanente e irreversible.',
+                                style: AppTextStyles.bodySmall
+                                    .copyWith(color: AppColors.ctText2),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18,
+                              color: AppColors.ctText2),
+                          onPressed: () => setState(() {
+                            _showDeleteModal = false;
+                            _confirmCtrl.clear();
+                          }),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Qué ocurrirá
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.ctBg,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Qué ocurrirá:',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                  fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 10),
+                          _ImpactRow(
+                            icon: Icons.check_circle_outline,
+                            color: AppColors.ctOk,
+                            text: 'Las ejecuciones existentes no se ven afectadas '
+                                '(tienen snapshot del flujo).',
+                          ),
+                          const SizedBox(height: 8),
+                          _ImpactRow(
+                            icon: Icons.block_outlined,
+                            color: AppColors.ctDanger,
+                            text: 'No se podrán iniciar nuevas ejecuciones de este flujo.',
+                          ),
+                          const SizedBox(height: 8),
+                          _ImpactRow(
+                            icon: Icons.warning_amber_rounded,
+                            color: AppColors.ctWarn,
+                            text: 'Las ejecuciones activas en curso serán bloqueadas '
+                                'si el flujo tiene ejecuciones activas.',
+                          ),
+                          if (_referencingFlows.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            _ImpactRow(
+                              icon: Icons.link_off_rounded,
+                              color: AppColors.ctDanger,
+                              text: 'Los siguientes flujos referencian este flujo y '
+                                  'fallarán silenciosamente: '
+                                  '${_referencingFlows.join(", ")}.',
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Mini-card del flujo
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.ctRedBg.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: AppColors.ctDanger.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36, height: 36,
+                            decoration: BoxDecoration(
+                              color: AppColors.ctSurface,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.ctBorder),
+                            ),
+                            child: const Icon(Icons.account_tree_outlined,
+                                size: 18, color: AppColors.ctText2),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(flowName,
+                                    style: AppTextStyles.body
+                                        .copyWith(fontWeight: FontWeight.w600)),
+                                Text(
+                                  widget.flow['slug'] as String? ?? '',
+                                  style: AppTextStyles.caption
+                                      .copyWith(color: AppColors.ctText3,
+                                          fontFamily: 'Geist'),
+                                ),
+                              ],
+                            ),
+                          ),
+                          _MetricRow(
+                            label: 'Ejecuciones',
+                            value: (widget.flow['execution_count'] as int? ?? 0)
+                                .toString(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Confirmación
+                    Text(
+                      'Escribe "$flowName" para confirmar:',
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.ctText2),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _confirmCtrl,
+                      autofocus: true,
+                      style: AppTextStyles.body,
+                      decoration: InputDecoration(
+                        hintText: flowName,
+                        hintStyle: AppTextStyles.body
+                            .copyWith(color: AppColors.ctText3),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide:
+                              const BorderSide(color: AppColors.ctBorder),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide:
+                              const BorderSide(color: AppColors.ctBorder),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                              color: AppColors.ctDanger, width: 1.5),
+                        ),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Botones
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        AppButton(
+                          label: 'Cancelar',
+                          variant: AppButtonVariant.ghost,
+                          size: AppButtonSize.sm,
+                          onPressed: () => setState(() {
+                            _showDeleteModal = false;
+                            _confirmCtrl.clear();
+                          }),
+                        ),
+                        const SizedBox(width: 10),
+                        AppButton(
+                          label: _deleting
+                              ? 'Eliminando...'
+                              : 'Sí, eliminar "$flowName"',
+                          variant: AppButtonVariant.danger,
+                          size: AppButtonSize.sm,
+                          isDisabled: !canConfirm || _deleting,
+                          isLoading: _deleting,
+                          onPressed: canConfirm ? _executeDelete : () {},
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
-      child: Text(
-        labels[s] ?? s,
-        style: AppTextStyles.caption.copyWith(
-            color: AppColors.ctTealDark, fontWeight: FontWeight.w500),
-      ),
-    )).toList();
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 220,
-      color: AppColors.ctSurface2,
-      child: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. Botón volver
-                  MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: widget.onBack,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: AppColors.ctNavy,
-                          border: Border.all(color: AppColors.ctNavy),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text('← Volver a flujos',
-                            style: AppTextStyles.bodySmall.copyWith(color: Colors.white)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // 2. Nombre — inline edit
-                  Row(
+    return Stack(
+      children: [
+        Container(
+          width: 220,
+          color: AppColors.ctSurface2,
+          child: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: _editingName
-                            ? TextField(
-                                controller: _nameCtrl,
-                                style: AppTextStyles.cardTitle,
-                                autofocus: true,
-                                maxLines: 2,
-                                decoration: InputDecoration(
-                                  border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: AppColors.ctBorder)),
-                                  focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: AppColors.ctTeal, width: 1.5)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                  isDense: true,
-                                ),
-                              )
-                            : Text(widget.flow['name'] as String? ?? '—',
-                                style: AppTextStyles.cardTitle),
-                      ),
-                      const SizedBox(width: 6),
-                      if (!_editingName)
-                        GestureDetector(
-                          onTap: () => setState(() => _editingName = true),
-                          child: const MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: Icon(Icons.edit_outlined, size: 14, color: AppColors.ctText3),
+                      // 1. Botón volver
+                      MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: widget.onBack,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: AppColors.ctNavy,
+                              border: Border.all(color: AppColors.ctNavy),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text('← Volver a flujos',
+                                style: AppTextStyles.bodySmall.copyWith(color: Colors.white)),
                           ),
                         ),
-                    ],
-                  ),
-                  if (_editingName) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        AppButton(
-                            label: 'Cancelar', variant: AppButtonVariant.ghost, size: AppButtonSize.sm,
-                            onPressed: () {
-                              _nameCtrl.text = widget.flow['name'] as String? ?? '';
-                              setState(() => _editingName = false);
-                            }),
-                        const SizedBox(width: 6),
-                        AppButton(
-                            label: 'Guardar', variant: AppButtonVariant.teal, size: AppButtonSize.sm,
-                            isLoading: widget.saving,
-                            onPressed: () {
-                              widget.onSaveName(_nameCtrl.text.trim());
-                              setState(() => _editingName = false);
-                            }),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 6),
+                      ),
+                      const SizedBox(height: 20),
 
-                  // 3. Slug — solo lectura, copiable
-                  GestureDetector(
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: widget.flow['slug'] as String? ?? ''));
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('Slug copiado'), duration: Duration(seconds: 2),
-                        backgroundColor: AppColors.ctOk,
-                      ));
-                    },
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.ctSurface,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.ctBorder),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(widget.flow['slug'] as String? ?? '—',
-                                  style: AppTextStyles.bodySmall.copyWith(
-                                    color: AppColors.ctText3,
-                                    fontFamily: 'Geist',
-                                  ),
-                                  overflow: TextOverflow.ellipsis),
+                      // 2. Nombre — solo lectura
+                      Text(
+                        widget.flow['name'] as String? ?? '—',
+                        style: AppTextStyles.cardTitle,
+                      ),
+                      const SizedBox(height: 6),
+
+                      // 3. Slug — solo lectura, copiable
+                      GestureDetector(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: widget.flow['slug'] as String? ?? ''));
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Slug copiado'),
+                            duration: Duration(seconds: 2),
+                            backgroundColor: AppColors.ctOk,
+                          ));
+                        },
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.ctSurface,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: AppColors.ctBorder),
                             ),
-                            const Icon(Icons.copy_rounded, size: 12, color: AppColors.ctText3),
-                          ],
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    widget.flow['slug'] as String? ?? '—',
+                                    style: AppTextStyles.bodySmall.copyWith(
+                                      color: AppColors.ctText3,
+                                      fontFamily: 'Geist',
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const Icon(Icons.copy_rounded, size: 12, color: AppColors.ctText3),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                      const SizedBox(height: 6),
 
-                  // 4. Descripción — inline edit
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _editingDesc
-                            ? TextField(
-                                controller: _descCtrl,
-                                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
-                                autofocus: true,
-                                maxLines: 3,
-                                decoration: InputDecoration(
-                                  border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: AppColors.ctBorder)),
-                                  focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: AppColors.ctTeal, width: 1.5)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                  isDense: true,
+                      // 4. Descripción — solo lectura
+                      if ((widget.flow['description'] as String?)?.isNotEmpty == true)
+                        Text(
+                          widget.flow['description'] as String,
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+                        )
+                      else
+                        Text(
+                          'Sin descripción',
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+                        ),
+                      const SizedBox(height: 20),
+
+                      const Divider(color: AppColors.ctBorder, height: 1),
+                      const SizedBox(height: 16),
+
+                      // 5. ESTADO
+                      Text('ESTADO', style: AppTextStyles.kpiLabel),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          AppBadge(
+                            label: widget.isActive ? 'Activo' : 'Inactivo',
+                            variant: widget.isActive ? AppBadgeVariant.ok : AppBadgeVariant.neutral,
+                          ),
+                          const Expanded(child: SizedBox()),
+                          Switch(
+                            value: widget.isActive,
+                            onChanged: (_) => widget.onToggleActive(),
+                            activeThumbColor: AppColors.ctTeal,
+                            activeTrackColor: AppColors.ctTealLight,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 6. TRIGGERS — editables
+                      Text('TRIGGERS', style: AppTextStyles.kpiLabel),
+                      const SizedBox(height: 8),
+                      Text(
+                        '¿Desde dónde puede iniciarse este flujo?',
+                        style: AppTextStyles.caption.copyWith(color: AppColors.ctText3),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: _kTriggerSources.map((entry) {
+                          final (value, label) = entry;
+                          final selected = _triggerSources.contains(value);
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                if (selected) {
+                                  if (_triggerSources.length > 1) {
+                                    _triggerSources.remove(value);
+                                  }
+                                } else {
+                                  _triggerSources.add(value);
+                                }
+                              });
+                              widget.onTriggerSourcesChanged(List.from(_triggerSources));
+                            },
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: selected ? AppColors.ctTealLight : AppColors.ctSurface,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: selected ? AppColors.ctTeal : AppColors.ctBorder,
+                                  ),
                                 ),
-                              )
-                            : Text(
-                                (widget.flow['description'] as String?)?.isNotEmpty == true
-                                    ? widget.flow['description'] as String
-                                    : 'Sin descripción',
-                                style: AppTextStyles.bodySmall.copyWith(
-                                  color: (widget.flow['description'] as String?)?.isNotEmpty == true
-                                      ? AppColors.ctText2
-                                      : AppColors.ctText3,
+                                child: Text(
+                                  label,
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: selected ? AppColors.ctTealDark : AppColors.ctText2,
+                                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                                  ),
                                 ),
                               ),
+                            ),
+                          );
+                        }).toList(),
                       ),
-                      const SizedBox(width: 6),
-                      if (!_editingDesc)
-                        GestureDetector(
-                          onTap: () => setState(() => _editingDesc = true),
-                          child: const MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: Icon(Icons.edit_outlined, size: 14, color: AppColors.ctText3),
-                          ),
-                        ),
+                      const SizedBox(height: 16),
+
+                      const Divider(color: AppColors.ctBorder, height: 1),
+                      const SizedBox(height: 16),
+
+                      // 7. MÉTRICAS
+                      Text('MÉTRICAS', style: AppTextStyles.kpiLabel),
+                      const SizedBox(height: 10),
+                      _MetricRow(
+                        label: 'Ejecuciones totales',
+                        value: (widget.flow['execution_count'] as int? ?? 0).toString(),
+                      ),
+                      const SizedBox(height: 6),
+                      _MetricRow(
+                        label: 'Campos configurados',
+                        value: ((widget.flow['fields'] as List?)?.length ?? 0).toString(),
+                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
-                  if (_editingDesc) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        AppButton(
-                            label: 'Cancelar', variant: AppButtonVariant.ghost, size: AppButtonSize.sm,
-                            onPressed: () {
-                              _descCtrl.text = widget.flow['description'] as String? ?? '';
-                              setState(() => _editingDesc = false);
-                            }),
-                        const SizedBox(width: 6),
-                        AppButton(
-                            label: 'Guardar', variant: AppButtonVariant.teal, size: AppButtonSize.sm,
-                            isLoading: widget.saving,
-                            onPressed: () {
-                              widget.onSaveDescription(_descCtrl.text.trim());
-                              setState(() => _editingDesc = false);
-                            }),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-
-                  const Divider(color: AppColors.ctBorder, height: 1),
-                  const SizedBox(height: 16),
-
-                  // 5. ESTADO
-                  Text('ESTADO', style: AppTextStyles.kpiLabel),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      AppBadge(
-                        label: widget.isActive ? 'Activo' : 'Inactivo',
-                        variant: widget.isActive ? AppBadgeVariant.ok : AppBadgeVariant.neutral,
-                      ),
-                      const Expanded(child: SizedBox()),
-                      Switch(
-                        value: widget.isActive,
-                        onChanged: (_) => widget.onToggleActive(),
-                        activeThumbColor: AppColors.ctTeal,
-                        activeTrackColor: AppColors.ctTealLight,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // 6. TRIGGERS
-                  Text('TRIGGERS', style: AppTextStyles.kpiLabel),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: _buildTriggerChips(),
-                  ),
-                  const SizedBox(height: 16),
-
-                  const Divider(color: AppColors.ctBorder, height: 1),
-                  const SizedBox(height: 16),
-
-                  // 7. MÉTRICAS
-                  Text('MÉTRICAS', style: AppTextStyles.kpiLabel),
-                  const SizedBox(height: 10),
-                  _MetricRow(
-                    label: 'Ejecuciones totales',
-                    value: (widget.flow['execution_count'] as int? ?? 0).toString(),
-                  ),
-                  const SizedBox(height: 6),
-                  _MetricRow(
-                    label: 'Campos configurados',
-                    value: ((widget.flow['fields'] as List?)?.length ?? 0).toString(),
-                  ),
-                  const SizedBox(height: 24),
-                ],
+                ),
               ),
-            ),
+              // 8. Botón eliminar — fuera del scroll
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: AppButton(
+                  label: 'Eliminar flujo',
+                  variant: AppButtonVariant.danger,
+                  size: AppButtonSize.sm,
+                  expand: true,
+                  onPressed: () {
+                    _confirmCtrl.clear();
+                    _checkReferences();
+                    setState(() => _showDeleteModal = true);
+                  },
+                ),
+              ),
+            ],
           ),
-          // 8. Botón eliminar — fuera del scroll
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: AppButton(
-              label: 'Eliminar flujo',
-              variant: AppButtonVariant.danger,
-              size: AppButtonSize.sm,
-              expand: true,
-              onPressed: widget.onDelete,
-            ),
-          ),
-        ],
-      ),
+        ),
+        if (_showDeleteModal) _buildDeleteModal(),
+      ],
     );
   }
 }
@@ -981,6 +1183,32 @@ class _MetricRow extends StatelessWidget {
       Text(label, style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
       Text(value, style: AppTextStyles.body.copyWith(
           fontWeight: FontWeight.w700, color: AppColors.ctTeal)),
+    ],
+  );
+}
+
+// ── _ImpactRow ───────────────────────────────────────────────────────────────
+
+class _ImpactRow extends StatelessWidget {
+  const _ImpactRow({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, size: 14, color: color),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(text,
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
+      ),
     ],
   );
 }
