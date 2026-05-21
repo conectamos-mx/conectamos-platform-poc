@@ -3402,6 +3402,10 @@ class _AlCerrarTab extends StatefulWidget {
 class _AlCerrarTabState extends State<_AlCerrarTab> {
   late List<Map<String, dynamic>> _actions;
 
+  bool get _hasOpenFlowNTimes => _actions.any(
+    (a) => (a['type'] as String?) == 'open_flow_n_times',
+  );
+
   @override
   void initState() {
     super.initState();
@@ -3505,6 +3509,32 @@ class _AlCerrarTabState extends State<_AlCerrarTab> {
             'Se ejecutan en orden cuando el flujo se marca como completado.',
             style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
           ),
+          if (_hasOpenFlowNTimes) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.ctInfoBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.ctInfo.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.info_outline, size: 14, color: AppColors.ctInfoText),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Este flujo genera instancias hijas. '
+                      'Asegúrate de que el flujo de cierre tenga una precondición '
+                      '"all_children_completed" configurada.',
+                      style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctInfoText),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           if (_actions.isEmpty)
             const SizedBox(
