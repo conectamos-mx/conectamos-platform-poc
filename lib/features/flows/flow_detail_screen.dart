@@ -2,8 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-
 import '../../core/api/catalogs_api.dart';
 import '../../core/api/flows_api.dart';
 import '../../shared/widgets/asset_item_selector.dart';
@@ -559,6 +557,9 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
                       rules: _precondiciones,
                       canManage: canManage,
                       availableRoles: _availableRoles,
+                      tenantId: ref.read(activeTenantIdProvider),
+                      tenantWorkerId: _flow!['tenant_worker_id'] as String? ?? '',
+                      currentFlowSlug: _flow!['slug'] as String? ?? '',
                       onChanged: (updated) { setState(() => _precondiciones = updated); _save(silent: true); },
                     ),
                     _AlCerrarTab(
@@ -3835,6 +3836,35 @@ class _ActionDialogState extends State<_ActionDialog> {
                         setState(() => _selectedCountFieldKey = v),
                   ),
                 ),
+                if (_selectedCountFieldKey != null) ...[
+                  Builder(builder: (_) {
+                    final field = widget.flowFields.firstWhere(
+                      (f) => (f['key'] as String?) == _selectedCountFieldKey,
+                      orElse: () => <String, dynamic>{},
+                    );
+                    final isRequired = field['required'] as bool? ?? false;
+                    final fieldType = field['type'] as String? ?? '';
+                    final warnings = <String>[];
+                    if (fieldType.isNotEmpty && fieldType != 'number') {
+                      warnings.add('Este campo es de tipo "$fieldType". '
+                          'Se recomienda usar un campo de tipo Número para evitar errores.');
+                    }
+                    if (!isRequired) {
+                      warnings.add('Este campo no es obligatorio. '
+                          'Si el operador no lo captura, no se crearán instancias hijas.');
+                    }
+                    if (warnings.isEmpty) return const SizedBox.shrink();
+                    return Column(
+                      children: [
+                        const SizedBox(height: 6),
+                        for (final w in warnings) ...[
+                          _SemanticWarning(message: w),
+                          const SizedBox(height: 4),
+                        ],
+                      ],
+                    );
+                  }),
+                ],
               ] else if (_type == 'webhook_out') ...[
                 _FormField(
                   label: 'ID de integración',
@@ -4415,11 +4445,17 @@ class _PrecondicionesTab extends StatefulWidget {
     required this.rules,
     required this.canManage,
     required this.availableRoles,
+    required this.tenantId,
+    required this.tenantWorkerId,
+    required this.currentFlowSlug,
     required this.onChanged,
   });
   final List<Map<String, dynamic>> rules;
   final bool canManage;
   final List<Map<String, dynamic>> availableRoles;
+  final String tenantId;
+  final String tenantWorkerId;
+  final String currentFlowSlug;
   final ValueChanged<List<Map<String, dynamic>>> onChanged;
 
   @override
@@ -4429,12 +4465,16 @@ class _PrecondicionesTab extends StatefulWidget {
 class _PrecondicionesTabState extends State<_PrecondicionesTab> {
   late List<Map<String, dynamic>> _rules;
   List<Map<String, dynamic>> _availableTypes = [];
+  List<Map<String, dynamic>> _workerFlows = [];
 
   @override
   void initState() {
     super.initState();
     _rules = List.from(widget.rules);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadTypes());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadTypes();
+      _loadWorkerFlows();
+    });
   }
 
   @override
@@ -4454,6 +4494,18 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
     }
   }
 
+  Future<void> _loadWorkerFlows() async {
+    if (widget.tenantWorkerId.isEmpty) return;
+    try {
+      final flows = await FlowsApi.getFlowsByWorker(
+        tenantWorkerId: widget.tenantWorkerId,
+      );
+      if (mounted) setState(() => _workerFlows = flows);
+    } catch (_) {
+      // fail silently — selectores mostrarán campo texto como fallback
+    }
+  }
+
   String _typeLabel(String type) {
     for (final t in _availableTypes) {
       if (t['type'] == type) return t['label'] as String? ?? type;
@@ -4468,6 +4520,8 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
         rule: rule,
         availableRoles: widget.availableRoles,
         types: _availableTypes,
+        workerFlows: _workerFlows,
+        currentFlowSlug: widget.currentFlowSlug,
         onSaved: (updated) {
           setState(() {
             if (rule != null) {
@@ -4695,11 +4749,15 @@ class _AddRuleDialog extends StatefulWidget {
     required this.rule,
     required this.availableRoles,
     required this.types,
+    required this.workerFlows,
+    required this.currentFlowSlug,
     required this.onSaved,
   });
   final Map<String, dynamic>? rule;
   final List<Map<String, dynamic>> availableRoles;
   final List<Map<String, dynamic>> types;
+  final List<Map<String, dynamic>> workerFlows;
+  final String currentFlowSlug;
   final ValueChanged<Map<String, dynamic>> onSaved;
 
   @override
@@ -4717,8 +4775,84 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
   final Map<String, TextEditingController> _textCtrls = {};
   final Map<String, String?> _selectVals = {};
   final Map<String, bool> _boolVals = {};
+  final Map<String, String> _semanticWarnings = {};
 
   bool get _isEdit => widget.rule != null;
+
+  List<Map<String, dynamic>> get _workerFlows => widget.workerFlows;
+
+  Map<String, dynamic>? _flowBySlug(String slug) {
+    final f = _workerFlows.firstWhere(
+      (f) => (f['slug'] as String?) == slug,
+      orElse: () => <String, dynamic>{},
+    );
+    return f.isEmpty ? null : f;
+  }
+
+  bool _isFlowSlugField(String key) => const {
+    'sibling_slug', 'flow_slug', 'parent_flow_slug',
+    'child_flow_slug', 'slug',
+  }.contains(key);
+
+  void _validateSemantic(String fieldKey, String selectedSlug) {
+    final flow = _flowBySlug(selectedSlug);
+    if (flow == null) {
+      setState(() => _semanticWarnings[fieldKey] =
+          'Este flujo no existe en el worker actual');
+      return;
+    }
+
+    String? warning;
+
+    // S-1: requires_completed_sibling sobre flow no conversacional
+    if (_type == 'requires_completed_sibling' && fieldKey == 'sibling_slug') {
+      final sources = (flow['trigger_sources'] as List? ?? [])
+          .map((s) => s.toString()).toList();
+      if (!sources.contains('conversational')) {
+        warning = 'Este flujo no es conversacional. '
+            'Puede no completarse en el contexto esperado del operador.';
+      }
+    }
+
+    // S-2: all_children_completed sobre flow que no genera hijos
+    if (_type == 'all_children_completed' && fieldKey == 'parent_flow_slug') {
+      final onComplete = (flow['on_complete'] as Map<String, dynamic>?) ?? {};
+      final actions = (onComplete['actions'] as List? ?? []);
+      final hasOpenFlowNTimes = actions.any(
+        (a) => (a as Map?)?['type'] == 'open_flow_n_times',
+      );
+      if (!hasOpenFlowNTimes) {
+        warning = 'Este flujo no tiene una acción "Abrir flujo N veces" '
+            'en "Al cerrar". La precondición nunca se cumplirá.';
+      }
+    }
+
+    // S-3: Deadlock detection
+    if (_type == 'requires_completed_sibling' && fieldKey == 'sibling_slug') {
+      final siblingPrecs = (flow['preconditions'] as List? ?? []);
+      final currentFlowSlug = widget.currentFlowSlug;
+      final hasMirrorPrecondition = siblingPrecs.any((p) {
+        final pMap = p as Map<String, dynamic>? ?? {};
+        if (pMap['type'] != 'requires_completed_sibling') return false;
+        final params = (pMap['params'] ?? pMap['config']) as Map? ?? {};
+        final sibSlug = params['sibling_slug'] as String? ??
+            params['slug'] as String? ?? '';
+        return sibSlug == currentFlowSlug;
+      });
+      if (hasMirrorPrecondition) {
+        warning = '⚠️ DEADLOCK: "${flow['name']}" también requiere '
+            'que este flujo esté completado. Ninguno podrá iniciarse jamás.';
+      }
+    }
+
+    setState(() {
+      if (warning != null) {
+        _semanticWarnings[fieldKey] = warning;
+      } else {
+        _semanticWarnings.remove(fieldKey);
+      }
+    });
+  }
 
   List<Map<String, dynamic>> _fieldsForType(String? type) {
     if (type == null) return [];
@@ -4816,6 +4950,54 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
             const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       );
 
+  Widget _buildFlowSlugSelector(String key, String label) {
+    final ctrl = _textCtrls[key] ??= TextEditingController();
+    if (_workerFlows.isEmpty) {
+      return _FormField(label: label, controller: ctrl, placeholder: 'slug del flujo');
+    }
+    final currentSlug = ctrl.text;
+    final selectedSlug = _workerFlows.any((f) => (f['slug'] as String?) == currentSlug)
+        ? currentSlug
+        : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          value: selectedSlug,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: AppColors.ctBorder)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: AppColors.ctBorder)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+          hint: Text('Selecciona un flujo',
+              style: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
+          items: _workerFlows.map((f) {
+            final slug = f['slug'] as String? ?? '';
+            final name = f['name'] as String? ?? slug;
+            return DropdownMenuItem<String>(
+              value: slug,
+              child: Text(name, style: AppTextStyles.body),
+            );
+          }).toList(),
+          onChanged: (v) {
+            if (v != null) {
+              setState(() => ctrl.text = v);
+              _validateSemantic(key, v);
+            }
+          },
+        ),
+        if (_semanticWarnings[key] != null) ...[
+          const SizedBox(height: 6),
+          _SemanticWarning(message: _semanticWarnings[key]!),
+        ],
+      ],
+    );
+  }
+
   List<Widget> _renderDynamicFields() {
     if (_type == null) return [];
     final fields = _fieldsForType(_type!);
@@ -4824,6 +5006,20 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     for (final field in fields) {
       final key = field['key'] as String? ?? '';
       if (key.isEmpty) continue;
+
+      // Evaluar show_if condicional
+      final showIf = field['show_if'] as Map<String, dynamic>?;
+      if (showIf != null) {
+        final depKey = showIf['field'] as String? ?? '';
+        final depOp  = showIf['op'] as String? ?? 'eq';
+        final depVal = showIf['value'] as String? ?? '';
+        final currentVal = _textCtrls[depKey]?.text ?? _selectVals[depKey] ?? '';
+        bool visible = false;
+        if (depOp == 'eq')  visible = currentVal == depVal;
+        if (depOp == 'neq') visible = currentVal != depVal;
+        if (!visible) continue;
+      }
+
       final label = field['label'] as String? ?? key;
       final fieldType = field['type'] as String? ?? 'text';
       final rawOptions = field['options'] as List? ?? [];
@@ -4834,15 +5030,19 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
       widgets.add(const SizedBox(height: 16));
       switch (fieldType) {
         case 'text':
-          widgets
-            ..add(Text(label,
-                style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)))
-            ..add(const SizedBox(height: 6))
-            ..add(TextField(
-              controller: _textCtrls[key] ??= TextEditingController(),
-              style: AppTextStyles.body,
-              decoration: _inputDecoration,
-            ));
+          if (_isFlowSlugField(key)) {
+            widgets.add(_buildFlowSlugSelector(key, label));
+          } else {
+            widgets
+              ..add(Text(label,
+                  style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)))
+              ..add(const SizedBox(height: 6))
+              ..add(TextField(
+                controller: _textCtrls[key] ??= TextEditingController(),
+                style: AppTextStyles.body,
+                decoration: _inputDecoration,
+              ));
+          }
         case 'select':
           widgets
             ..add(Text(label,
@@ -4995,6 +5195,49 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── _SemanticWarning ──────────────────────────────────────────────────────────
+
+class _SemanticWarning extends StatelessWidget {
+  const _SemanticWarning({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDeadlock = message.startsWith('⚠️ DEADLOCK');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDeadlock ? AppColors.ctRedBg : AppColors.ctWarnBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDeadlock
+              ? AppColors.ctDanger.withValues(alpha: 0.4)
+              : AppColors.ctWarn.withValues(alpha: 0.4),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isDeadlock ? Icons.error_outline : Icons.warning_amber_rounded,
+            size: 14,
+            color: isDeadlock ? AppColors.ctDanger : AppColors.ctWarnText,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: isDeadlock ? AppColors.ctRedText : AppColors.ctWarnText,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
