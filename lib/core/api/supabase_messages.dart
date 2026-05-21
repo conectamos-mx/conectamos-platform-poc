@@ -66,6 +66,8 @@ class SupabaseMessages {
     String chatId, {
     int limit = 100,
     String? tenantId,
+    DateTime? before,
+    bool ascending = true,
   }) async {
     var query = _client
         .from('wa_messages')
@@ -76,12 +78,55 @@ class SupabaseMessages {
     if (tenantId != null && tenantId.isNotEmpty) {
       query = query.eq('tenant_id', tenantId);
     }
+    if (before != null) {
+      query = query.lt('received_at', before.toUtc().toIso8601String());
+    }
 
     return List<Map<String, dynamic>>.from(
-      await query.order('received_at', ascending: true).limit(limit),
+      await query.order('received_at', ascending: ascending).limit(limit),
     );
   }
 
+  /// Streams individual INSERT events on wa_messages for the given chat.
+  /// Emits one Map per new row — no full-list re-emit.
+  static Stream<Map<String, dynamic>> streamNewMessages(
+    String chatId, {
+    String? tenantId,
+  }) {
+    final controller = StreamController<Map<String, dynamic>>();
+    RealtimeChannel? rtChannel;
+
+    rtChannel = _client
+        .channel('chat_inserts_$chatId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'wa_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'chat_id',
+            value: chatId,
+          ),
+          callback: (payload) {
+            final row = Map<String, dynamic>.from(payload.newRecord);
+            if (tenantId != null &&
+                tenantId.isNotEmpty &&
+                row['tenant_id'] != tenantId) {
+              return;
+            }
+            if (!controller.isClosed) controller.add(row);
+          },
+        )
+        .subscribe();
+
+    controller.onCancel = () {
+      if (rtChannel != null) _client.removeChannel(rtChannel);
+    };
+
+    return controller.stream;
+  }
+
+  @Deprecated('Use getMessages + streamNewMessages instead')
   static Stream<List<Map<String, dynamic>>> streamMessages(
     String chatId, {
     String? tenantId,

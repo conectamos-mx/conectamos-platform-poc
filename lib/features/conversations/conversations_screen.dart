@@ -1656,12 +1656,17 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
   bool? _windowOpen; // null = cargando, true = abierta, false = cerrada
   bool _streamError = false;
   bool _sending = false;
-  StreamSubscription<List<Map<String, dynamic>>>? _subscription;
+  StreamSubscription<Map<String, dynamic>>? _subscription;
   String? _firstUnreadMessageId;
   final _firstUnreadKey = GlobalKey();
   final Set<String> _processedReadIds = {};
   // Optimistic reactions keyed by wa_message_id of the target message
   final Map<String, List<String>> _pendingReactions = {};
+
+  // Pagination state
+  bool _isLoadingOlder = false;
+  bool _hasMoreMessages = true;
+  DateTime? _oldestLoadedAt;
 
   // Multimedia
   bool _isDragOver = false;
@@ -1702,6 +1707,10 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
     final nearBottom = pos.pixels <= 100;
     if (nearBottom != _atBottom) setState(() => _atBottom = nearBottom);
     if (nearBottom && _hasNewMessage) setState(() => _hasNewMessage = false);
+    // reverse: true → maxScrollExtent == visual top (oldest messages).
+    if (pos.pixels >= pos.maxScrollExtent - 200) {
+      _loadOlderMessages();
+    }
   }
 
   String _chatFormatDate(DateTime dt) {
@@ -2290,7 +2299,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
     );
   }
 
-  void _subscribeToMessages(String chatId) {
+  Future<void> _subscribeToMessages(String chatId) async {
     _subscription?.cancel();
     _subscribedChatId = chatId;
     _processedReadIds.clear();
@@ -2304,37 +2313,48 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
       _atBottom = true;
       _hasNewMessage = false;
       _streamError = false;
+      _isLoadingOlder = false;
+      _hasMoreMessages = true;
+      _oldestLoadedAt = null;
     });
 
-    // Use the pre-tap lastRead so we correctly find "new" messages
-    final lastRead = _ConvoListState._preOpenLastRead[chatId];
-
     final tenantId = ref.read(activeTenantIdProvider);
-    var firstEmit = true;
-    _subscription = SupabaseMessages.streamMessages(
-      chatId,
-      tenantId: tenantId.isNotEmpty ? tenantId : null,
-    ).listen((messages) {
-      if (!mounted) return;
+    final effectiveTenantId = tenantId.isNotEmpty ? tenantId : null;
 
-      // Determine first unread only once, on first emit
-      if (firstEmit && _firstUnreadMessageId == null) {
-        if (lastRead != null) {
-          for (final msg in messages) {
-            if ((msg['direction'] as String?) == 'outbound') continue;
-            final receivedAt =
-                DateTime.tryParse(msg['received_at'] as String? ?? '');
-            if (receivedAt != null && receivedAt.isAfter(lastRead)) {
-              _firstUnreadMessageId = msg['id'] as String?;
-              break;
-            }
+    // ── Fetch inicial: 50 mensajes más recientes ──
+    try {
+      final recent = await SupabaseMessages.getMessages(
+        chatId,
+        limit: 50,
+        tenantId: effectiveTenantId,
+        ascending: false, // DESC → most recent first
+      );
+      if (!mounted) return;
+      // Reverse to ASC (oldest → newest) for display
+      final messages = recent.reversed.toList();
+
+      // Determine first unread
+      final lastRead = _ConvoListState._preOpenLastRead[chatId];
+      if (lastRead != null) {
+        for (final msg in messages) {
+          if ((msg['direction'] as String?) == 'outbound') continue;
+          final receivedAt =
+              DateTime.tryParse(msg['received_at'] as String? ?? '');
+          if (receivedAt != null && receivedAt.isAfter(lastRead)) {
+            _firstUnreadMessageId = msg['id'] as String?;
+            break;
           }
         }
       }
 
-      // Mientras el chat está abierto, marcar mensajes como leídos en tiempo real
-      _ConvoListState.setLastRead(
-          chatId, DateTime.now().toUtc(), ref.read(activeTenantIdProvider));
+      // Track oldest loaded timestamp for pagination
+      if (messages.isNotEmpty) {
+        _oldestLoadedAt = DateTime.tryParse(
+            messages.first['received_at'] as String? ?? '');
+      }
+      if (recent.length < 50) _hasMoreMessages = false;
+
+      // Compute window state
       final lastInbound = messages
           .where((m) => (m['direction'] as String?) != 'outbound')
           .lastOrNull;
@@ -2348,6 +2368,10 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
       final computed = operatorId == null
           ? true
           : (channelType != 'whatsapp') || hasRecentInbound;
+
+      _ConvoListState.setLastRead(
+          chatId, DateTime.now().toUtc(), ref.read(activeTenantIdProvider));
+
       setState(() {
         _apiMessages = messages;
         _msgLoading = false;
@@ -2356,25 +2380,102 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
       });
       _sendReadReceipts(messages);
 
-      if (firstEmit) {
-        firstEmit = false;
-        WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _scrollToFirstUnread());
-      } else {
-        // Emit posterior: mensaje nuevo en tiempo real.
-        // reverse: true → position 0 == visual bottom.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || !_scrollCtrl.hasClients) return;
-          if (_atBottom) {
-            _scrollCtrl.jumpTo(0);
-          } else {
-            setState(() => _hasNewMessage = true);
-          }
-        });
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _scrollToFirstUnread());
+    } catch (_) {
+      if (!mounted) return;
+      setState(() { _msgLoading = false; _streamError = true; });
+      return;
+    }
+
+    // ── Suscripción a inserts en tiempo real ──
+    _subscription = SupabaseMessages.streamNewMessages(
+      chatId,
+      tenantId: effectiveTenantId,
+    ).listen((newMsg) {
+      if (!mounted) return;
+      final id = newMsg['id'] as String?;
+      // Dedup: skip if already in list
+      if (id != null && _apiMessages.any((m) => m['id'] == id)) return;
+
+      // Update window state
+      if ((newMsg['direction'] as String?) != 'outbound') {
+        final ra = DateTime.tryParse(newMsg['received_at'] as String? ?? '');
+        if (ra != null) {
+          final channelType = ref.read(selectedChannelTypeProvider);
+          final operatorId  = ref.read(selectedConvOperatorIdProvider);
+          final fresh = DateTime.now().toUtc().difference(ra.toUtc()).inHours < 24;
+          final computed = operatorId == null
+              ? true
+              : (channelType != 'whatsapp') || fresh;
+          _windowOpen = computed;
+        }
       }
+
+      _ConvoListState.setLastRead(
+          chatId, DateTime.now().toUtc(), ref.read(activeTenantIdProvider));
+
+      setState(() {
+        _apiMessages = [..._apiMessages, newMsg];
+      });
+      _sendReadReceipts([newMsg]);
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollCtrl.hasClients) return;
+        if (_atBottom) {
+          _scrollCtrl.jumpTo(0);
+        } else {
+          setState(() => _hasNewMessage = true);
+        }
+      });
     }, onError: (_) {
-      if (mounted) setState(() { _msgLoading = false; _streamError = true; });
+      // Stream error doesn't affect already-loaded messages
     });
+  }
+
+  Future<void> _loadOlderMessages() async {
+    if (_isLoadingOlder || !_hasMoreMessages) return;
+    final chatId = _subscribedChatId;
+    if (chatId == null || _oldestLoadedAt == null) return;
+
+    setState(() => _isLoadingOlder = true);
+    try {
+      final tenantId = ref.read(activeTenantIdProvider);
+      final older = await SupabaseMessages.getMessages(
+        chatId,
+        limit: 50,
+        tenantId: tenantId.isNotEmpty ? tenantId : null,
+        before: _oldestLoadedAt,
+        ascending: false, // DESC → most recent of the older batch first
+      );
+      if (!mounted) return;
+      if (older.isEmpty) {
+        setState(() {
+          _hasMoreMessages = false;
+          _isLoadingOlder = false;
+        });
+        return;
+      }
+      // Reverse to ASC, then prepend
+      final batch = older.reversed.toList();
+      // Dedup by id
+      final existingIds = _apiMessages.map((m) => m['id']).toSet();
+      final unique = batch.where((m) => !existingIds.contains(m['id'])).toList();
+
+      if (unique.isNotEmpty) {
+        _oldestLoadedAt = DateTime.tryParse(
+            unique.first['received_at'] as String? ?? '');
+      }
+      if (older.length < 50) _hasMoreMessages = false;
+
+      setState(() {
+        _apiMessages = [...unique, ..._apiMessages];
+        _isLoadingOlder = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoadingOlder = false);
+    }
   }
 
   bool _isGoogleMapsUrl(String text) {
@@ -2802,13 +2903,35 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
                 // groups so the most-recent day group is at index 0 (bottom).
                 final displayGroups = groups.reversed.toList();
 
+                // Extra item at visual top for loading spinner
+                final hasLoader = _isLoadingOlder || _hasMoreMessages;
+                final totalItems = displayGroups.length + (hasLoader ? 1 : 0);
+
                 return ListView.builder(
                   controller: _scrollCtrl,
                   reverse: true,
                   padding: const EdgeInsets.symmetric(
                       horizontal: 20, vertical: 16),
-                  itemCount: displayGroups.length,
+                  itemCount: totalItems,
                   itemBuilder: (context, i) {
+                    // Last index in reverse == visual top → loading indicator
+                    if (i == displayGroups.length && hasLoader) {
+                      return _isLoadingOlder
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.ctTeal,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : const SizedBox.shrink();
+                    }
                     final group = displayGroups[i];
                     return StickyHeader(
                       header: _chatDateSepChip(group.label),
