@@ -3737,6 +3737,9 @@ class _ActionDialogState extends State<_ActionDialog> {
   // google_sheets_append_row
   final _spreadsheetIdCtrl = TextEditingController();
   final _sheetNameCtrl = TextEditingController();
+  // catalog schemas for asset_ref fields: {catalog_slug: fields_schema}
+  Map<String, List<Map<String, dynamic>>> _catalogSchemas = {};
+  bool _loadingCatalogSchemas = false;
   // Each entry: (col: controller, val: controller)
   final List<(TextEditingController, TextEditingController)> _columnMappingRows = [];
   // Parallel list: selected flowField key per row (null = custom text mode)
@@ -3886,7 +3889,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         _spreadsheetIdCtrl.text = cfg['spreadsheet_id'] as String? ?? '';
         _sheetNameCtrl.text = cfg['sheet_name'] as String? ?? 'Sheet1';
         final mapping = cfg['column_mapping'] as Map? ?? {};
-        final fieldKeyRe = RegExp(r'^\{\{fields\.(\w+)\}\}$');
+        final fieldKeyRe = RegExp(r'^\{\{fields\.([\w.]+)\}\}$');
         for (final e in mapping.entries) {
           final valStr = e.value.toString();
           final m = fieldKeyRe.firstMatch(valStr);
@@ -3917,6 +3920,50 @@ class _ActionDialogState extends State<_ActionDialog> {
     }
     _loadFlows();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadActionTypes());
+    _loadCatalogSchemas();
+  }
+
+  Future<void> _loadCatalogSchemas() async {
+    debugPrint('[_loadCatalogSchemas] flowFields: ${widget.flowFields.map((f) => '${f['key']}(type=${f['type']}, slug=${f['catalog_slug']})').toList()}');
+    final assetRefFields = widget.flowFields
+        .where((f) =>
+            (f['type'] as String?) == 'asset_ref' &&
+            f['catalog_slug'] != null &&
+            (f['catalog_slug'] as String).isNotEmpty)
+        .toList();
+    debugPrint('[_loadCatalogSchemas] assetRefFields count: ${assetRefFields.length}');
+    if (assetRefFields.isEmpty) return;
+
+    setState(() => _loadingCatalogSchemas = true);
+    try {
+      final slugs = assetRefFields
+          .map((f) => f['catalog_slug'] as String)
+          .toSet();
+      debugPrint('[_loadCatalogSchemas] slugs to fetch: $slugs');
+      final futures = slugs.map((slug) async {
+        final catalog = await CatalogsApi.getCatalogBySlug(
+          tenantId: widget.tenantId,
+          slug: slug,
+        );
+        debugPrint('[_loadCatalogSchemas] catalog response for $slug: ${catalog.keys.toList()}');
+        final schema = (catalog['fields_schema'] as List?)
+                ?.cast<Map<String, dynamic>>() ??
+            [];
+        debugPrint('[_loadCatalogSchemas] schema for $slug: $schema');
+        return MapEntry(slug, schema);
+      });
+      final entries = await Future.wait(futures);
+      if (!mounted) return;
+      setState(() {
+        _catalogSchemas = Map.fromEntries(entries);
+        _loadingCatalogSchemas = false;
+      });
+      debugPrint('[_loadCatalogSchemas] loaded schemas: ${_catalogSchemas.keys.toList()}');
+    } catch (e) {
+      debugPrint('[_loadCatalogSchemas] ERROR: $e');
+      if (!mounted) return;
+      setState(() => _loadingCatalogSchemas = false);
+    }
   }
 
   Future<void> _loadFlows() async {
@@ -3958,6 +4005,66 @@ class _ActionDialogState extends State<_ActionDialog> {
     _conditionValueCtrl.dispose();
     for (final c in _dynTextCtrls.values) { c.dispose(); }
     super.dispose();
+  }
+
+  Set<String> _buildAllValidKeys() {
+    final keys = <String>{};
+    for (final f in widget.flowFields) {
+      final key = f['key'] as String? ?? '';
+      if (key.isEmpty) continue;
+      final type = f['type'] as String?;
+      final slug = f['catalog_slug'] as String?;
+      if (type == 'asset_ref' && slug != null && _catalogSchemas.containsKey(slug)) {
+        for (final col in _catalogSchemas[slug]!) {
+          final colKey = col['key'] as String? ?? '';
+          if (colKey.isNotEmpty) keys.add('$key.data.$colKey');
+        }
+      } else {
+        keys.add(key);
+      }
+    }
+    return keys;
+  }
+
+  List<DropdownMenuItem<String?>> _buildFieldDropdownItems() {
+    final items = <DropdownMenuItem<String?>>[];
+    for (final f in widget.flowFields) {
+      final key = f['key'] as String? ?? '';
+      final label = f['label'] as String? ?? key;
+      final type = f['type'] as String?;
+      final slug = f['catalog_slug'] as String?;
+      if (type == 'asset_ref' && slug != null && _catalogSchemas.containsKey(slug)) {
+        for (final col in _catalogSchemas[slug]!) {
+          final colKey = col['key'] as String? ?? '';
+          final colLabel = col['label'] as String? ?? colKey;
+          if (colKey.isEmpty) continue;
+          items.add(DropdownMenuItem<String?>(
+            value: '$key.data.$colKey',
+            child: Text(
+              '$label > $colLabel',
+              style: const TextStyle(
+                fontFamily: 'Geist',
+                fontSize: 13,
+                color: AppColors.ctText,
+              ),
+            ),
+          ));
+        }
+      } else {
+        items.add(DropdownMenuItem<String?>(
+          value: key,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'Geist',
+              fontSize: 13,
+              color: AppColors.ctText,
+            ),
+          ),
+        ));
+      }
+    }
+    return items;
   }
 
   String? _buildConditionExpression() {
@@ -4341,9 +4448,12 @@ class _ActionDialogState extends State<_ActionDialog> {
                   final row = entry.value;
                   final selectedKey = _columnMappingKeys.length > i ? _columnMappingKeys[i] : null;
                   final hasFields = widget.flowFields.isNotEmpty;
-                  // If selected key is no longer in flowFields (e.g. field deleted), treat as custom
+                  // Validate against expanded keys (includes compound asset_ref keys)
+                  // While schemas are loading, trust compound keys (contain dots)
+                  final allKeys = _buildAllValidKeys();
                   final effectiveKey = (selectedKey != null &&
-                      widget.flowFields.any((f) => (f['key'] as String?) == selectedKey))
+                      (allKeys.contains(selectedKey) ||
+                       (_loadingCatalogSchemas && selectedKey.contains('.'))))
                       ? selectedKey
                       : null;
                   return Padding(
@@ -4375,7 +4485,9 @@ class _ActionDialogState extends State<_ActionDialog> {
                                     underline: const SizedBox.shrink(),
                                     dropdownColor: AppColors.ctSurface,
                                     hint: Text(
-                                      'Campo del flujo…',
+                                      _loadingCatalogSchemas
+                                          ? 'Cargando campos…'
+                                          : 'Campo del flujo…',
                                       style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                                     ),
                                     items: [
@@ -4386,17 +4498,19 @@ class _ActionDialogState extends State<_ActionDialog> {
                                           style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                                         ),
                                       ),
-                                      ...widget.flowFields.map((f) {
-                                        final key = f['key'] as String? ?? '';
-                                        final label = f['label'] as String? ?? key;
-                                        return DropdownMenuItem<String?>(
-                                          value: key,
+                                      ..._buildFieldDropdownItems(),
+                                      // Temporary item while schemas load for compound keys
+                                      if (_loadingCatalogSchemas &&
+                                          effectiveKey != null &&
+                                          effectiveKey.contains('.') &&
+                                          !_buildAllValidKeys().contains(effectiveKey))
+                                        DropdownMenuItem<String?>(
+                                          value: effectiveKey,
                                           child: Text(
-                                            label,
-                                            style: AppTextStyles.body,
+                                            'Cargando…',
+                                            style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                                           ),
-                                        );
-                                      }),
+                                        ),
                                     ],
                                     onChanged: (v) => setState(() {
                                       if (_columnMappingKeys.length > i) {
