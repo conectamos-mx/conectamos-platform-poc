@@ -3373,7 +3373,8 @@ class _ActionDialogState extends State<_ActionDialog> {
         case 'text':
           _dynTextCtrls[key] = TextEditingController(text: existing?.toString() ?? '');
         case 'select':
-          _dynSelectVals[key] = existing?.toString();
+          _dynSelectVals[key] = existing?.toString()
+              ?? (field['default'] as String?);
         case 'bool':
           _dynBoolVals[key] = (existing as bool?) ?? false;
       }
@@ -4876,7 +4877,8 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
         case 'text':
           _textCtrls[key] = TextEditingController(text: existing?.toString() ?? '');
         case 'select':
-          _selectVals[key] = existing?.toString();
+          _selectVals[key] = existing?.toString()
+              ?? (field['default'] as String?);
         case 'bool':
           _boolVals[key] = (existing as bool?) ?? false;
       }
