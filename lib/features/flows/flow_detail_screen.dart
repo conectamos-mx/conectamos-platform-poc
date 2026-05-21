@@ -4536,6 +4536,7 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
         types: _availableTypes,
         workerFlows: _workerFlows,
         currentFlowSlug: widget.currentFlowSlug,
+        tenantId: widget.tenantId,
         onSaved: (updated) {
           setState(() {
             if (rule != null) {
@@ -4765,6 +4766,7 @@ class _AddRuleDialog extends StatefulWidget {
     required this.types,
     required this.workerFlows,
     required this.currentFlowSlug,
+    required this.tenantId,
     required this.onSaved,
   });
   final Map<String, dynamic>? rule;
@@ -4772,6 +4774,7 @@ class _AddRuleDialog extends StatefulWidget {
   final List<Map<String, dynamic>> types;
   final List<Map<String, dynamic>> workerFlows;
   final String currentFlowSlug;
+  final String tenantId;
   final ValueChanged<Map<String, dynamic>> onSaved;
 
   @override
@@ -4790,6 +4793,9 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
   final Map<String, String?> _selectVals = {};
   final Map<String, bool> _boolVals = {};
   final Map<String, String> _semanticWarnings = {};
+
+  List<Map<String, dynamic>> _availableCatalogs = [];
+  bool _loadingCatalogs = false;
 
   bool get _isEdit => widget.rule != null;
 
@@ -4911,6 +4917,20 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
       final params = ((rule['params'] ?? rule['config']) as Map?)?.cast<String, dynamic>() ?? {};
       if (_type != null) _initFields(_type!, params);
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCatalogs());
+  }
+
+  Future<void> _loadCatalogs() async {
+    if (widget.tenantId.isEmpty) return;
+    setState(() => _loadingCatalogs = true);
+    try {
+      final cats = await CatalogsApi.listCatalogs(tenantId: widget.tenantId);
+      if (mounted) setState(() => _availableCatalogs = cats);
+    } catch (_) {
+      // fail silently — fallback a TextField
+    } finally {
+      if (mounted) setState(() => _loadingCatalogs = false);
+    }
   }
 
   @override
@@ -5015,6 +5035,72 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     );
   }
 
+  Widget _buildCatalogSlugSelector(String key, String label) {
+    final ctrl = _textCtrls[key] ??= TextEditingController();
+    final currentSlug = ctrl.text;
+
+    if (_loadingCatalogs) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
+          const SizedBox(height: 6),
+          const SizedBox(
+            height: 18, width: 18,
+            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctTeal),
+          ),
+        ],
+      );
+    }
+
+    if (_availableCatalogs.isEmpty) {
+      return _FormField(label: label, controller: ctrl, placeholder: 'slug del catálogo');
+    }
+
+    final selectedSlug = _availableCatalogs.any(
+            (c) => (c['slug'] as String?) == currentSlug)
+        ? currentSlug
+        : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          value: selectedSlug,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: AppColors.ctBorder)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: AppColors.ctBorder)),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+          hint: Text('Selecciona un catálogo',
+              style: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
+          items: _availableCatalogs.map((cat) {
+            final slug = cat['slug'] as String? ?? '';
+            final catLabel = cat['label'] as String?
+                ?? cat['name'] as String?
+                ?? slug;
+            return DropdownMenuItem<String>(
+              value: slug,
+              child: Text(catLabel, style: AppTextStyles.body),
+            );
+          }).toList(),
+          onChanged: (v) {
+            if (v != null) setState(() => ctrl.text = v);
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildTimezoneSelector(String key, String label) {
     final ctrl = _textCtrls[key] ??= TextEditingController();
     final currentVal = ctrl.text;
@@ -5085,6 +5171,8 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
         case 'text':
           if (_isFlowSlugField(key)) {
             widgets.add(_buildFlowSlugSelector(key, label));
+          } else if (key == 'catalog_slug') {
+            widgets.add(_buildCatalogSlugSelector(key, label));
           } else if (key == 'timezone') {
             widgets.add(_buildTimezoneSelector(key, label));
           } else {
