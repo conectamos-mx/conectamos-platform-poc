@@ -45,9 +45,9 @@ jobs:
       - name: Build web
         run: |
           flutter build web --release \
-            --dart-define=API_BASE_URL=https://platform-api.conectamos.mx \
-            --dart-define=SUPABASE_URL=${{ secrets.DART_DEFINE_SUPABASE_URL }} \
-            --dart-define=SUPABASE_ANON_KEY=${{ secrets.DART_DEFINE_SUPABASE_ANON_KEY }} \
+            --dart-define=API_BASE_URL=${{ env.IS_PROD == 'true' && 'https://platform-api.conectamos.mx' || 'https://platform-api-dev.conectamos.mx' }} \
+            --dart-define=SUPABASE_URL=${{ env.IS_PROD == 'true' && secrets.DART_DEFINE_SUPABASE_URL || secrets.DART_DEFINE_SUPABASE_URL_DEV }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ env.IS_PROD == 'true' && secrets.DART_DEFINE_SUPABASE_ANON_KEY || secrets.DART_DEFINE_SUPABASE_ANON_KEY_DEV }} \
             --dart-define=MOCK_MODE=false
 
       # ── AWS credentials (OIDC) ────────────────────────────────────────────────
@@ -132,7 +132,7 @@ jobs:
       status: ${{ needs.deploy.result == 'success' && 'success' || 'failure' }}
       environment: ${{ (github.ref_name == 'main' || github.event.inputs.environment == 'production') && 'Production' || 'Development' }}
       service_name: "conectamos-platform"
-      service_url: ${{ needs.deploy.result == 'success' && needs.deploy.outputs.site_url || 'N/A' }}
+      service_url: ${{ needs.deploy.result == 'success' && ((github.ref_name == 'main' || github.event.inputs.environment == 'production') && 'https://platform.conectamos.mx' || 'https://platform-dev.conectamos.mx') || 'N/A' }}
       commit_sha: ${{ github.sha }}
       actor: ${{ github.actor }}
       run_id: ${{ github.run_id }}

@@ -15,7 +15,6 @@ import '../../core/api/channels_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
-import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/page_header.dart';
 
@@ -27,9 +26,9 @@ external void _fbLaunchSignup(JSFunction onFlush, JSFunction onCancel);
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const _kChannelTypeConfig = {
-  'whatsapp': (label: 'WhatsApp', bg: Color(0xFFDBEAFE), fg: Color(0xFF1E40AF)),
-  'telegram': (label: 'Telegram', bg: Color(0xFFEDE9FE), fg: Color(0xFF6D28D9)),
-  'sms':      (label: 'SMS',      bg: Color(0xFFFFEDD5), fg: Color(0xFFC2410C)),
+  'whatsapp': (label: 'WhatsApp', bg: AppColors.ctOkBg, fg: AppColors.ctWa),
+  'telegram': (label: 'Telegram', bg: AppColors.ctInfoBg, fg: AppColors.ctTg),
+  'sms':      (label: 'SMS',      bg: AppColors.ctSurface2, fg: AppColors.ctText2),
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -62,8 +61,15 @@ String _dioError(Object e) {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class ChannelsScreen extends ConsumerStatefulWidget {
-  const ChannelsScreen({super.key, this.tenantWorkerId});
+  const ChannelsScreen({
+    super.key,
+    this.tenantWorkerId,
+    this.onChannelSelected,
+    this.onActiveCountChanged,
+  });
   final String? tenantWorkerId;
+  final ValueChanged<String>? onChannelSelected;
+  final ValueChanged<int>? onActiveCountChanged;
 
   @override
   ConsumerState<ChannelsScreen> createState() => _ChannelsScreenState();
@@ -91,17 +97,21 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
       ]);
       if (!mounted) return;
       final allChannels = results[0];
+      final filtered = widget.tenantWorkerId != null
+          ? allChannels
+              .where((c) =>
+                  (c['tenant_worker_id'] as String?) ==
+                  widget.tenantWorkerId)
+              .toList()
+          : allChannels;
+      final activeCount =
+          filtered.where((c) => c['is_active'] as bool? ?? false).length;
       setState(() {
-        _channels  = widget.tenantWorkerId != null
-            ? allChannels
-                .where((c) =>
-                    (c['tenant_worker_id'] as String?) ==
-                    widget.tenantWorkerId)
-                .toList()
-            : allChannels;
-        _workers   = results[1];
-        _loading   = false;
+        _channels = filtered;
+        _workers  = results[1];
+        _loading  = false;
       });
+      widget.onActiveCountChanged?.call(activeCount);
     } catch (e) {
       if (!mounted) return;
       setState(() { _loading = false; _error = _dioError(e); });
@@ -132,10 +142,18 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
     final result = await showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _CreateChannelStepper(
-        workers: _workers,
-        tenantId: ref.read(activeTenantIdProvider),
-      ),
+      builder: (_) {
+        final currentWorker = widget.tenantWorkerId != null
+            ? _workers.firstWhere(
+                (w) => (w['id'] as String?) == widget.tenantWorkerId,
+                orElse: () => <String, dynamic>{},
+              )
+            : <String, dynamic>{};
+        return _CreateChannelStepper(
+          tenantWorkerId: widget.tenantWorkerId ?? '',
+          workerData: currentWorker.isNotEmpty ? currentWorker : null,
+        );
+      },
     );
     if (!mounted) return;
     if (result == '_workers') {
@@ -154,13 +172,22 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
     }
     if (result != null && result.isNotEmpty) {
       _fetchAll();
-      context.go('/channels/$result');
+      if (widget.onChannelSelected != null) {
+        widget.onChannelSelected!(result);
+      } else {
+        context.go('/channels/$result');
+      }
     }
   }
 
   void _openEdit(Map<String, dynamic> channel) {
     final id = channel['id'] as String? ?? '';
-    if (id.isNotEmpty) context.go('/channels/$id');
+    if (id.isEmpty) return;
+    if (widget.onChannelSelected != null) {
+      widget.onChannelSelected!(id);
+    } else {
+      context.go('/channels/$id');
+    }
   }
 
 
@@ -218,6 +245,7 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
                       ),
                     )
                   : SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
                       child: _ChannelsBody(
                         channels: _channels,
                         onEdit: _openEdit,
@@ -247,31 +275,28 @@ class _ChannelsBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.ctSurface,
-        border: Border.all(color: AppColors.ctBorder),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: channels.isEmpty
-          ? const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: Center(child: Text('No hay canales configurados aún.')),
-            )
-          : Column(
-              children: channels.asMap().entries.map((entry) {
-                final isLast = entry.key == channels.length - 1;
-                return Column(children: [
-                  _ChannelCard(
-                    channel: entry.value,
-                    onEdit: () => onEdit(entry.value),
-                    onToggleActive: () => onToggleActive(entry.value),
-                    canManage: canManage,
-                  ),
-                  if (!isLast) const Divider(height: 1, color: AppColors.ctBorder),
-                ]);
-              }).toList(),
-            ),
+    if (channels.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: Center(child: Text('No hay canales configurados aún.')),
+      );
+    }
+    return Column(
+      children: channels.map((ch) => Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: AppColors.ctSurface,
+          border: Border.all(color: AppColors.ctBorder),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: _ChannelCard(
+          channel: ch,
+          onEdit: () => onEdit(ch),
+          onToggleActive: () => onToggleActive(ch),
+          canManage: canManage,
+        ),
+      )).toList(),
     );
   }
 }
@@ -305,17 +330,18 @@ class _ChannelCardState extends State<_ChannelCard> {
     final isActive    = ch['is_active'] as bool? ?? false;
     final typeEntry   = _kChannelTypeConfig[channelType] ?? _kChannelTypeConfig['whatsapp']!;
 
-    final rawPhone  = ch['phone_number'] as String? ?? ch['phone_number_id'] as String? ?? '';
-    final rawHandle = ch['bot_username'] as String? ?? ch['handle'] as String? ?? '';
+    final credentials = (ch['channel_config'] as Map<String, dynamic>?)?['credentials'] as Map<String, dynamic>? ?? {};
+    final rawPhone  = credentials['display_phone_number'] as String? ?? credentials['phone_number_id'] as String? ?? '';
+    final rawHandle = credentials['bot_username'] as String? ?? '';
     final identifier = channelType == 'whatsapp'
         ? rawPhone
         : (rawHandle.isNotEmpty ? '@$rawHandle' : '');
 
-    final inviteUrl = identifier.isNotEmpty
-        ? (channelType == 'whatsapp'
-            ? 'https://wa.me/${identifier.replaceAll('+', '').replaceAll(' ', '')}'
-            : 'https://t.me/${identifier.replaceAll('@', '')}')
-        : '';
+    final inviteUrl = channelType == 'whatsapp' && rawPhone.isNotEmpty
+        ? 'https://wa.me/${rawPhone.replaceAll('+', '').replaceAll(' ', '').replaceAll('-', '')}'
+        : (rawHandle.isNotEmpty
+            ? 'https://t.me/${rawHandle.replaceAll('@', '')}'
+            : '');
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -329,32 +355,10 @@ class _ChannelCardState extends State<_ChannelCard> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Logo real 40x40
-              channelType == 'whatsapp'
-                  ? Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                          color: const Color(0xFF25D366),
-                          borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.all(6),
-                      child: SvgPicture.asset('assets/logos/whatsapp.svg',
-                          colorFilter: const ColorFilter.mode(
-                              Colors.white, BlendMode.srcIn)),
-                    )
-                  : Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                          color: const Color(0xFF229ED9),
-                          borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.all(6),
-                      child: Image.asset('assets/logos/telegram.png'),
-                    ),
+              _ChannelLogo(channelType: channelType),
               const SizedBox(width: 14),
-              // Nombre + identifier
+              // Nombre + badge tipo + identifier + icono copiar
               Expanded(
-                flex: 3,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -363,29 +367,56 @@ class _ChannelCardState extends State<_ChannelCard> {
                         style: AppTextStyles.body
                             .copyWith(fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis),
-                    if (identifier.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(identifier,
-                          style: AppTextStyles.navItem
-                              .copyWith(color: AppColors.ctText2),
-                          overflow: TextOverflow.ellipsis),
-                    ],
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                              color: typeEntry.bg,
+                              borderRadius: BorderRadius.circular(20)),
+                          child: Text(typeEntry.label,
+                              style: AppTextStyles.caption.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: typeEntry.fg)),
+                        ),
+                        if (identifier.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(identifier,
+                              style: AppTextStyles.navItem
+                                  .copyWith(color: AppColors.ctText2)),
+                          if (inviteUrl.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () {
+                                Clipboard.setData(
+                                    ClipboardData(text: inviteUrl));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('URL copiada'),
+                                    duration: Duration(seconds: 2),
+                                    backgroundColor: AppColors.ctOk,
+                                  ),
+                                );
+                              },
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: Tooltip(
+                                  message: 'Copiar URL de invitación',
+                                  child: const Icon(Icons.link_rounded,
+                                      size: 14, color: AppColors.ctText3),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               ),
-              // Badge tipo
-              Container(
-                margin: const EdgeInsets.only(right: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                    color: typeEntry.bg,
-                    borderRadius: BorderRadius.circular(20)),
-                child: Text(
-                  typeEntry.label,
-                  style: AppTextStyles.badge.copyWith(
-                      color: typeEntry.fg, fontWeight: FontWeight.w600),
-                ),
-              ),
+              const SizedBox(width: 12),
               // Status pill
               Container(
                 margin: const EdgeInsets.only(right: 12),
@@ -399,31 +430,6 @@ class _ChannelCardState extends State<_ChannelCard> {
                       color: isActive ? AppColors.ctOkText : AppColors.ctText2),
                 ),
               ),
-              const Spacer(),
-              // Icono copiar URL
-              if (inviteUrl.isNotEmpty) ...[
-                GestureDetector(
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: inviteUrl));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('URL copiada'),
-                        duration: Duration(seconds: 2),
-                        backgroundColor: AppColors.ctOk,
-                      ),
-                    );
-                  },
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Tooltip(
-                      message: 'Copiar URL de invitación',
-                      child: const Icon(Icons.link_rounded,
-                          size: 16, color: AppColors.ctText3),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
               // Ver detalle
               GestureDetector(
                 onTap: widget.onEdit,
@@ -434,23 +440,46 @@ class _ChannelCardState extends State<_ChannelCard> {
                           .copyWith(color: AppColors.ctTeal)),
                 ),
               ),
-              if (widget.canManage) ...[
-                const SizedBox(width: 8),
-                AppActionButton(
-                    variant: AppActionVariant.edit,
-                    onPressed: widget.onEdit),
-                const SizedBox(width: 4),
-                AppActionButton(
-                  variant: isActive
-                      ? AppActionVariant.suspend
-                      : AppActionVariant.reactivate,
-                  onPressed: widget.onToggleActive,
-                ),
-              ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Channel logo ──────────────────────────────────────────────────────────────
+
+class _ChannelLogo extends StatelessWidget {
+  const _ChannelLogo({required this.channelType});
+  final String channelType;
+
+  @override
+  Widget build(BuildContext context) {
+    if (channelType == 'whatsapp') {
+      return Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: AppColors.ctWa,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        padding: const EdgeInsets.all(6),
+        child: SvgPicture.asset(
+          'assets/logos/whatsapp.svg',
+          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+        ),
+      );
+    }
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: AppColors.ctTg,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      padding: const EdgeInsets.all(6),
+      child: Image.asset('assets/logos/telegram.png'),
     );
   }
 }
@@ -461,9 +490,12 @@ class _ChannelCardState extends State<_ChannelCard> {
 // ── Create channel stepper ────────────────────────────────────────────────────
 
 class _CreateChannelStepper extends StatefulWidget {
-  const _CreateChannelStepper({required this.workers, required this.tenantId});
-  final List<Map<String, dynamic>> workers;
-  final String tenantId;
+  const _CreateChannelStepper({
+    required this.tenantWorkerId,
+    this.workerData,
+  });
+  final String tenantWorkerId;
+  final Map<String, dynamic>? workerData;
 
   @override
   State<_CreateChannelStepper> createState() => _CreateChannelStepperState();
@@ -646,9 +678,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
   void initState() {
     super.initState();
     _initFbSdk(); // pre-load FB SDK so it's ready when user reaches step 2
-    if (widget.workers.isNotEmpty) {
-      _workerId = widget.workers.first['id'] as String?;
-    }
+    _workerId = widget.tenantWorkerId;
     _nameCtrl       = TextEditingController()..addListener(_rebuild);
     _phoneCtrl      = TextEditingController()..addListener(_rebuild);
     _wabaCtrl       = TextEditingController()..addListener(_rebuild);
@@ -673,7 +703,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
   }
 
   bool get _canNext {
-    if (_step == 0) return _workerId != null && widget.workers.isNotEmpty;
+    if (_step == 0) return true; // worker siempre implícito del workspace
     if (_step == 1) {
       if (_channelType == 'telegram') {
         return _nameCtrl.text.trim().isNotEmpty && _tokenCtrl.text.trim().isNotEmpty;
@@ -881,12 +911,6 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
     child: Text(text, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
   );
 
-  Widget _dropdownBox(Widget child) => Container(
-    height: 40, padding: const EdgeInsets.symmetric(horizontal: 12),
-    decoration: BoxDecoration(color: AppColors.ctSurface2, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.ctBorder2)),
-    child: child,
-  );
-
   // ── Sidebar ──────────────────────────────────────────────────────────────
 
   Widget _buildSidebar() {
@@ -959,55 +983,6 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
             Expanded(child: _EmptyTypeCard()),
           ],
         ),
-        const SizedBox(height: 24),
-        _label('AI Worker asignado'),
-        if (widget.workers.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: AppColors.ctWarnBg, borderRadius: BorderRadius.circular(8)),
-            child: Row(
-              children: [
-                const Icon(Icons.warning_amber_rounded, color: AppColors.ctWarnText, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'No tienes Workers contratados. Ve a Mis Workers para contratar uno.',
-                    style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctWarnText),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => Navigator.of(context).pop('_workers'),
-                  child: Text('Ir a Workers', style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.ctWarnText, decoration: TextDecoration.underline)),
-                ),
-              ],
-            ),
-          )
-        else
-          _dropdownBox(
-            DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _workerId,
-                isExpanded: true,
-                style: AppTextStyles.body,
-                icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: AppColors.ctText3),
-                items: widget.workers.map((w) {
-                  final id    = w['id']           as String? ?? '';
-                  final name  = w['display_name'] as String? ?? w['catalog_name'] as String? ?? '—';
-                  final color = w['catalog_color'] as String? ?? '#9CA3AF';
-                  return DropdownMenuItem<String>(
-                    value: id,
-                    child: Row(children: [
-                      Container(width: 10, height: 10, decoration: BoxDecoration(color: _hexColor(color), shape: BoxShape.circle)),
-                      const SizedBox(width: 8),
-                      Text(name),
-                    ]),
-                  );
-                }).toList(),
-                onChanged: (v) { if (v != null) setState(() => _workerId = v); },
-              ),
-            ),
-          ),
       ],
     );
   }
@@ -1145,12 +1120,64 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
 
   // ── Step 3 ───────────────────────────────────────────────────────────────
 
-  Widget _buildStep3() {
-    final worker = widget.workers.firstWhere(
-      (w) => (w['id'] as String?) == _workerId,
-      orElse: () => {},
+  Widget _buildWorkerChip() {
+    final workerData = widget.workerData;
+    if (workerData == null || workerData.isEmpty) {
+      return Text('—', style: AppTextStyles.body.copyWith(color: AppColors.ctText2));
+    }
+    final name      = workerData['display_name'] as String?
+        ?? workerData['catalog_name'] as String? ?? '—';
+    final avatarUrl = workerData['catalog_avatar_url'] as String?
+        ?? workerData['avatar_url'] as String?;
+    final colorHex  = workerData['catalog_color'] as String?
+        ?? workerData['color'] as String?;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (avatarUrl != null && avatarUrl.isNotEmpty)
+          Container(
+            width: 24, height: 24,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.ctBorder, width: 1),
+            ),
+            child: Image.network(
+              avatarUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (context2, err, stack) => Container(
+                color: _hexColor(colorHex),
+                alignment: Alignment.center,
+                child: Text(
+                  name[0].toUpperCase(),
+                  style: AppTextStyles.caption.copyWith(
+                    color: Colors.white, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          )
+        else
+          Container(
+            width: 24, height: 24,
+            decoration: BoxDecoration(
+              color: _hexColor(colorHex),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              name[0].toUpperCase(),
+              style: AppTextStyles.caption.copyWith(
+                color: Colors.white, fontWeight: FontWeight.w700),
+            ),
+          ),
+        const SizedBox(width: 8),
+        Text(name, style: AppTextStyles.body),
+      ],
     );
-    final workerName = worker['display_name'] as String? ?? worker['catalog_name'] as String? ?? '—';
+  }
+
+  Widget _buildStep3() {
 
     final errorBox = _createError != null
         ? Column(children: [
@@ -1174,7 +1201,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
           const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: AppColors.ctSurface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.ctBorder)),
+            decoration: BoxDecoration(color: AppColors.ctSurface2, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.ctBorder)),
             child: Column(
               children: [
                 _reviewRow('Tipo de canal', _buildTypeChip()),
@@ -1183,7 +1210,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
                 const Divider(height: 20, color: AppColors.ctBorder),
                 _reviewRow('Username', Text('@${_botUsername ?? '—'}', style: AppTextStyles.body)),
                 const Divider(height: 20, color: AppColors.ctBorder),
-                _reviewRow('Worker', Text(workerName, style: AppTextStyles.body)),
+                _reviewRow('Worker', _buildWorkerChip()),
                 const Divider(height: 20, color: AppColors.ctBorder),
                 _reviewRow('Token', Text('••••••••', style: AppTextStyles.body.copyWith(color: AppColors.ctText2))),
               ],
@@ -1207,14 +1234,14 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
         const SizedBox(height: 24),
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: AppColors.ctSurface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.ctBorder)),
+          decoration: BoxDecoration(color: AppColors.ctSurface2, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.ctBorder)),
           child: Column(
             children: [
               _reviewRow('Tipo de canal', _buildTypeChip()),
               const Divider(height: 20, color: AppColors.ctBorder),
               _reviewRow('Nombre', Text(_nameCtrl.text.trim(), style: AppTextStyles.body)),
               const Divider(height: 20, color: AppColors.ctBorder),
-              _reviewRow('Worker', Text(workerName, style: AppTextStyles.body)),
+              _reviewRow('Worker', _buildWorkerChip()),
               const Divider(height: 20, color: AppColors.ctBorder),
               _reviewRow('Phone Number ID', Text(maskedPhone, style: AppTextStyles.body)),
               const Divider(height: 20, color: AppColors.ctBorder),
@@ -1243,26 +1270,26 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
     if (_channelType == 'telegram') {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(color: const Color(0xFFEDE9FE), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: AppColors.ctInfoBg, borderRadius: BorderRadius.circular(20)),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(width: 8, height: 8, child: DecoratedBox(decoration: BoxDecoration(color: Color(0xFF229ED9), shape: BoxShape.circle))),
+            const SizedBox(width: 8, height: 8, child: DecoratedBox(decoration: BoxDecoration(color: AppColors.ctTg, shape: BoxShape.circle))),
             const SizedBox(width: 5),
-            Text('Telegram', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: const Color(0xFF6D28D9))),
+            Text('Telegram', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: AppColors.ctTg)),
           ],
         ),
       );
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(color: AppColors.ctOkBg, borderRadius: BorderRadius.circular(20)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(width: 8, height: 8, child: DecoratedBox(decoration: BoxDecoration(color: Color(0xFF25D366), shape: BoxShape.circle))),
+          const SizedBox(width: 8, height: 8, child: DecoratedBox(decoration: BoxDecoration(color: AppColors.ctWa, shape: BoxShape.circle))),
           const SizedBox(width: 5),
-          Text('WhatsApp', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: const Color(0xFF16A34A))),
+          Text('WhatsApp', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: AppColors.ctWa)),
         ],
       ),
     );
@@ -1378,6 +1405,53 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
 
 // ── Type card ─────────────────────────────────────────────────────────────────
 
+// ── Channel type card logo ────────────────────────────────────────────────────
+
+class _TypeCardLogo extends StatelessWidget {
+  const _TypeCardLogo({required this.type, this.size = 36});
+  final String type;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    if (type == 'whatsapp') {
+      return Container(
+        width: size, height: size,
+        decoration: BoxDecoration(
+          color: AppColors.ctWa,
+          borderRadius: BorderRadius.circular(size * 0.22),
+        ),
+        padding: EdgeInsets.all(size * 0.17),
+        child: SvgPicture.asset(
+          'assets/logos/whatsapp.svg',
+          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+        ),
+      );
+    }
+    if (type == 'telegram') {
+      return Container(
+        width: size, height: size,
+        decoration: BoxDecoration(
+          color: AppColors.ctTg,
+          borderRadius: BorderRadius.circular(size * 0.22),
+        ),
+        padding: EdgeInsets.all(size * 0.17),
+        child: Image.asset('assets/logos/telegram.png'),
+      );
+    }
+    return Container(
+      width: size, height: size,
+      decoration: BoxDecoration(
+        color: AppColors.ctSurface2,
+        borderRadius: BorderRadius.circular(size * 0.22),
+        border: Border.all(color: AppColors.ctBorder),
+      ),
+      alignment: Alignment.center,
+      child: Icon(Icons.sms_rounded, size: size * 0.5, color: AppColors.ctText3),
+    );
+  }
+}
+
 class _TypeCard extends StatefulWidget {
   const _TypeCard({required this.type, this.selected = false, this.disabled = false, this.onTap});
   final String        type;
@@ -1392,14 +1466,57 @@ class _TypeCard extends StatefulWidget {
 class _TypeCardState extends State<_TypeCard> {
   bool _hovered = false;
 
-  static const _icons    = {'whatsapp': Icons.chat_rounded, 'telegram': Icons.send_rounded, 'sms': Icons.sms_rounded};
-  static const _colors   = {'whatsapp': Color(0xFF25D366), 'telegram': Color(0xFF229ED9), 'sms': Color(0xFF6B7280)};
-  static const _labels   = {'whatsapp': 'WhatsApp Business API', 'telegram': 'Telegram Bot API', 'sms': 'SMS via Twilio / Vonage'};
+  static const _colors = {'whatsapp': Color(0xFF25D366), 'telegram': Color(0xFF229ED9), 'sms': Color(0xFF6B7280)};
+  static const _labels = {'whatsapp': 'WhatsApp Business API', 'telegram': 'Telegram Bot API', 'sms': 'SMS via Twilio / Vonage'};
+
+  Widget _buildCardContent(Color channelColor, String label) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      height: 90,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: widget.selected
+            ? channelColor.withValues(alpha: 0.07)
+            : _hovered
+                ? AppColors.ctSurface2
+                : AppColors.ctSurface,
+        border: widget.disabled
+            ? Border.all(color: Colors.transparent, width: 1)
+            : Border.all(
+                color: widget.selected ? channelColor : AppColors.ctBorder2,
+                width: widget.selected ? 2 : 1,
+              ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          _TypeCardLogo(type: widget.type, size: 36),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(label, style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.ctText)),
+                if (widget.disabled) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: AppColors.ctSurface2, borderRadius: BorderRadius.circular(20)),
+                    child: Text('Próximamente', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w500, color: AppColors.ctText3)),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final channelColor = _colors[widget.type] ?? AppColors.ctTeal;
-    final icon         = _icons[widget.type]  ?? Icons.chat_rounded;
     final label        = _labels[widget.type] ?? widget.type;
 
     return MouseRegion(
@@ -1409,52 +1526,13 @@ class _TypeCardState extends State<_TypeCard> {
       child: GestureDetector(
         onTap: widget.disabled ? null : widget.onTap,
         child: Opacity(
-          opacity: widget.disabled ? 0.45 : 1.0,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            height: 90,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: widget.selected
-                  ? channelColor.withValues(alpha: 0.07)
-                  : _hovered
-                      ? AppColors.ctSurface2
-                      : AppColors.ctSurface,
-              border: Border.all(
-                color: widget.selected ? channelColor : AppColors.ctBorder2,
-                width: widget.selected ? 2 : 1,
-              ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 36, height: 36,
-                  decoration: BoxDecoration(color: channelColor, borderRadius: BorderRadius.circular(8)),
-                  alignment: Alignment.center,
-                  child: Icon(icon, color: Colors.white, size: 18),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(label, style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.ctText)),
-                      if (widget.disabled) ...[
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: AppColors.ctSurface2, borderRadius: BorderRadius.circular(20)),
-                          child: Text('Próximamente', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w500, color: AppColors.ctText3)),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+          opacity: widget.disabled ? 0.55 : 1.0,
+          child: widget.disabled
+              ? CustomPaint(
+                  painter: const _DashedBorderPainter(color: AppColors.ctBorder2),
+                  child: _buildCardContent(channelColor, label),
+                )
+              : _buildCardContent(channelColor, label),
         ),
       ),
     );
@@ -1464,23 +1542,64 @@ class _TypeCardState extends State<_TypeCard> {
 class _EmptyTypeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 90,
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.ctBorder, width: 1.5, style: BorderStyle.solid),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.add_circle_outline_rounded, size: 22, color: AppColors.ctText3),
-          const SizedBox(height: 6),
-          Text('Más próximamente', style: AppTextStyles.bodySmall),
-        ],
+    return CustomPaint(
+      painter: const _DashedBorderPainter(color: AppColors.ctBorder2),
+      child: Container(
+        height: 90,
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_circle_outline_rounded, size: 22, color: AppColors.ctText3),
+            const SizedBox(height: 6),
+            Text('Más próximamente', style: AppTextStyles.bodySmall),
+          ],
+        ),
       ),
     );
   }
+}
+
+// ── Dashed border painter ──────────────────────────────────────────────────────
+
+class _DashedBorderPainter extends CustomPainter {
+  const _DashedBorderPainter({required this.color});
+  final Color color;
+
+  static const double _strokeWidth = 1.5;
+  static const double _dashLength  = 5.0;
+  static const double _gapLength   = 4.0;
+  static const double _radius      = 16.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color       = color
+      ..strokeWidth = _strokeWidth
+      ..style       = PaintingStyle.stroke;
+
+    final path = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+        Rect.fromLTWH(_strokeWidth / 2, _strokeWidth / 2,
+            size.width - _strokeWidth, size.height - _strokeWidth),
+        const Radius.circular(_radius),
+      ));
+
+    for (final metric in path.computeMetrics()) {
+      double distance = 0;
+      while (distance < metric.length) {
+        canvas.drawPath(
+          metric.extractPath(distance, distance + _dashLength),
+          paint,
+        );
+        distance += _dashLength + _gapLength;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter old) => old.color != color;
 }
 
 

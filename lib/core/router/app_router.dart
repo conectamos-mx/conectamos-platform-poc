@@ -10,7 +10,6 @@ import '../../features/auth/forgot_password_screen.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/auth/reset_password_screen.dart';
 import '../../features/broadcasts/broadcast_screen.dart';
-import '../../features/config/channel_detail_screen.dart';
 import '../../features/config/channels_screen.dart';
 import '../../features/config/connections_screen.dart';
 import '../../features/config/operator_detail_screen.dart';
@@ -28,7 +27,6 @@ import '../../features/catalogs/catalogs_screen.dart';
 import '../../features/flows/all_executions_screen.dart';
 import '../../features/flows/executions_screen.dart';
 import '../../features/flows/execution_detail_screen.dart';
-import '../../features/flows/flow_detail_screen.dart';
 import '../../features/conversations/conversations_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
 import '../../features/escalaciones/escalaciones_screen.dart';
@@ -299,20 +297,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (c, s) => const NoTransitionPage(child: WorkflowsScreen()),
       ),
       GoRoute(
-        path: '/flows/:flowId',
-        pageBuilder: (c, s) => NoTransitionPage(
-          child: FlowDetailScreen(flowId: s.pathParameters['flowId'] ?? ''),
-        ),
-      ),
-      GoRoute(
         path: '/channels',
         pageBuilder: (c, s) => const NoTransitionPage(child: ChannelsScreen()),
-      ),
-      GoRoute(
-        path: '/channels/:channelId',
-        pageBuilder: (c, s) => NoTransitionPage(
-          child: ChannelDetailScreen(channelId: s.pathParameters['channelId'] ?? ''),
-        ),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

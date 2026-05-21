@@ -85,8 +85,14 @@ class ChannelsApi {
     return Map<String, dynamic>.from(response.data);
   }
 
-  static Future<void> deleteChannel({required String channelId}) async {
-    await ApiClient.instance.delete('/channels/$channelId');
+  static Future<Map<String, dynamic>> deleteChannel({
+    required String tenantWorkerId,
+    required String channelId,
+  }) async {
+    final resp = await ApiClient.instance.delete(
+      '/workers/$tenantWorkerId/channels/$channelId',
+    );
+    return resp.data as Map<String, dynamic>;
   }
 
   static Future<void> verifyCredentials({
@@ -213,5 +219,19 @@ class ChannelsApi {
       '/channels/embedded-signup/events',
       data: eventData,
     );
+  }
+
+  static Future<List<Map<String, dynamic>>> listChannelsByWorker({
+    required String tenantWorkerId,
+  }) async {
+    final response = await ApiClient.instance.get(
+      '/channels',
+      queryParameters: {'tenant_worker_id': tenantWorkerId},
+    );
+    final data = response.data;
+    final List raw = data is List
+        ? data
+        : (data['channels'] ?? data['items'] ?? []) as List;
+    return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 }

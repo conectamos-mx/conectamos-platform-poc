@@ -73,8 +73,9 @@ String _slugify(String input) {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class WorkflowsScreen extends ConsumerStatefulWidget {
-  const WorkflowsScreen({super.key, this.tenantWorkerId});
+  const WorkflowsScreen({super.key, this.tenantWorkerId, this.onFlowSelected});
   final String? tenantWorkerId;
+  final void Function(String flowId)? onFlowSelected;
 
   @override
   ConsumerState<WorkflowsScreen> createState() => _WorkflowsScreenState();
@@ -233,7 +234,15 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
               flow: entry.value,
               index: entry.key,
               onToggle: () => _toggleActive(entry.value),
-              onEdit: () => context.go('/flows/${entry.value['id']}'),
+              onEdit: () {
+                final id = entry.value['id'] as String? ?? '';
+                if (id.isEmpty) return;
+                if (widget.onFlowSelected != null) {
+                  widget.onFlowSelected!(id);
+                } else {
+                  context.go('/flows/$id');
+                }
+              },
               canManage: canManage,
             ),
           );

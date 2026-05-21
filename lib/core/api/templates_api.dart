@@ -86,7 +86,13 @@ class TemplatesApi {
   }
 
   /// Elimina una plantilla por ID.
-  static Future<void> deleteTemplate({required String templateId}) async {
-    await ApiClient.instance.delete('/templates/$templateId');
+  static Future<void> deleteTemplate({
+    required String templateId,
+    required String channelId,
+  }) async {
+    await ApiClient.instance.delete(
+      '/templates/$templateId',
+      queryParameters: {'channel_id': channelId},
+    );
   }
 }
