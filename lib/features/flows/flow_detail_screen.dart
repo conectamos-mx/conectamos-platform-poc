@@ -98,6 +98,19 @@ IconData _fieldIcon(String? type) {
   }
 }
 
+const _kTimezones = [
+  ('', 'Default del tenant'),
+  ('America/Mexico_City',             'México (Ciudad de México)'),
+  ('America/Monterrey',               'México (Monterrey)'),
+  ('America/Bogota',                  'Colombia (Bogotá)'),
+  ('America/Lima',                    'Perú (Lima)'),
+  ('America/Santiago',                'Chile (Santiago)'),
+  ('America/Argentina/Buenos_Aires',  'Argentina (Buenos Aires)'),
+  ('America/New_York',                'EE.UU. (Nueva York)'),
+  ('America/Los_Angeles',             'EE.UU. (Los Ángeles)'),
+  ('UTC',                             'UTC'),
+];
+
 const _kTriggerSources = [
   ('conversational', 'Conversacional'),
   ('api', 'API / Sistema'),
@@ -4910,7 +4923,9 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
 
   Map<String, dynamic> _buildConfig() {
     final config = <String, dynamic>{};
-    for (final e in _textCtrls.entries) { config[e.key] = e.value.text.trim(); }
+    for (final e in _textCtrls.entries) {
+      if (e.value.text.trim().isNotEmpty) config[e.key] = e.value.text.trim();
+    }
     for (final e in _selectVals.entries) { config[e.key] = e.value; }
     for (final e in _boolVals.entries) { config[e.key] = e.value; }
     return config;
@@ -5000,6 +5015,42 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     );
   }
 
+  Widget _buildTimezoneSelector(String key, String label) {
+    final ctrl = _textCtrls[key] ??= TextEditingController();
+    final currentVal = ctrl.text;
+    final selectedVal = _kTimezones.any((t) => t.$1 == currentVal)
+        ? currentVal
+        : '';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          value: selectedVal,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: AppColors.ctBorder)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: AppColors.ctBorder)),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+          items: _kTimezones.map((tz) {
+            return DropdownMenuItem<String>(
+              value: tz.$1,
+              child: Text(tz.$2, style: AppTextStyles.body),
+            );
+          }).toList(),
+          onChanged: (v) => setState(() => ctrl.text = v ?? ''),
+        ),
+      ],
+    );
+  }
+
   List<Widget> _renderDynamicFields() {
     if (_type == null) return [];
     final fields = _fieldsForType(_type!);
@@ -5034,6 +5085,8 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
         case 'text':
           if (_isFlowSlugField(key)) {
             widgets.add(_buildFlowSlugSelector(key, label));
+          } else if (key == 'timezone') {
+            widgets.add(_buildTimezoneSelector(key, label));
           } else {
             widgets
               ..add(Text(label,
