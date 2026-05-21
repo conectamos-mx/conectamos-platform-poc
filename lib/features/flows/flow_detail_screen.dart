@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/catalogs_api.dart';
+import '../../core/api/channels_api.dart';
 import '../../core/api/flows_api.dart';
 import '../../shared/widgets/asset_item_selector.dart';
 import '../../core/api/operator_roles_api.dart';
@@ -150,6 +151,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
   // Comportamiento tab state
   List<Map<String, dynamic>> _conditions = [];
   bool _sendProactive = true;
+  Map<String, dynamic> _proactiveTrigger = {};
 
   // Al cerrar tab state
   List<Map<String, dynamic>> _actions = [];
@@ -216,6 +218,10 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
           (rawBehavior['conditions'] as List? ?? [])
               .whereType<Map>()
               .map((e) => Map<String, dynamic>.from(e)));
+      final proactiveTrigger = rawBehavior['proactive_trigger'] is Map
+          ? Map<String, dynamic>.from(
+              rawBehavior['proactive_trigger'] as Map)
+          : <String, dynamic>{};
       final rawOnComplete =
           (flow['on_complete'] as Map<String, dynamic>?) ?? {};
       final actions = List<Map<String, dynamic>>.from(
@@ -233,6 +239,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         _fields = fields;
         _triggerSources = sources;
         _conditions = conditions;
+        _proactiveTrigger = proactiveTrigger;
         _actions = actions;
         _precondiciones = precondiciones;
         _sendProactive = (flow['send_proactive'] as bool?) ?? true;
@@ -262,7 +269,11 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         slug: _derivedSlug,
         description: _descCtrl.text.trim(),
         fields: _fields,
-        behavior: {'conditions': _conditions},
+        behavior: {
+          'conditions': _conditions,
+          if (_proactiveTrigger.isNotEmpty)
+            'proactive_trigger': _proactiveTrigger,
+        },
         onComplete: {'actions': _actions},
         triggerSources: _triggerSources,
         sendProactive: _sendProactive,
@@ -280,6 +291,9 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
           (rawBeh['conditions'] as List? ?? [])
               .whereType<Map>()
               .map((e) => Map<String, dynamic>.from(e)));
+      final updatedProactiveTrigger = rawBeh['proactive_trigger'] is Map
+          ? Map<String, dynamic>.from(rawBeh['proactive_trigger'] as Map)
+          : <String, dynamic>{};
       final rawOC = (updated['on_complete'] as Map<String, dynamic>?) ?? {};
       final updatedActions = List<Map<String, dynamic>>.from(
           (rawOC['actions'] as List? ?? [])
@@ -294,6 +308,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         _flow = updated;
         _fields = fields;
         _conditions = updatedConditions;
+        _proactiveTrigger = updatedProactiveTrigger;
         _actions = updatedActions;
         _precondiciones = updatedPrecondiciones;
         _saving = false;
@@ -560,11 +575,15 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
                       triggerSources: _triggerSources,
                       flowId: widget.flowId,
                       tenantId: ref.read(activeTenantIdProvider),
+                      tenantWorkerId: _flow!['tenant_worker_id'] as String? ?? '',
                       sendProactive: _sendProactive,
+                      proactiveTrigger: _proactiveTrigger,
                       availableRoles: _availableRoles,
                       allowedRoleIds: _allowedRoleIds,
                       onChanged: (updated) { setState(() => _conditions = updated); _save(silent: true); },
                       onAllowedRoleIdsChanged: (updated) { setState(() => _allowedRoleIds = updated); _save(silent: true); },
+                      onProactiveTriggerChanged: (updated) { setState(() => _proactiveTrigger = updated); _save(silent: true); },
+                      onSendProactiveChanged: (value) => setState(() => _sendProactive = value),
                     ),
                     _PrecondicionesTab(
                       rules: _precondiciones,
@@ -2312,11 +2331,15 @@ class _ComportamientoTab extends StatefulWidget {
     required this.triggerSources,
     required this.flowId,
     required this.tenantId,
+    required this.tenantWorkerId,
     required this.sendProactive,
+    required this.proactiveTrigger,
     required this.availableRoles,
     required this.allowedRoleIds,
     required this.onChanged,
     required this.onAllowedRoleIdsChanged,
+    required this.onProactiveTriggerChanged,
+    required this.onSendProactiveChanged,
   });
 
   final List<Map<String, dynamic>> conditions;
@@ -2325,11 +2348,15 @@ class _ComportamientoTab extends StatefulWidget {
   final List<String> triggerSources;
   final String flowId;
   final String tenantId;
+  final String tenantWorkerId;
   final bool sendProactive;
+  final Map<String, dynamic> proactiveTrigger;
   final List<Map<String, dynamic>> availableRoles;
   final List<String> allowedRoleIds;
   final ValueChanged<List<Map<String, dynamic>>> onChanged;
   final ValueChanged<List<String>> onAllowedRoleIdsChanged;
+  final ValueChanged<Map<String, dynamic>> onProactiveTriggerChanged;
+  final ValueChanged<bool> onSendProactiveChanged;
 
   @override
   State<_ComportamientoTab> createState() => _ComportamientoTabState();
@@ -2341,12 +2368,35 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
   late List<String> _allowedRoleIds;
   bool _savingProactive = false;
 
+  // Proactive trigger state
+  String? _waChannelId;
+  List<Map<String, dynamic>> _approvedTemplates = [];
+  bool _loadingTemplates = false;
+  // Each row: (variableCtrl, sourceCtrl)
+  List<(TextEditingController, TextEditingController)> _mappingRows = [];
+
   @override
   void initState() {
     super.initState();
     _conditions = List.from(widget.conditions);
     _sendProactive = widget.sendProactive;
     _allowedRoleIds = List.from(widget.allowedRoleIds);
+    if (widget.triggerSources.contains('scheduled') &&
+        widget.tenantWorkerId.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadWaChannel();
+        _initMappingRows();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final row in _mappingRows) {
+      row.$1.dispose();
+      row.$2.dispose();
+    }
+    super.dispose();
   }
 
   @override
@@ -2361,6 +2411,13 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
     if (old.allowedRoleIds != widget.allowedRoleIds) {
       _allowedRoleIds = List.from(widget.allowedRoleIds);
     }
+    // When scheduled trigger is added, load WA channel
+    final wasScheduled = old.triggerSources.contains('scheduled');
+    final isScheduled = widget.triggerSources.contains('scheduled');
+    if (!wasScheduled && isScheduled && widget.tenantWorkerId.isNotEmpty) {
+      _loadWaChannel();
+      _initMappingRows();
+    }
     // When conversational is removed from trigger sources, auto-disable
     // send_proactive and persist immediately.
     final wasConversational = old.triggerSources.contains('conversational');
@@ -2370,11 +2427,87 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
     }
   }
 
+  Future<void> _loadWaChannel() async {
+    if (widget.tenantWorkerId.isEmpty) return;
+    try {
+      final channels = await ChannelsApi.listChannelsByWorker(
+        tenantWorkerId: widget.tenantWorkerId,
+      );
+      final waChannel = channels.firstWhere(
+        (c) => (c['channel_type'] as String?) == 'whatsapp',
+        orElse: () => {},
+      );
+      if (!mounted) return;
+      final channelId = waChannel['id'] as String?;
+      setState(() => _waChannelId = channelId);
+      if (channelId != null) {
+        await _loadTemplates(channelId);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadTemplates(String channelId) async {
+    setState(() => _loadingTemplates = true);
+    try {
+      final all = await ChannelsApi.listTemplates(channelId: channelId);
+      if (!mounted) return;
+      setState(() {
+        _approvedTemplates =
+            all.where((t) => (t['status'] as String?) == 'APPROVED').toList();
+        _loadingTemplates = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingTemplates = false);
+    }
+  }
+
+  void _initMappingRows() {
+    for (final row in _mappingRows) {
+      row.$1.dispose();
+      row.$2.dispose();
+    }
+    final existing = (widget.proactiveTrigger['variable_mapping'] as List? ?? [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    setState(() {
+      _mappingRows = existing
+          .map((e) => (
+                TextEditingController(text: e['variable'] as String? ?? ''),
+                TextEditingController(text: e['source'] as String? ?? ''),
+              ))
+          .toList();
+    });
+  }
+
+  void _updateProactiveTrigger({
+    String? templateId,
+    List<(TextEditingController, TextEditingController)>? rows,
+  }) {
+    final effectiveTemplateId =
+        templateId ?? widget.proactiveTrigger['template_id'] as String?;
+    final effectiveRows = rows ?? _mappingRows;
+    final mapping = effectiveRows
+        .where((r) => r.$1.text.trim().isNotEmpty)
+        .map((r) => {
+              'variable': r.$1.text.trim(),
+              'source': r.$2.text.trim(),
+            })
+        .toList();
+    final updated = <String, dynamic>{
+      'template_id': ?effectiveTemplateId,
+      if (mapping.isNotEmpty) 'variable_mapping': mapping,
+    };
+    widget.onProactiveTriggerChanged(updated);
+  }
+
   Future<void> _patchSendProactive(bool value) async {
     setState(() {
       _sendProactive = value;
       _savingProactive = true;
     });
+    widget.onSendProactiveChanged(value);
     try {
       await FlowsApi.updateFlow(
         flowId: widget.flowId,
@@ -2395,6 +2528,7 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
         _sendProactive = !value;
         _savingProactive = false;
       });
+      widget.onSendProactiveChanged(!value);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(_dioError(e)),
         backgroundColor: AppColors.ctDanger,
@@ -2570,6 +2704,239 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                           ? (v) => _patchSendProactive(v)
                           : null,
                     ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+          // ── Proactive trigger (scheduled) ────────────────────────────────
+          if (widget.triggerSources.contains('scheduled')) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.ctSurface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.ctBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Plantilla de inicio programado',
+                    style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Selecciona la plantilla de WhatsApp aprobada que se enviará cuando este flujo se dispare de forma programada.',
+                    style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_waChannelId == null)
+                    Text(
+                      'No se encontró canal de WhatsApp activo en este worker.',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        fontSize: 12,
+                        color: AppColors.ctText3,
+                      ),
+                    )
+                  else if (_loadingTemplates)
+                    const SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.ctTeal,
+                      ),
+                    )
+                  else if (_approvedTemplates.isEmpty)
+                    Text(
+                      'No hay plantillas aprobadas. Sincroniza las plantillas en Canales.',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        fontSize: 12,
+                        color: AppColors.ctText3,
+                      ),
+                    )
+                  else ...[
+                    DropdownButtonFormField<String>(
+                      value: widget.proactiveTrigger['template_id'] as String?,
+                      decoration: InputDecoration(
+                        labelText: 'Plantilla',
+                        labelStyle: AppTextStyles.bodySmall,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: const BorderSide(color: AppColors.ctBorder),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: const BorderSide(color: AppColors.ctBorder),
+                        ),
+                      ),
+                      dropdownColor: AppColors.ctSurface,
+                      style: AppTextStyles.body,
+                      items: _approvedTemplates.map((t) {
+                        final id = t['id'] as String? ?? t['name'] as String? ?? '';
+                        final name = t['name'] as String? ?? id;
+                        final lang = t['language'] as String? ?? '';
+                        return DropdownMenuItem<String>(
+                          value: id,
+                          child: Text('$name ($lang)', style: AppTextStyles.body),
+                        );
+                      }).toList(),
+                      onChanged: widget.canManage
+                          ? (v) {
+                              if (v != null) {
+                                _updateProactiveTrigger(templateId: v);
+                              }
+                            }
+                          : null,
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Text(
+                          'Mapeo de variables',
+                          style: AppTextStyles.body
+                              .copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const Spacer(),
+                        if (widget.canManage)
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _mappingRows = [
+                                  ..._mappingRows,
+                                  (
+                                    TextEditingController(),
+                                    TextEditingController(),
+                                  ),
+                                ];
+                              });
+                            },
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.ctTeal,
+                              padding: EdgeInsets.zero,
+                            ),
+                            child: Text(
+                              '+ Agregar',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: AppColors.ctTeal,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (_mappingRows.isEmpty)
+                      Text(
+                        'Sin variables mapeadas. La plantilla se enviará sin reemplazos.',
+                        style: AppTextStyles.bodySmall.copyWith(
+                            fontSize: 12, color: AppColors.ctText3),
+                      )
+                    else
+                      ...List.generate(_mappingRows.length, (i) {
+                        final row = _mappingRows[i];
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  controller: row.$1,
+                                  style: AppTextStyles.body,
+                                  decoration: InputDecoration(
+                                    labelText: 'Variable',
+                                    labelStyle: AppTextStyles.bodySmall,
+                                    hintText: 'nombre_cliente',
+                                    isDense: true,
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 8),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                      borderSide: const BorderSide(
+                                          color: AppColors.ctBorder),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                      borderSide: const BorderSide(
+                                          color: AppColors.ctBorder),
+                                    ),
+                                  ),
+                                  enabled: widget.canManage,
+                                  onChanged: (_) =>
+                                      _updateProactiveTrigger(),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: row.$2,
+                                  style: AppTextStyles.body,
+                                  decoration: InputDecoration(
+                                    labelText: 'Fuente',
+                                    labelStyle: AppTextStyles.bodySmall,
+                                    hintText: 'fields.nombre',
+                                    isDense: true,
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 8),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                      borderSide: const BorderSide(
+                                          color: AppColors.ctBorder),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                      borderSide: const BorderSide(
+                                          color: AppColors.ctBorder),
+                                    ),
+                                  ),
+                                  enabled: widget.canManage,
+                                  onChanged: (_) =>
+                                      _updateProactiveTrigger(),
+                                ),
+                              ),
+                              if (widget.canManage)
+                                IconButton(
+                                  icon: const Icon(Icons.close,
+                                      size: 16, color: AppColors.ctText3),
+                                  onPressed: () {
+                                    row.$1.dispose();
+                                    row.$2.dispose();
+                                    setState(() {
+                                      _mappingRows.removeAt(i);
+                                    });
+                                    _updateProactiveTrigger(
+                                        rows: _mappingRows);
+                                  },
+                                ),
+                            ],
+                          ),
+                        );
+                      }),
+                    if (_mappingRows.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      AppButton(
+                        label: 'Guardar mapeo',
+                        variant: AppButtonVariant.primary,
+                        size: AppButtonSize.sm,
+                        onPressed: () {
+                          if (!widget.canManage) return;
+                          _updateProactiveTrigger();
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(const SnackBar(
+                            content: Text(
+                                'Mapeo guardado — presiona Guardar en el flujo para persistir'),
+                            backgroundColor: AppColors.ctOk,
+                            duration: Duration(seconds: 2),
+                          ));
+                        },
+                      ),
+                    ],
+                  ],
                 ],
               ),
             ),

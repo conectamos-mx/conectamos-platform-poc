@@ -220,4 +220,18 @@ class ChannelsApi {
       data: eventData,
     );
   }
+
+  static Future<List<Map<String, dynamic>>> listChannelsByWorker({
+    required String tenantWorkerId,
+  }) async {
+    final response = await ApiClient.instance.get(
+      '/channels',
+      queryParameters: {'tenant_worker_id': tenantWorkerId},
+    );
+    final data = response.data;
+    final List raw = data is List
+        ? data
+        : (data['channels'] ?? data['items'] ?? []) as List;
+    return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
 }
