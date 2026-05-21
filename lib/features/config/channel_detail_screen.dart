@@ -38,10 +38,13 @@ String _dioError(Object e) {
 }
 
 String _formatDate(String iso) {
+  const months = [
+    '', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+  ];
   try {
     final dt = DateTime.parse(iso).toLocal();
-    return '${dt.day.toString().padLeft(2, '0')}/'
-        '${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+    return '${dt.day} de ${months[dt.month]} de ${dt.year}';
   } catch (_) {
     return '—';
   }
@@ -152,8 +155,19 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
     if (confirmed != true || !mounted) return;
     setState(() => _deleting = true);
     try {
+      final tenantWorkerId =
+          (_channel!['worker_id'] ?? _channel!['tenant_worker_id']) as String? ?? '';
+      if (tenantWorkerId.isEmpty) {
+        setState(() => _deleting = false);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No se pudo identificar el worker del canal'),
+          backgroundColor: AppColors.ctDanger,
+        ));
+        return;
+      }
       await ChannelsApi.deleteChannel(
-        tenantWorkerId: _channel!['tenant_worker_id'] as String,
+        tenantWorkerId: tenantWorkerId,
         channelId: widget.channelId,
       );
       if (!mounted) return;
@@ -242,6 +256,7 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
                 controller: _tabCtrl!,
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
+                dividerColor: Colors.transparent,
                 labelStyle:
                     AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                 unselectedLabelStyle:
@@ -267,15 +282,7 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
                 onError: _showError,
                 onSuccess: _showSuccess,
               ),
-              _CredentialsTab(
-                channel: ch,
-                tenantId: _tenantId,
-                onUpdated: (updated) {
-                  if (mounted) setState(() => _channel = updated);
-                },
-                onError: _showError,
-                onSuccess: _showSuccess,
-              ),
+              _CredentialsTab(channel: ch),
               _TemplatesTab(
                 channelId: widget.channelId,
                 tenantId: _tenantId,
@@ -394,6 +401,7 @@ class _ChannelSidePanel extends StatelessWidget {
                     label: '← Volver a canales',
                     variant: AppButtonVariant.ghost,
                     size: AppButtonSize.sm,
+                    expand: true,
                     onPressed: onBack,
                   ),
                   const SizedBox(height: 20),
@@ -632,7 +640,8 @@ class _InfoTab extends StatefulWidget {
 
 class _InfoTabState extends State<_InfoTab> {
   late final TextEditingController _nameCtrl;
-  bool _saving = false;
+  bool _editing = false;
+  bool _saving  = false;
 
   @override
   void initState() {
@@ -658,9 +667,9 @@ class _InfoTabState extends State<_InfoTab> {
       );
       widget.onUpdated(updated);
       widget.onSuccess('Cambios guardados');
+      if (mounted) setState(() { _editing = false; _saving = false; });
     } catch (e) {
       widget.onError(_dioError(e));
-    } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
@@ -677,26 +686,57 @@ class _InfoTabState extends State<_InfoTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _FieldLabel('Nombre del canal'),
+                Row(
+                  children: [
+                    _FieldLabel('Nombre del canal'),
+                    const Expanded(child: SizedBox()),
+                    if (!_editing)
+                      AppButton(
+                        label: 'Editar',
+                        variant: AppButtonVariant.ghost,
+                        size: AppButtonSize.sm,
+                        onPressed: () => setState(() => _editing = true),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 6),
-                _StyledTextField(controller: _nameCtrl, hint: 'Mi canal'),
+                if (_editing) ...[
+                  _StyledTextField(controller: _nameCtrl, hint: 'Mi canal'),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      AppButton(
+                        label: 'Cancelar',
+                        variant: AppButtonVariant.ghost,
+                        size: AppButtonSize.sm,
+                        onPressed: () => setState(() {
+                          _nameCtrl.text =
+                              widget.channel['display_name'] as String? ?? '';
+                          _editing = false;
+                        }),
+                      ),
+                      const SizedBox(width: 8),
+                      AppButton(
+                        label: 'Guardar',
+                        variant: AppButtonVariant.teal,
+                        size: AppButtonSize.sm,
+                        isLoading: _saving,
+                        onPressed: _save,
+                      ),
+                    ],
+                  ),
+                ] else
+                  Text(
+                    widget.channel['display_name'] as String? ?? '—',
+                    style: AppTextStyles.body,
+                  ),
                 const SizedBox(height: 16),
                 _FieldLabel('Creado el'),
                 const SizedBox(height: 4),
                 Text(
                   _formatDate(widget.channel['created_at'] as String? ?? ''),
                   style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                ),
-                const SizedBox(height: 20),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: AppButton(
-                    label: 'Guardar cambios',
-                    onPressed: _save,
-                    variant: AppButtonVariant.teal,
-                    size: AppButtonSize.sm,
-                    isLoading: _saving,
-                  ),
                 ),
               ],
             ),
@@ -709,40 +749,12 @@ class _InfoTabState extends State<_InfoTab> {
 
 // ── TAB 2 — Credenciales ──────────────────────────────────────────────────────
 
-class _CredentialsTab extends StatefulWidget {
-  const _CredentialsTab({
-    required this.channel,
-    required this.tenantId,
-    required this.onUpdated,
-    required this.onError,
-    required this.onSuccess,
-  });
+class _CredentialsTab extends StatelessWidget {
+  const _CredentialsTab({required this.channel});
   final Map<String, dynamic> channel;
-  final String tenantId;
-  final ValueChanged<Map<String, dynamic>> onUpdated;
-  final ValueChanged<String> onError;
-  final ValueChanged<String> onSuccess;
-
-  @override
-  State<_CredentialsTab> createState() => _CredentialsTabState();
-}
-
-class _CredentialsTabState extends State<_CredentialsTab> {
-  late final TextEditingController _phoneCtrl;
-  late final TextEditingController _wabaCtrl;
-  late final TextEditingController _tokenCtrl;
-  late final TextEditingController _pinCtrl;
-  late final TextEditingController _pinConfirmCtrl;
-  bool    _saving             = false;
-  bool    _verifying          = false;
-  String? _verifyError;
-  bool    _showToken          = false;
-  bool    _showPin            = false;
-  bool    _showPinConfirm     = false;
-  bool    _credentialsLocked  = false;
 
   Map<String, dynamic> get _credentials {
-    final cfg = widget.channel['channel_config'];
+    final cfg = channel['channel_config'];
     if (cfg is Map) {
       final creds = cfg['credentials'];
       if (creds is Map) return Map<String, dynamic>.from(creds);
@@ -751,300 +763,24 @@ class _CredentialsTabState extends State<_CredentialsTab> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    final creds = _credentials;
-    _phoneCtrl = TextEditingController(
-        text: widget.channel['phone_number_id'] as String?
-            ?? creds['phone_number_id'] as String? ?? '');
-    _wabaCtrl = TextEditingController(
-        text: widget.channel['waba_id'] as String?
-            ?? creds['waba_id'] as String? ?? '');
-    _tokenCtrl = TextEditingController(
-        text: widget.channel['wa_token'] as String?
-            ?? creds['access_token'] as String? ?? '');
-    _pinCtrl        = TextEditingController();
-    _pinConfirmCtrl = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _phoneCtrl.dispose();
-    _wabaCtrl.dispose();
-    _tokenCtrl.dispose();
-    _pinCtrl.dispose();
-    _pinConfirmCtrl.dispose();
-    super.dispose();
-  }
-
-  bool get _isPinValid {
-    final pin = _pinCtrl.text.trim();
-    return pin.length == 6 && RegExp(r'^\d{6}$').hasMatch(pin) && pin == _pinConfirmCtrl.text.trim();
-  }
-
-  Future<void> _saveCredentials() async {
-    final phone = _phoneCtrl.text.trim();
-    final waba  = _wabaCtrl.text.trim();
-    final token = _tokenCtrl.text.trim();
-    if (phone.isEmpty || waba.isEmpty || token.isEmpty) {
-      widget.onError('Completa todos los campos de credenciales');
-      return;
-    }
-    if (!_isPinValid) {
-      widget.onError('El PIN debe tener exactamente 6 dígitos numéricos y coincidir en ambos campos');
-      return;
-    }
-    // Step 1: verify credentials against Meta
-    setState(() { _verifying = true; _verifyError = null; });
-    try {
-      await ChannelsApi.verifyCredentials(phoneNumberId: phone, accessToken: token);
-    } catch (e) {
-      if (mounted) setState(() { _verifying = false; _verifyError = _dioError(e); });
-      return;
-    }
-    if (!mounted) return;
-    // Step 2: activate WhatsApp channel on Meta
-    try {
-      await ChannelsApi.activateWhatsapp(
-        phoneNumberId: phone,
-        wabaId:        waba,
-        accessToken:   token,
-        pin:           _pinCtrl.text.trim(),
-      );
-    } catch (e) {
-      if (mounted) setState(() { _verifying = false; _verifyError = _dioError(e); });
-      return;
-    }
-    if (!mounted) return;
-    setState(() { _verifying = false; _saving = true; });
-    // Step 3: persist credentials
-    try {
-      final updated = await ChannelsApi.updateChannel(
-        channelId: widget.channel['id'] as String,
-        phoneNumberId: phone,
-        wabaId: waba,
-        waToken: token,
-      );
-      widget.onUpdated(updated);
-      TemplatesApi.syncTemplates(
-        channelId: widget.channel['id'] as String,
-      ).catchError((_) {});
-      widget.onSuccess('Credenciales guardadas');
-    } catch (e) {
-      if (e is DioException && e.response?.statusCode == 409) {
-        final data = e.response?.data;
-        final errorCode = data is Map ? data['error'] as String? : null;
-        if (errorCode == 'channel_has_history') {
-          final msg = data is Map
-              ? (data['message'] as String? ?? 'Este canal tiene historial.')
-              : 'Este canal tiene historial.';
-          if (mounted) setState(() => _credentialsLocked = true);
-          widget.onError(msg);
-          return;
-        }
-      }
-      widget.onError(_dioError(e));
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final creds = _credentials;
+    final phoneId = channel['phone_number_id'] as String?
+        ?? creds['phone_number_id'] as String? ?? '—';
+    final wabaId = channel['waba_id'] as String?
+        ?? creds['waba_id'] as String? ?? '—';
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Embedded Signup (disabled) ──
-          _SectionCard(
-            title: 'Conexión rápida',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.ctTealLight,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Requiere certificación Tech Provider',
-                    style: AppTextStyles.kpiLabel.copyWith(color: AppColors.ctTealDark),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Tooltip(
-                  message:
-                      'Disponible cuando Conectamos obtenga certificación Meta Tech Provider',
-                  child: Opacity(
-                    opacity: 0.5,
-                    child: Container(
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1877F2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF1565C0),
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(8),
-                                bottomLeft: Radius.circular(8),
-                              ),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              'f',
-                              style: AppTextStyles.body.copyWith(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Conectar con WhatsApp Business',
-                            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600, color: Colors.white),
-                          ),
-                          const SizedBox(width: 16),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // ── Manual credentials ──
-          _SectionCard(
-            title: 'Credenciales manuales',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (_credentialsLocked) ...[
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.ctWarnBg,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.ctWarnText.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.ctWarnText),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Este canal tiene historial. Para cambiar el número o WABA, desactiva este canal y crea uno nuevo.',
-                            style: AppTextStyles.body.copyWith(fontSize: 12.5, color: AppColors.ctWarnText, height: 1.4),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                _FieldLabel('Phone Number ID'),
-                const SizedBox(height: 6),
-                _StyledTextField(
-                    controller: _phoneCtrl,
-                    hint: '123456789012345',
-                    enabled: !_credentialsLocked),
-                const SizedBox(height: 16),
-                _FieldLabel('WABA ID'),
-                const SizedBox(height: 6),
-                _StyledTextField(
-                    controller: _wabaCtrl,
-                    hint: '987654321098765',
-                    enabled: !_credentialsLocked),
-                const SizedBox(height: 16),
-                _FieldLabel('Access Token'),
-                const SizedBox(height: 6),
-                _StyledTextField(
-                  controller: _tokenCtrl,
-                  hint: 'EAAxxxx...',
-                  obscure: !_showToken,
-                  enabled: !_credentialsLocked,
-                  suffix: IconButton(
-                    icon: Icon(
-                      _showToken ? Icons.visibility_off : Icons.visibility,
-                      size: 18,
-                      color: AppColors.ctText2,
-                    ),
-                    onPressed: () =>
-                        setState(() => _showToken = !_showToken),
-                  ),
-                ),
-                if (!_credentialsLocked) ...[
-                  const SizedBox(height: 16),
-                  _FieldLabel('PIN de verificación (6 dígitos)'),
-                  const SizedBox(height: 6),
-                  _StyledTextField(
-                    controller: _pinCtrl,
-                    hint: '6 dígitos numéricos',
-                    obscure: !_showPin,
-                    suffix: IconButton(
-                      icon: Icon(_showPin ? Icons.visibility_off : Icons.visibility, size: 18, color: AppColors.ctText2),
-                      onPressed: () => setState(() => _showPin = !_showPin),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _FieldLabel('Confirmar PIN'),
-                  const SizedBox(height: 6),
-                  _StyledTextField(
-                    controller: _pinConfirmCtrl,
-                    hint: 'Repite los 6 dígitos',
-                    obscure: !_showPinConfirm,
-                    suffix: IconButton(
-                      icon: Icon(_showPinConfirm ? Icons.visibility_off : Icons.visibility, size: 18, color: AppColors.ctText2),
-                      onPressed: () => setState(() => _showPinConfirm = !_showPinConfirm),
-                    ),
-                  ),
-                ],
-                if (!_credentialsLocked) ...[
-                  const SizedBox(height: 20),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: _verifying
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                            decoration: BoxDecoration(color: AppColors.ctTeal, borderRadius: BorderRadius.circular(8)),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctNavy)),
-                                const SizedBox(width: 8),
-                                Text('Verificando...', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600, color: AppColors.ctNavy)),
-                              ],
-                            ),
-                          )
-                        : AppButton(
-                            label: 'Guardar credenciales',
-                            onPressed: _saveCredentials,
-                            variant: AppButtonVariant.teal,
-                            size: AppButtonSize.sm,
-                            isLoading: _saving,
-                          ),
-                  ),
-                  if (_verifyError != null) ...[
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(color: AppColors.ctRedBg, borderRadius: BorderRadius.circular(8)),
-                      child: Text(_verifyError!, style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctRedText)),
-                    ),
-                  ],
-                ],
-              ],
-            ),
-          ),
-        ],
+      child: _SectionCard(
+        title: 'Credenciales del canal',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ReadOnlyCredentialRow(label: 'Phone Number ID', value: phoneId),
+            const SizedBox(height: 12),
+            _ReadOnlyCredentialRow(label: 'WABA ID', value: wabaId),
+          ],
+        ),
       ),
     );
   }
@@ -1274,7 +1010,8 @@ class _TelegramInfoPanel extends StatefulWidget {
 
 class _TelegramInfoPanelState extends State<_TelegramInfoPanel> {
   late final TextEditingController _nameCtrl;
-  bool _saving = false;
+  bool _editing = false;
+  bool _saving  = false;
 
   Map<String, dynamic> get _credentials {
     final cfg = widget.channel['channel_config'];
@@ -1309,9 +1046,9 @@ class _TelegramInfoPanelState extends State<_TelegramInfoPanel> {
       );
       widget.onUpdated(updated);
       widget.onSuccess('Cambios guardados');
+      if (mounted) setState(() { _editing = false; _saving = false; });
     } catch (e) {
       widget.onError(_dioError(e));
-    } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
@@ -1330,9 +1067,51 @@ class _TelegramInfoPanelState extends State<_TelegramInfoPanel> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _FieldLabel('Nombre del canal'),
+                Row(
+                  children: [
+                    _FieldLabel('Nombre del canal'),
+                    const Expanded(child: SizedBox()),
+                    if (!_editing)
+                      AppButton(
+                        label: 'Editar',
+                        variant: AppButtonVariant.ghost,
+                        size: AppButtonSize.sm,
+                        onPressed: () => setState(() => _editing = true),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 6),
-                _StyledTextField(controller: _nameCtrl, hint: 'Mi bot'),
+                if (_editing) ...[
+                  _StyledTextField(controller: _nameCtrl, hint: 'Mi bot'),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      AppButton(
+                        label: 'Cancelar',
+                        variant: AppButtonVariant.ghost,
+                        size: AppButtonSize.sm,
+                        onPressed: () => setState(() {
+                          _nameCtrl.text =
+                              widget.channel['display_name'] as String? ?? '';
+                          _editing = false;
+                        }),
+                      ),
+                      const SizedBox(width: 8),
+                      AppButton(
+                        label: 'Guardar',
+                        variant: AppButtonVariant.teal,
+                        size: AppButtonSize.sm,
+                        isLoading: _saving,
+                        onPressed: _save,
+                      ),
+                    ],
+                  ),
+                ] else
+                  Text(
+                    widget.channel['display_name'] as String? ?? '—',
+                    style: AppTextStyles.body,
+                  ),
                 const SizedBox(height: 16),
                 _FieldLabel('Identificador'),
                 const SizedBox(height: 4),
@@ -1356,17 +1135,6 @@ class _TelegramInfoPanelState extends State<_TelegramInfoPanel> {
                 Text(
                   _formatDate(widget.channel['created_at'] as String? ?? ''),
                   style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                ),
-                const SizedBox(height: 20),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: AppButton(
-                    label: 'Guardar cambios',
-                    onPressed: _save,
-                    variant: AppButtonVariant.teal,
-                    size: AppButtonSize.sm,
-                    isLoading: _saving,
-                  ),
                 ),
               ],
             ),
@@ -1571,6 +1339,49 @@ class _WelcomeTabState extends State<_WelcomeTab> {
 
 // ── Shared Widgets ────────────────────────────────────────────────────────────
 
+class _ReadOnlyCredentialRow extends StatelessWidget {
+  const _ReadOnlyCredentialRow({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 140,
+          child: Text(label,
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.ctText2)),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: AppTextStyles.bodySmall
+                .copyWith(fontWeight: FontWeight.w500),
+          ),
+        ),
+        GestureDetector(
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: value));
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Copiado'),
+              duration: Duration(seconds: 2),
+              backgroundColor: AppColors.ctOk,
+            ));
+          },
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: Icon(Icons.copy_rounded,
+                size: 14, color: AppColors.ctText3),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _SectionCard extends StatelessWidget {
   const _SectionCard({
     required this.title,
@@ -1630,31 +1441,22 @@ class _StyledTextField extends StatelessWidget {
   const _StyledTextField({
     required this.controller,
     required this.hint,
-    this.obscure = false,
-    this.suffix,
-    this.enabled = true,
   });
   final TextEditingController controller;
   final String hint;
-  final bool obscure;
-  final Widget? suffix;
-  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
-      obscureText: obscure,
-      enabled: enabled,
-      style: AppTextStyles.body.copyWith(color: enabled ? AppColors.ctText : AppColors.ctText3),
+      style: AppTextStyles.body.copyWith(color: AppColors.ctText),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         filled: true,
-        fillColor: enabled ? AppColors.ctSurface : AppColors.ctSurface2,
-        suffixIcon: suffix,
+        fillColor: AppColors.ctSurface,
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: AppColors.ctBorder),
