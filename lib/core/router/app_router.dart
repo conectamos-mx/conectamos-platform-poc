@@ -27,7 +27,6 @@ import '../../features/catalogs/catalogs_screen.dart';
 import '../../features/flows/all_executions_screen.dart';
 import '../../features/flows/executions_screen.dart';
 import '../../features/flows/execution_detail_screen.dart';
-import '../../features/flows/flow_detail_screen.dart';
 import '../../features/conversations/conversations_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
 import '../../features/escalaciones/escalaciones_screen.dart';
@@ -296,12 +295,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/flows',
         pageBuilder: (c, s) => const NoTransitionPage(child: WorkflowsScreen()),
-      ),
-      GoRoute(
-        path: '/flows/:flowId',
-        pageBuilder: (c, s) => NoTransitionPage(
-          child: FlowDetailScreen(flowId: s.pathParameters['flowId'] ?? ''),
-        ),
       ),
       GoRoute(
         path: '/channels',

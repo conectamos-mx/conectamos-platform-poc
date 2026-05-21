@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,6 +12,7 @@ import '../../core/constants/field_types.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -106,15 +108,16 @@ const _kTriggerSources = [
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
-class FlowDetailScreen extends ConsumerStatefulWidget {
-  const FlowDetailScreen({super.key, required this.flowId});
+class FlowDetailPanel extends ConsumerStatefulWidget {
+  const FlowDetailPanel({super.key, required this.flowId, required this.onBack});
   final String flowId;
+  final VoidCallback onBack;
 
   @override
-  ConsumerState<FlowDetailScreen> createState() => _FlowDetailScreenState();
+  ConsumerState<FlowDetailPanel> createState() => _FlowDetailPanelState();
 }
 
-class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
+class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
     with SingleTickerProviderStateMixin {
   Map<String, dynamic>? _flow;
   bool _loading = true;
@@ -150,7 +153,7 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 5, vsync: this);
+    _tabCtrl = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -160,6 +163,12 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
     _nameCtrl.dispose();
     _descCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(FlowDetailPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.flowId != widget.flowId) _load();
   }
 
   Future<void> _load() async {
@@ -362,6 +371,49 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
     );
   }
 
+  Future<void> _toggleActive() async {
+    final current = _flow?['is_active'] as bool? ?? false;
+    try {
+      final updated = await FlowsApi.updateFlow(
+        flowId: widget.flowId,
+        isActive: !current,
+      );
+      if (!mounted) return;
+      setState(() => _flow = updated);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_dioError(e)), backgroundColor: AppColors.ctDanger,
+      ));
+    }
+  }
+
+  Future<void> _saveField({String? name, String? description}) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final updated = await FlowsApi.updateFlow(
+        flowId: widget.flowId,
+        name: name ?? (_flow!['name'] as String?),
+        description: description ?? (_flow!['description'] as String?),
+      );
+      if (!mounted) return;
+      if (name != null) _nameCtrl.text = name;
+      if (description != null) _descCtrl.text = description;
+      setState(() { _flow = updated; _saving = false; });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Guardado'), backgroundColor: AppColors.ctOk,
+        duration: Duration(seconds: 2),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_dioError(e)), backgroundColor: AppColors.ctDanger,
+      ));
+    }
+  }
+
   Future<void> _confirmDelete() async {
     final name = _flow?['name'] as String? ?? 'este flujo';
     final confirmed = await showDialog<bool>(
@@ -395,7 +447,7 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
     try {
       await FlowsApi.deleteFlow(flowId: widget.flowId);
       if (!mounted) return;
-      context.go('/flows');
+      widget.onBack();
     } catch (e) {
       if (!mounted) return;
       final isDioException = e is DioException;
@@ -414,189 +466,496 @@ class _FlowDetailScreenState extends ConsumerState<FlowDetailScreen>
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('FLOW_DETAIL BUILD: loading=$_loading error=$_error flow=${_flow?['name']}');
     if (_loading) {
-      return Scaffold(
-        backgroundColor: AppColors.ctBg,
-        appBar: _buildAppBar(),
-        body: const Center(child: CircularProgressIndicator()),
-      );
+      return const Center(child: CircularProgressIndicator(color: AppColors.ctTeal));
     }
     if (_error != null || _flow == null) {
-      return Scaffold(
-        backgroundColor: AppColors.ctBg,
-        appBar: _buildAppBar(),
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline,
-                  size: 48, color: AppColors.ctDanger),
-              const SizedBox(height: 12),
-              Text(
-                _error ?? 'No se encontró el flujo',
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: AppColors.ctDanger),
+            const SizedBox(height: 12),
+            Text(_error ?? 'No se encontró el flujo',
                 style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                textAlign: TextAlign.center,
+                textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            AppButton(label: 'Reintentar', variant: AppButtonVariant.ghost,
+                size: AppButtonSize.sm, onPressed: _load),
+          ],
+        ),
+      );
+    }
+    final canManage = hasPermission(ref, 'flows', 'manage');
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _FlowSidePanel(
+          flow: _flow!,
+          isActive: _flow!['is_active'] as bool? ?? false,
+          saving: _saving,
+          onBack: widget.onBack,
+          onToggleActive: _toggleActive,
+          onDelete: _confirmDelete,
+          onSaveName: (name) => _saveField(name: name),
+          onSaveDescription: (desc) => _saveField(description: desc),
+        ),
+        Container(width: 1, color: AppColors.ctBorder),
+        Expanded(
+          child: Column(
+            children: [
+              Container(
+                color: AppColors.ctSurface,
+                child: Column(
+                  children: [
+                    const Divider(height: 1, color: AppColors.ctBorder),
+                    TabBar(
+                      controller: _tabCtrl,
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
+                      dividerColor: Colors.transparent,
+                      labelStyle: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+                      unselectedLabelStyle: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+                      labelColor: AppColors.ctTeal,
+                      unselectedLabelColor: AppColors.ctText2,
+                      indicatorColor: AppColors.ctTeal,
+                      indicatorWeight: 2,
+                      tabs: const [
+                        Tab(text: 'Campos'),
+                        Tab(text: 'Comportamiento'),
+                        Tab(text: 'Precondiciones'),
+                        Tab(text: 'Al cerrar'),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-              AppButton(label: 'Reintentar', variant: AppButtonVariant.ghost, size: AppButtonSize.sm, onPressed: _load),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabCtrl,
+                  children: [
+                    _CamposTab(
+                      fields: _fields,
+                      canManage: canManage,
+                      onReorder: _onReorder,
+                      onEditField: (field, index) => _openFieldDialog(field: field, index: index),
+                      onDeleteField: (field, index) => _confirmDeleteField(field, index),
+                      onAddField: () => _openFieldDialog(),
+                    ),
+                    _ComportamientoTab(
+                      conditions: _conditions,
+                      flowFields: _fields,
+                      canManage: canManage,
+                      triggerSources: _triggerSources,
+                      flowId: widget.flowId,
+                      tenantId: ref.read(activeTenantIdProvider),
+                      sendProactive: _sendProactive,
+                      availableRoles: _availableRoles,
+                      allowedRoleIds: _allowedRoleIds,
+                      onChanged: (updated) { setState(() => _conditions = updated); _save(silent: true); },
+                      onAllowedRoleIdsChanged: (updated) { setState(() => _allowedRoleIds = updated); _save(silent: true); },
+                    ),
+                    _PrecondicionesTab(
+                      rules: _precondiciones,
+                      canManage: canManage,
+                      availableRoles: _availableRoles,
+                      onChanged: (updated) { setState(() => _precondiciones = updated); _save(silent: true); },
+                    ),
+                    _AlCerrarTab(
+                      actions: _actions,
+                      canManage: canManage,
+                      tenantId: ref.read(activeTenantIdProvider),
+                      tenantWorkerId: _flow!['tenant_worker_id'] as String? ?? '',
+                      currentFlowSlug: _flow!['slug'] as String? ?? '',
+                      flowFields: _fields,
+                      onChanged: (updated) { setState(() => _actions = updated); _save(silent: true); },
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-      );
-    }
-
-    final canManage = hasPermission(ref, 'flows', 'manage');
-
-    return Scaffold(
-      backgroundColor: AppColors.ctBg,
-      appBar: _buildAppBar(),
-      body: TabBarView(
-        controller: _tabCtrl,
-        children: [
-          _InfoTab(
-            flow: _flow!,
-            nameCtrl: _nameCtrl,
-            descCtrl: _descCtrl,
-            canManage: canManage,
-            triggerSources: _triggerSources,
-            onTriggerToggle: (source) {
-              setState(() {
-                if (_triggerSources.contains(source)) {
-                  if (_triggerSources.length > 1) {
-                    _triggerSources.remove(source);
-                  }
-                } else {
-                  _triggerSources.add(source);
-                }
-              });
-            },
-            onDelete: _confirmDelete,
-          ),
-          _CamposTab(
-            fields: _fields,
-            canManage: canManage,
-            onReorder: _onReorder,
-            onEditField: (field, index) =>
-                _openFieldDialog(field: field, index: index),
-            onDeleteField: (field, index) =>
-                _confirmDeleteField(field, index),
-            onAddField: () => _openFieldDialog(),
-          ),
-          _ComportamientoTab(
-            conditions: _conditions,
-            flowFields: _fields,
-            canManage: canManage,
-            triggerSources: _triggerSources,
-            flowId: widget.flowId,
-            tenantId: ref.read(activeTenantIdProvider),
-            sendProactive: _sendProactive,
-            availableRoles: _availableRoles,
-            allowedRoleIds: _allowedRoleIds,
-            onChanged: (updated) {
-              setState(() => _conditions = updated);
-              _save(silent: true);
-            },
-            onAllowedRoleIdsChanged: (updated) {
-              setState(() => _allowedRoleIds = updated);
-              _save(silent: true);
-            },
-          ),
-          _PrecondicionesTab(
-            rules: _precondiciones,
-            canManage: canManage,
-            availableRoles: _availableRoles,
-            onChanged: (updated) {
-              setState(() => _precondiciones = updated);
-              _save(silent: true);
-            },
-          ),
-          _AlCerrarTab(
-            actions: _actions,
-            canManage: canManage,
-            tenantId: ref.read(activeTenantIdProvider),
-            tenantWorkerId: _flow?['tenant_worker_id'] as String? ?? '',
-            currentFlowSlug: _flow?['slug'] as String? ?? '',
-            flowFields: _fields,
-            onChanged: (updated) {
-              setState(() => _actions = updated);
-              _save(silent: true);
-            },
-          ),
-        ],
-      ),
+      ],
     );
   }
+}
 
-  PreferredSizeWidget _buildAppBar() {
-    final name = _flow?['name'] as String? ?? 'Flujo';
-    return AppBar(
-      backgroundColor: AppColors.ctNavy,
-      elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.white),
-        onPressed: () => context.go('/flows'),
+// ── _FlowSidePanel ────────────────────────────────────────────────────────────
+
+class _FlowSidePanel extends StatefulWidget {
+  const _FlowSidePanel({
+    required this.flow,
+    required this.isActive,
+    required this.saving,
+    required this.onBack,
+    required this.onToggleActive,
+    required this.onDelete,
+    required this.onSaveName,
+    required this.onSaveDescription,
+  });
+
+  final Map<String, dynamic> flow;
+  final bool isActive;
+  final bool saving;
+  final VoidCallback onBack;
+  final VoidCallback onToggleActive;
+  final VoidCallback onDelete;
+  final ValueChanged<String> onSaveName;
+  final ValueChanged<String> onSaveDescription;
+
+  @override
+  State<_FlowSidePanel> createState() => _FlowSidePanelState();
+}
+
+class _FlowSidePanelState extends State<_FlowSidePanel> {
+  bool _editingName = false;
+  bool _editingDesc = false;
+  late TextEditingController _nameCtrl;
+  late TextEditingController _descCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.flow['name'] as String? ?? '');
+    _descCtrl = TextEditingController(text: widget.flow['description'] as String? ?? '');
+  }
+
+  @override
+  void didUpdateWidget(_FlowSidePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final newName = widget.flow['name'] as String? ?? '';
+    final newDesc = widget.flow['description'] as String? ?? '';
+    if (oldWidget.flow['name'] != newName && !_editingName) {
+      _nameCtrl.text = newName;
+    }
+    if (oldWidget.flow['description'] != newDesc && !_editingDesc) {
+      _descCtrl.text = newDesc;
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  List<Widget> _buildTriggerChips() {
+    const labels = {
+      'conversational': 'Conversacional',
+      'api': 'API',
+      'dashboard': 'Dashboard',
+    };
+    final sources = (widget.flow['trigger_sources'] as List? ?? [])
+        .map((s) => s.toString())
+        .toList();
+    if (sources.isEmpty) {
+      return [Text('—', style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3))];
+    }
+    return sources.map((s) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.ctTealLight,
+        borderRadius: BorderRadius.circular(20),
       ),
-      title: Text(
-        name,
-        style: AppFonts.onest(
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
-        ),
+      child: Text(
+        labels[s] ?? s,
+        style: AppTextStyles.caption.copyWith(
+            color: AppColors.ctTealDark, fontWeight: FontWeight.w500),
       ),
-      actions: [
-        if (_flow != null)
-          IconButton(
-            icon: const Icon(Icons.electrical_services_outlined, color: Colors.white70),
-            tooltip: 'Integraciones',
-            onPressed: () {
-              final name = _flow!['name'] as String? ?? 'Flujo';
-              context.go('/flows/${widget.flowId}/integrations?flowName=${Uri.encodeComponent(name)}');
-            },
-          ),
-        if (_saving)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
+    )).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 220,
+      color: AppColors.ctSurface2,
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Botón volver
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: widget.onBack,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: AppColors.ctNavy,
+                          border: Border.all(color: AppColors.ctNavy),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text('← Volver a flujos',
+                            style: AppTextStyles.bodySmall.copyWith(color: Colors.white)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // 2. Nombre — inline edit
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _editingName
+                            ? TextField(
+                                controller: _nameCtrl,
+                                style: AppTextStyles.cardTitle,
+                                autofocus: true,
+                                maxLines: 2,
+                                decoration: InputDecoration(
+                                  border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: AppColors.ctBorder)),
+                                  focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: AppColors.ctTeal, width: 1.5)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  isDense: true,
+                                ),
+                              )
+                            : Text(widget.flow['name'] as String? ?? '—',
+                                style: AppTextStyles.cardTitle),
+                      ),
+                      const SizedBox(width: 6),
+                      if (!_editingName)
+                        GestureDetector(
+                          onTap: () => setState(() => _editingName = true),
+                          child: const MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: Icon(Icons.edit_outlined, size: 14, color: AppColors.ctText3),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (_editingName) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        AppButton(
+                            label: 'Cancelar', variant: AppButtonVariant.ghost, size: AppButtonSize.sm,
+                            onPressed: () {
+                              _nameCtrl.text = widget.flow['name'] as String? ?? '';
+                              setState(() => _editingName = false);
+                            }),
+                        const SizedBox(width: 6),
+                        AppButton(
+                            label: 'Guardar', variant: AppButtonVariant.teal, size: AppButtonSize.sm,
+                            isLoading: widget.saving,
+                            onPressed: () {
+                              widget.onSaveName(_nameCtrl.text.trim());
+                              setState(() => _editingName = false);
+                            }),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 6),
+
+                  // 3. Slug — solo lectura, copiable
+                  GestureDetector(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: widget.flow['slug'] as String? ?? ''));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Slug copiado'), duration: Duration(seconds: 2),
+                        backgroundColor: AppColors.ctOk,
+                      ));
+                    },
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.ctSurface,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.ctBorder),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(widget.flow['slug'] as String? ?? '—',
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.ctText3,
+                                    fontFamily: 'Geist',
+                                  ),
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                            const Icon(Icons.copy_rounded, size: 12, color: AppColors.ctText3),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 4. Descripción — inline edit
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _editingDesc
+                            ? TextField(
+                                controller: _descCtrl,
+                                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+                                autofocus: true,
+                                maxLines: 3,
+                                decoration: InputDecoration(
+                                  border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: AppColors.ctBorder)),
+                                  focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: AppColors.ctTeal, width: 1.5)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  isDense: true,
+                                ),
+                              )
+                            : Text(
+                                (widget.flow['description'] as String?)?.isNotEmpty == true
+                                    ? widget.flow['description'] as String
+                                    : 'Sin descripción',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: (widget.flow['description'] as String?)?.isNotEmpty == true
+                                      ? AppColors.ctText2
+                                      : AppColors.ctText3,
+                                ),
+                              ),
+                      ),
+                      const SizedBox(width: 6),
+                      if (!_editingDesc)
+                        GestureDetector(
+                          onTap: () => setState(() => _editingDesc = true),
+                          child: const MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: Icon(Icons.edit_outlined, size: 14, color: AppColors.ctText3),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (_editingDesc) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        AppButton(
+                            label: 'Cancelar', variant: AppButtonVariant.ghost, size: AppButtonSize.sm,
+                            onPressed: () {
+                              _descCtrl.text = widget.flow['description'] as String? ?? '';
+                              setState(() => _editingDesc = false);
+                            }),
+                        const SizedBox(width: 6),
+                        AppButton(
+                            label: 'Guardar', variant: AppButtonVariant.teal, size: AppButtonSize.sm,
+                            isLoading: widget.saving,
+                            onPressed: () {
+                              widget.onSaveDescription(_descCtrl.text.trim());
+                              setState(() => _editingDesc = false);
+                            }),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+
+                  const Divider(color: AppColors.ctBorder, height: 1),
+                  const SizedBox(height: 16),
+
+                  // 5. ESTADO
+                  Text('ESTADO', style: AppTextStyles.kpiLabel),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      AppBadge(
+                        label: widget.isActive ? 'Activo' : 'Inactivo',
+                        variant: widget.isActive ? AppBadgeVariant.ok : AppBadgeVariant.neutral,
+                      ),
+                      const Expanded(child: SizedBox()),
+                      Switch(
+                        value: widget.isActive,
+                        onChanged: (_) => widget.onToggleActive(),
+                        activeThumbColor: AppColors.ctTeal,
+                        activeTrackColor: AppColors.ctTealLight,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 6. TRIGGERS
+                  Text('TRIGGERS', style: AppTextStyles.kpiLabel),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: _buildTriggerChips(),
+                  ),
+                  const SizedBox(height: 16),
+
+                  const Divider(color: AppColors.ctBorder, height: 1),
+                  const SizedBox(height: 16),
+
+                  // 7. MÉTRICAS
+                  Text('MÉTRICAS', style: AppTextStyles.kpiLabel),
+                  const SizedBox(height: 10),
+                  _MetricRow(
+                    label: 'Ejecuciones totales',
+                    value: (widget.flow['execution_count'] as int? ?? 0).toString(),
+                  ),
+                  const SizedBox(height: 6),
+                  _MetricRow(
+                    label: 'Campos configurados',
+                    value: ((widget.flow['fields'] as List?)?.length ?? 0).toString(),
+                  ),
+                  const SizedBox(height: 24),
+                ],
               ),
             ),
-          )
-        else
-          AppButton(
-            label: 'Guardar',
-            variant: AppButtonVariant.ghost,
-            size: AppButtonSize.sm,
-            isDisabled: _loading,
-            onPressed: _save,
           ),
-      ],
-      bottom: TabBar(
-        controller: _tabCtrl,
-        labelColor: AppColors.ctTeal,
-        unselectedLabelColor: Colors.white60,
-        indicatorColor: AppColors.ctTeal,
-        labelStyle: AppTextStyles.formLabel,
-        unselectedLabelStyle: AppTextStyles.navItem,
-        tabs: const [
-          Tab(text: 'INFO'),
-          Tab(text: 'CAMPOS'),
-          Tab(text: 'COMPORTAMIENTO'),
-          Tab(text: 'PRECONDICIONES'),
-          Tab(text: 'AL CERRAR'),
+          // 8. Botón eliminar — fuera del scroll
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: AppButton(
+              label: 'Eliminar flujo',
+              variant: AppButtonVariant.danger,
+              size: AppButtonSize.sm,
+              expand: true,
+              onPressed: widget.onDelete,
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
+// ── _MetricRow ────────────────────────────────────────────────────────────────
+
+class _MetricRow extends StatelessWidget {
+  const _MetricRow({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(label, style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
+      Text(value, style: AppTextStyles.body.copyWith(
+          fontWeight: FontWeight.w700, color: AppColors.ctTeal)),
+    ],
+  );
+}
+
 // ── _InfoTab ──────────────────────────────────────────────────────────────────
 
+// DEPRECATED — sesión 2026-05-21. Contenido migrado a _FlowSidePanel.
+// ignore: unused_element
 class _InfoTab extends StatefulWidget {
   const _InfoTab({
     required this.flow,

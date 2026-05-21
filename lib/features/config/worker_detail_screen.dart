@@ -12,6 +12,7 @@ import '../../shared/widgets/app_loading_state.dart';
 import '../../shared/widgets/app_stacked_metric_card.dart';
 import 'channel_detail_screen.dart';
 import 'channels_screen.dart';
+import '../flows/flow_detail_screen.dart';
 import 'workflows_screen.dart';
 
 // ── Helpers de archivo ────────────────────────────────────────────────────────
@@ -65,6 +66,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
   String? _error;
   String? _selectedChannelId;
   int _activeChannelCount = 0;
+  String? _selectedFlowId;
 
   @override
   void initState() {
@@ -274,7 +276,15 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
                     ),
                   ],
                 ),
-          WorkflowsScreen(tenantWorkerId: widget.workerId),
+          _selectedFlowId == null
+              ? WorkflowsScreen(
+                  tenantWorkerId: widget.workerId,
+                  onFlowSelected: (id) => setState(() => _selectedFlowId = id),
+                )
+              : FlowDetailPanel(
+                  flowId: _selectedFlowId!,
+                  onBack: () => setState(() => _selectedFlowId = null),
+                ),
         ],
       ),
     );
