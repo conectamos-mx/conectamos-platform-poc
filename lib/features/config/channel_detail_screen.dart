@@ -1037,20 +1037,19 @@ class _TemplatesTabState extends State<_TemplatesTab> {
                                   children: [
                                     Row(
                                       children: [
-                                        Expanded(
-                                          child: Text(
-                                            t['name'] as String? ?? '—',
-                                            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
+                                        Text(
+                                          t['name'] as String? ?? '—',
+                                          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                         if ((t['language'] as String?) != null) ...[
-                                          const SizedBox(width: 8),
+                                          const SizedBox(width: 6),
                                           Text(
                                             t['language'] as String,
                                             style: AppTextStyles.caption.copyWith(color: AppColors.ctText3),
                                           ),
                                         ],
+                                        const Expanded(child: SizedBox()),
                                         const SizedBox(width: 8),
                                         MouseRegion(
                                           cursor: SystemMouseCursors.click,
@@ -1061,7 +1060,7 @@ class _TemplatesTabState extends State<_TemplatesTab> {
                                               child: Icon(
                                                 Icons.delete_outline_rounded,
                                                 size: 16,
-                                                color: AppColors.ctText3,
+                                                color: AppColors.ctDanger,
                                               ),
                                             ),
                                           ),
