@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +16,9 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_dropdown.dart';
+import '../../shared/widgets/app_multi_select.dart';
+import '../../shared/widgets/app_text_field.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -361,8 +365,89 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
     });
   }
 
+  List<String> _findFieldReferences(String fieldKey) {
+    final refs = <String>[];
+    for (final f in _fields) {
+      final showIf = f['show_if'] as Map<String, dynamic>?;
+      if (showIf != null && showIf['field'] == fieldKey) {
+        refs.add('Campo "${f['label'] ?? f['key']}" (condición de visibilidad)');
+      }
+    }
+    for (final action in _actions) {
+      if ((action as Map)['count_field_key'] == fieldKey) {
+        refs.add('Acción "${action['type']}" en Al cerrar (campo de conteo)');
+      }
+      final colMap = action['config']?['column_mapping'] as Map?;
+      if (colMap != null && colMap.containsKey(fieldKey)) {
+        refs.add('Acción "${action['type']}" en Al cerrar (mapeo de columna)');
+      }
+    }
+    final varMapping = _proactiveTrigger['variable_mapping'] as List?;
+    if (varMapping != null) {
+      for (final vm in varMapping) {
+        if ((vm as Map)['source'] == 'fields.$fieldKey') {
+          refs.add('Mensaje proactivo (variable_mapping)');
+        }
+      }
+    }
+    return refs;
+  }
+
   void _confirmDeleteField(Map<String, dynamic> field, int index) {
     final label = field['label'] as String? ?? field['key'] as String? ?? 'este campo';
+    final fieldKey = field['key'] as String? ?? '';
+    final refs = _findFieldReferences(fieldKey);
+
+    if (refs.isNotEmpty) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.ctSurface,
+          title: Text(
+            'No se puede eliminar "$label"',
+            style: AppTextStyles.pageTitle,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Este campo está siendo usado en:',
+                style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+              ),
+              const SizedBox(height: 8),
+              ...refs.map((r) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('• ', style: AppTextStyles.body.copyWith(color: AppColors.ctDanger)),
+                        Expanded(
+                          child: Text(r, style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
+                        ),
+                      ],
+                    ),
+                  )),
+              const SizedBox(height: 8),
+              Text(
+                'Edita o elimina esas referencias primero.',
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+              ),
+            ],
+          ),
+          actions: [
+            AppButton(
+              label: 'Entendido',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.sm,
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -485,6 +570,45 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         content: Text(msg), backgroundColor: AppColors.ctDanger,
       ));
     }
+  }
+
+  Future<void> _saveWithResult({List<String>? triggerSources}) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await FlowsApi.updateFlow(
+        flowId: widget.flowId,
+        name: _nameCtrl.text.trim(),
+        slug: _derivedSlug,
+        description: _descCtrl.text.trim(),
+        fields: _fields,
+        behavior: {
+          'conditions': _conditions,
+          if (_proactiveTrigger.isNotEmpty)
+            'proactive_trigger': _proactiveTrigger,
+        },
+        onComplete: {'actions': _actions},
+        triggerSources: triggerSources ?? _triggerSources,
+        sendProactive: _sendProactive,
+        allowedRoleIds: _allowedRoleIds,
+        preconditions: _precondiciones,
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  String _parseTriggerError(Object e) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      final detail = data is Map ? data['detail'] as String? ?? '' : '';
+      if (detail.contains('scheduled') && detail.contains('proactive_trigger')) {
+        return 'Para usar el trigger "Programado" primero configura '
+            'la plantilla de WhatsApp en la tab Comportamiento.';
+      }
+      if (detail.isNotEmpty) return detail;
+    }
+    return 'No se pudo actualizar el trigger. Intenta de nuevo.';
   }
 
   Widget _buildDeleteModal() {
@@ -769,9 +893,28 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
             _deleteConfirmCtrl.clear();
             setState(() => _showDeleteModal = true);
           },
-          onTriggerSourcesChanged: (updated) {
+          triggerSources: _triggerSources,
+          onTriggerSourcesChanged: (updated) async {
+            final previous = List<String>.from(_triggerSources);
             setState(() => _triggerSources = updated);
-            _save(silent: true);
+            try {
+              await _saveWithResult(triggerSources: updated);
+            } catch (e) {
+              if (mounted) setState(() => _triggerSources = previous);
+              final msg = _parseTriggerError(e);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(msg),
+                  backgroundColor: AppColors.ctDanger,
+                  duration: const Duration(seconds: 4),
+                  action: SnackBarAction(
+                    label: 'Ir a Comportamiento',
+                    textColor: Colors.white,
+                    onPressed: () => _tabCtrl.animateTo(1),
+                  ),
+                ));
+              }
+            }
           },
         ),
         Container(width: 1, color: AppColors.ctBorder),
@@ -875,6 +1018,7 @@ class _FlowSidePanel extends StatefulWidget {
     required this.onBack,
     required this.onToggleActive,
     required this.onDelete,
+    required this.triggerSources,
     required this.onTriggerSourcesChanged,
   });
 
@@ -884,6 +1028,7 @@ class _FlowSidePanel extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onToggleActive;
   final VoidCallback onDelete;
+  final List<String> triggerSources;
   final ValueChanged<List<String>> onTriggerSourcesChanged;
 
   @override
@@ -896,18 +1041,14 @@ class _FlowSidePanelState extends State<_FlowSidePanel> {
   @override
   void initState() {
     super.initState();
-    _triggerSources = List<String>.from(
-      (widget.flow['trigger_sources'] as List? ?? []).map((s) => s.toString()),
-    );
+    _triggerSources = List.from(widget.triggerSources);
   }
 
   @override
   void didUpdateWidget(_FlowSidePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.flow['trigger_sources'] != widget.flow['trigger_sources']) {
-      _triggerSources = List<String>.from(
-        (widget.flow['trigger_sources'] as List? ?? []).map((s) => s.toString()),
-      );
+    if (!listEquals(oldWidget.triggerSources, widget.triggerSources)) {
+      setState(() => _triggerSources = List.from(widget.triggerSources));
     }
   }
 
@@ -1393,28 +1534,111 @@ class _CamposTab extends StatelessWidget {
   final void Function(Map<String, dynamic> field, int index) onDeleteField;
   final VoidCallback onAddField;
 
+  String _resolveFieldLabel(String key) {
+    final match = fields.where((f) => f['key'] == key).firstOrNull;
+    return match?['label'] as String? ?? match?['key'] as String? ?? key;
+  }
+
+  Map<String, List<Map<String, dynamic>>> _groupByCondition(
+      List<Map<String, dynamic>> conds) {
+    final groups = <String, List<Map<String, dynamic>>>{};
+    for (final f in conds) {
+      final si = f['show_if'] as Map<String, dynamic>;
+      final field = si['field'] as String? ?? '';
+      final value = si['value'];
+      final valueStr =
+          value is List ? value.join(', ') : value.toString();
+      final key = '$field::$valueStr';
+      groups.putIfAbsent(key, () => []).add(f);
+    }
+    return groups;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final alwaysFields =
+        fields.where((f) => f['show_if'] == null).toList();
+    final conditionalFields =
+        fields.where((f) => f['show_if'] != null).toList();
+    final condGroups = _groupByCondition(conditionalFields);
+
     return CustomScrollView(
       slivers: [
         // Header
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Campos del flujo (${fields.length})',
-                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+                Row(
+                  children: [
+                    Text(
+                      'Campos del flujo (${fields.length})',
+                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const Spacer(),
+                    if (canManage)
+                      AppButton(
+                        label: '+ Agregar campo',
+                        variant: AppButtonVariant.ghost,
+                        size: AppButtonSize.sm,
+                        onPressed: onAddField,
+                      ),
+                  ],
                 ),
-                const Spacer(),
-                if (canManage)
-                  AppButton(
-                    label: '+ Agregar campo',
-                    variant: AppButtonVariant.ghost,
-                    size: AppButtonSize.sm,
-                    onPressed: onAddField,
+                if (fields.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Builder(builder: (_) {
+                    final requiredCount = fields.where((f) => f['required'] == true).length;
+                    final optionalCount = fields.where((f) => f['required'] != true && f['show_if'] == null).length;
+                    final conditionalCount = fields.where((f) => f['show_if'] != null).length;
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        if (requiredCount > 0)
+                          _CountBadge(
+                            icon: '⭐',
+                            count: requiredCount,
+                            label: requiredCount == 1 ? 'requerido' : 'requeridos',
+                            bgColor: AppColors.ctTealLight,
+                            textColor: AppColors.ctNavy,
+                          ),
+                        if (optionalCount > 0)
+                          _CountBadge(
+                            icon: '○',
+                            count: optionalCount,
+                            label: optionalCount == 1 ? 'opcional' : 'opcionales',
+                            bgColor: AppColors.ctSurface,
+                            textColor: AppColors.ctText2,
+                            borderColor: AppColors.ctBorder,
+                          ),
+                        if (conditionalCount > 0)
+                          _CountBadge(
+                            icon: '↳',
+                            count: conditionalCount,
+                            label: conditionalCount == 1 ? 'condicional' : 'condicionales',
+                            bgColor: AppColors.ctTealLight,
+                            textColor: AppColors.ctTeal,
+                          ),
+                      ],
+                    );
+                  }),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 4,
+                    children: [
+                      Text('⭐ Requerido · Debe completarse siempre',
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)),
+                      Text('○ Opcional · Puede dejarse vacío',
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)),
+                      Text('↳ Condicional · Aparece solo si se cumple la condición',
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)),
+                    ],
                   ),
+                ],
               ],
             ),
           ),
@@ -1432,27 +1656,128 @@ class _CamposTab extends StatelessWidget {
               ),
             ),
           )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            sliver: SliverReorderableList(
-              itemCount: fields.length,
-              onReorder: canManage ? onReorder : (int a, int b) {},
-              itemBuilder: (context, i) {
-                final field = fields[i];
-                final id = field['id']?.toString() ?? i.toString();
-                return _FieldRow(
-                  key: ValueKey(id),
-                  field: field,
-                  index: i,
-                  canManage: canManage,
-                  isLast: i == fields.length - 1,
-                  onEdit: () => onEditField(field, i),
-                  onDelete: () => onDeleteField(field, i),
-                );
-              },
+        else ...[
+          // ── Siempre presentes ──
+          if (alwaysFields.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _SectionDivider(
+                  label: 'SIEMPRE PRESENTES — ${alwaysFields.length}',
+                ),
+              ),
             ),
-          ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: SliverReorderableList(
+                itemCount: alwaysFields.length,
+                onReorder: canManage
+                    ? (oldIdx, newIdx) {
+                        // Map local indices back to global indices
+                        final globalOld = fields.indexOf(alwaysFields[oldIdx]);
+                        var globalNew = newIdx >= alwaysFields.length
+                            ? fields.indexOf(alwaysFields.last) + 1
+                            : fields.indexOf(alwaysFields[newIdx]);
+                        if (globalNew > globalOld) globalNew--;
+                        onReorder(globalOld, globalNew > globalOld ? globalNew + 1 : globalNew);
+                      }
+                    : (int a, int b) {},
+                itemBuilder: (context, i) {
+                  final field = alwaysFields[i];
+                  final id = field['id']?.toString() ?? 'a$i';
+                  return _FieldRow(
+                    key: ValueKey(id),
+                    field: field,
+                    index: i,
+                    canManage: canManage,
+                    isLast: i == alwaysFields.length - 1,
+                    onEdit: () => onEditField(field, fields.indexOf(field)),
+                    onDelete: () => onDeleteField(field, fields.indexOf(field)),
+                  );
+                },
+              ),
+            ),
+          ],
+
+          // ── Condicionales ──
+          if (conditionalFields.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _SectionDivider(
+                  label: 'CONDICIONALES — ${conditionalFields.length}',
+                  labelColor: AppColors.ctTeal,
+                ),
+              ),
+            ),
+            ...condGroups.entries.expand((entry) {
+              final parts = entry.key.split('::');
+              final fieldKey = parts.first;
+              final valueStr = parts.length > 1 ? parts.sublist(1).join('::') : '';
+              final fieldLabel = _resolveFieldLabel(fieldKey);
+              final groupFields = entry.value;
+
+              return [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.ctTealLight,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: RichText(
+                        text: TextSpan(
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctNavy),
+                          children: [
+                            const TextSpan(text: '↳ Si '),
+                            TextSpan(
+                              text: fieldLabel,
+                              style: const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            const TextSpan(text: ' = '),
+                            TextSpan(
+                              text: valueStr,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.ctTeal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, i) {
+                        final field = groupFields[i];
+                        return _FieldRow(
+                          key: ValueKey(field['id']?.toString() ?? 'c$i'),
+                          field: field,
+                          index: i,
+                          canManage: canManage,
+                          isLast: i == groupFields.length - 1,
+                          indented: true,
+                          onEdit: () =>
+                              onEditField(field, fields.indexOf(field)),
+                          onDelete: () =>
+                              onDeleteField(field, fields.indexOf(field)),
+                        );
+                      },
+                      childCount: groupFields.length,
+                    ),
+                  ),
+                ),
+              ];
+            }),
+          ],
+        ],
 
         const SliverToBoxAdapter(child: SizedBox(height: 20)),
       ],
@@ -1471,6 +1796,7 @@ class _FieldRow extends StatelessWidget {
     required this.isLast,
     required this.onEdit,
     required this.onDelete,
+    this.indented = false,
   });
 
   final Map<String, dynamic> field;
@@ -1479,6 +1805,7 @@ class _FieldRow extends StatelessWidget {
   final bool isLast;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final bool indented;
 
   @override
   Widget build(BuildContext context) {
@@ -1491,14 +1818,16 @@ class _FieldRow extends StatelessWidget {
         .map((e) => e.$2)
         .firstOrNull ?? type;
 
-    return Container(
-      color: AppColors.ctSurface,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-            child: Row(
+    return Padding(
+      padding: EdgeInsets.only(left: indented ? 16.0 : 0.0),
+      child: Container(
+        color: AppColors.ctSurface,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              child: Row(
               children: [
                 if (canManage)
                   ReorderableDragStartListener(
@@ -1570,8 +1899,79 @@ class _FieldRow extends StatelessWidget {
               ],
             ),
           ),
-          if (!isLast)
-            const Divider(height: 1, color: AppColors.ctBorder),
+            if (!isLast)
+              const Divider(height: 1, color: AppColors.ctBorder),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── _CountBadge ──────────────────────────────────────────────────────────────
+
+class _CountBadge extends StatelessWidget {
+  const _CountBadge({
+    required this.icon,
+    required this.count,
+    required this.label,
+    required this.bgColor,
+    required this.textColor,
+    this.borderColor,
+  });
+  final String icon;
+  final int count;
+  final String label;
+  final Color bgColor;
+  final Color textColor;
+  final Color? borderColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+        border: borderColor != null ? Border.all(color: borderColor!) : null,
+      ),
+      child: Text(
+        '$icon $count $label',
+        style: AppTextStyles.bodySmall.copyWith(
+          color: textColor,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
+// ── _SectionDivider ──────────────────────────────────────────────────────────
+
+class _SectionDivider extends StatelessWidget {
+  const _SectionDivider({required this.label, this.labelColor});
+  final String label;
+  final Color? labelColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = labelColor ?? AppColors.ctText3;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: AppColors.ctBorder, height: 1)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              label,
+              style: AppTextStyles.kpiLabel.copyWith(
+                color: color,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: AppColors.ctBorder, height: 1)),
         ],
       ),
     );
@@ -1603,7 +2003,6 @@ class _FieldDialog extends StatefulWidget {
 const _kDataSources = [
   ('static', 'Opciones estáticas'),
   ('system:operators', 'Operadores del tenant'),
-  ('system:operators_with_flow', 'Operadores con flow asignado'),
 ];
 
 class _FieldDialogState extends State<_FieldDialog> {
@@ -1613,10 +2012,6 @@ class _FieldDialogState extends State<_FieldDialog> {
 
   // select type state
   String _dataSourceBase = 'system:operators';
-  String? _dataSourceFlowSlug;
-  String _fillStrategy = 'conversational_list';
-  List<Map<String, dynamic>> _availableFlows = [];
-  bool _loadingFlows = false;
 
   // static options state
   List<String> _staticOptions = [];
@@ -1633,7 +2028,9 @@ class _FieldDialogState extends State<_FieldDialog> {
   // show_if condition state
   String? _showIfField;
   String? _showIfOp;
+  String? _showIfRefType;
   final _showIfValueCtrl = TextEditingController();
+  List<String> _showIfValues = []; // for op in/not_in
 
   bool get _isEdit => widget.field != null;
   bool get _assetRefValid => _type != 'asset_ref' || _catalogSlug != null;
@@ -1641,22 +2038,11 @@ class _FieldDialogState extends State<_FieldDialog> {
   String get _fieldKey => _fieldKeyify(_labelCtrl.text.trim());
   bool get _fieldKeyValid => _fieldKey.length >= 2;
 
-  String get _resolvedDataSource {
-    if (_dataSourceBase == 'static') return 'static';
-    if (_dataSourceBase == 'system:operators_with_flow') {
-      if (_dataSourceFlowSlug == null) return _dataSourceBase;
-      return 'system:operators_with_flow:$_dataSourceFlowSlug';
-    }
-    return _dataSourceBase;
-  }
-
   bool get _selectValid =>
       _type != 'select' ||
       (_dataSourceBase == 'static'
           ? _staticOptions.isNotEmpty
-          : (_dataSourceBase == 'system:operators' ||
-              (_dataSourceBase == 'system:operators_with_flow' &&
-                  _dataSourceFlowSlug != null)));
+          : _dataSourceBase == 'system:operators');
 
   @override
   void initState() {
@@ -1668,15 +2054,13 @@ class _FieldDialogState extends State<_FieldDialog> {
       _descCtrl.text = widget.field!['description'] as String? ?? '';
       final ds = widget.field!['data_source'] as String?;
       if (ds != null) {
-        if (ds.startsWith('system:operators_with_flow:')) {
-          _dataSourceBase = 'system:operators_with_flow';
-          _dataSourceFlowSlug = ds.substring('system:operators_with_flow:'.length);
+        // Migrate legacy operators_with_flow to system:operators
+        if (ds.startsWith('system:operators_with_flow')) {
+          _dataSourceBase = 'system:operators';
         } else {
           _dataSourceBase = ds;
         }
       }
-      _fillStrategy = widget.field!['fill_strategy'] as String? ??
-          'conversational_list';
       final rawOpts = widget.field!['options'];
       if (rawOpts is List) {
         _staticOptions = List<String>.from(rawOpts.map((e) => e.toString()));
@@ -1690,36 +2074,26 @@ class _FieldDialogState extends State<_FieldDialog> {
     if (showIf != null) {
       _showIfField = showIf['field'] as String?;
       _showIfOp = showIf['op'] as String?;
-      _showIfValueCtrl.text = showIf['value'] as String? ?? '';
+      final rawValue = showIf['value'];
+      if (_showIfOp == 'in' || _showIfOp == 'not_in') {
+        if (rawValue is List) {
+          _showIfValues = List<String>.from(rawValue.map((e) => e.toString()));
+        } else if (rawValue is String && rawValue.isNotEmpty) {
+          _showIfValues = rawValue.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        }
+      } else {
+        _showIfValueCtrl.text = rawValue as String? ?? '';
+      }
+      if (_showIfField != null) {
+        final ref = widget.flowFields.where((f) => f['key'] == _showIfField).firstOrNull;
+        _showIfRefType = ref?['type'] as String?;
+      }
     }
     _labelCtrl.addListener(_onLabelChanged);
-    if (_type == 'select') _loadFlows();
     if (_type == 'asset_ref') _loadCatalogs();
   }
 
   void _onLabelChanged() => setState(() {});
-
-  Future<void> _loadFlows() async {
-    if (widget.tenantWorkerId.isEmpty) return;
-    setState(() => _loadingFlows = true);
-    try {
-      final flows = await FlowsApi.getFlowsByWorker(
-        tenantWorkerId: widget.tenantWorkerId,
-      );
-      if (!mounted) return;
-      setState(() {
-        _availableFlows = flows;
-        if (_dataSourceFlowSlug != null &&
-            !flows.any((f) => f['slug'] == _dataSourceFlowSlug)) {
-          _dataSourceFlowSlug = null;
-        }
-        _loadingFlows = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loadingFlows = false);
-    }
-  }
 
   Future<void> _loadCatalogs() async {
     if (_loadingCatalogs) return;
@@ -1774,17 +2148,15 @@ class _FieldDialogState extends State<_FieldDialog> {
       if (_dataSourceBase == 'static') {
         updated['options'] = List<String>.from(_staticOptions);
         updated.remove('data_source');
-        updated.remove('fill_strategy');
       } else {
-        updated['data_source'] = _resolvedDataSource;
-        updated['fill_strategy'] = _fillStrategy;
+        updated['data_source'] = _dataSourceBase;
         updated.remove('options');
       }
     } else {
       updated.remove('data_source');
-      updated.remove('fill_strategy');
       updated.remove('options');
     }
+    updated.remove('fill_strategy');
     if (_type == 'asset_ref') {
       updated['catalog_slug'] = _catalogSlug;
       if (_selectedItemId != null) {
@@ -1800,10 +2172,11 @@ class _FieldDialogState extends State<_FieldDialog> {
       updated.remove('item_display');
     }
     if (_showIfField != null && _showIfOp != null) {
+      final isMultiOp = _showIfOp == 'in' || _showIfOp == 'not_in';
       updated['show_if'] = {
         'field': _showIfField,
         'op': _showIfOp,
-        'value': _showIfValueCtrl.text.trim(),
+        'value': isMultiOp ? _showIfValues : _showIfValueCtrl.text.trim(),
       };
     } else {
       updated.remove('show_if');
@@ -1840,8 +2213,16 @@ class _FieldDialogState extends State<_FieldDialog> {
               const SizedBox(height: 20),
 
               // Label
+              Row(
+                children: [
+                  Text('Etiqueta', style: AppTextStyles.formLabel),
+                  const SizedBox(width: 4),
+                  Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
+                ],
+              ),
+              const SizedBox(height: 6),
               _FormField(
-                label: 'Etiqueta',
+                label: '',
                 controller: _labelCtrl,
                 placeholder: 'Ej: Número de guía',
               ),
@@ -1855,201 +2236,87 @@ class _FieldDialogState extends State<_FieldDialog> {
               const SizedBox(height: 14),
 
               // Description
-              const Text(
-                'Descripción / alias de detección',
-                style: AppTextStyles.btnSecondary,
+              Text(
+                'Contexto para el asistente',
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Describe cómo el operador se refiere a este dato. '
+                'Tu Worker lo usa para identificar y capturar el campo correctamente.',
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
               ),
               const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.ctSurface2,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.ctBorder2),
-                ),
-                child: TextField(
-                  controller: _descCtrl,
-                  maxLines: 3,
-                  style: AppTextStyles.body,
-                  decoration: InputDecoration(
-                    hintText: 'Opcional',
-                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
+              AppTextField(
+                controller: _descCtrl,
+                hint: 'Opcional — ej: "número de seguimiento", "guía del paquete"',
+                maxLines: 3,
               ),
               const SizedBox(height: 14),
 
               // Type
-              const Text(
-                'Tipo',
-                style: AppTextStyles.btnSecondary,
+              Row(
+                children: [
+                  Text('Tipo', style: AppTextStyles.formLabel),
+                  const SizedBox(width: 4),
+                  Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
+                ],
               ),
               const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.ctSurface2,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.ctBorder2),
-                ),
-                child: DropdownButton<String>(
-                  value: _type,
-                  isExpanded: true,
-                  underline: const SizedBox.shrink(),
-                  dropdownColor: AppColors.ctSurface,
-                  items: kFieldTypes.map((entry) {
-                    final (value, label) = entry;
-                    return DropdownMenuItem(
-                      value: value,
-                      child: Row(
-                        children: [
-                          Icon(_fieldIcon(value),
-                              size: 16, color: AppColors.ctText2),
-                          const SizedBox(width: 8),
-                          Text(
-                            label,
-                            style: AppTextStyles.body,
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (v) {
-                    if (v != null) {
-                      setState(() {
-                        _type = v;
-                        if (v != 'asset_ref') {
-                          _catalogSlug = null;
-                          _selectedItemId = null;
-                          _selectedItemDisplay = null;
-                        }
-                      });
-                      if (v == 'select' && _availableFlows.isEmpty) {
-                        _loadFlows();
+              AppDropdown<String>(
+                value: _type,
+                hint: 'Selecciona un tipo',
+                items: kFieldTypes.map((entry) {
+                  final (value, label) = entry;
+                  return AppDropdownItem<String>(
+                    value: value,
+                    label: label,
+                    icon: _fieldIcon(value),
+                  );
+                }).toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() {
+                      _type = v;
+                      if (v != 'asset_ref') {
+                        _catalogSlug = null;
+                        _selectedItemId = null;
+                        _selectedItemDisplay = null;
                       }
-                      if (v == 'asset_ref' && _availableCatalogs.isEmpty) {
-                        _loadCatalogs();
-                      }
+                    });
+                    if (v == 'asset_ref' && _availableCatalogs.isEmpty) {
+                      _loadCatalogs();
                     }
-                  },
-                ),
+                  }
+                },
               ),
 
               // Data source (select type only)
               if (_type == 'select') ...[
                 const SizedBox(height: 14),
-                const Text(
-                  'Fuente de datos',
-                  style: AppTextStyles.btnSecondary,
+                AppDropdown<String>(
+                  label: 'Fuente de datos',
+                  value: _dataSourceBase,
+                  hint: 'Selecciona fuente',
+                  items: _kDataSources.map((entry) {
+                    final (value, label) = entry;
+                    return AppDropdownItem<String>(value: value, label: label);
+                  }).toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _dataSourceBase = v);
+                  },
                 ),
-                const SizedBox(height: 6),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.ctSurface2,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.ctBorder2),
-                  ),
-                  child: DropdownButton<String>(
-                    value: _dataSourceBase,
-                    isExpanded: true,
-                    underline: const SizedBox.shrink(),
-                    dropdownColor: AppColors.ctSurface,
-                    items: _kDataSources.map((entry) {
-                      final (value, label) = entry;
-                      return DropdownMenuItem(
-                        value: value,
-                        child: Text(label, style: AppTextStyles.body),
-                      );
-                    }).toList(),
-                    onChanged: (v) {
-                      if (v != null) {
-                        setState(() {
-                          _dataSourceBase = v;
-                          _dataSourceFlowSlug = null;
-                        });
-                        if (v == 'system:operators_with_flow' &&
-                            _availableFlows.isEmpty) {
-                          _loadFlows();
-                        }
-                      }
-                    },
-                  ),
-                ),
-                if (_dataSourceBase == 'system:operators_with_flow') ...[
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Flow asignado',
-                    style: AppTextStyles.btnSecondary,
-                  ),
-                  const SizedBox(height: 6),
-                  if (_loadingFlows)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: CircularProgressIndicator(
-                            color: AppColors.ctTeal, strokeWidth: 2),
-                      ),
-                    )
-                  else if (_availableFlows.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.ctBorder),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'No hay flujos disponibles para este worker',
-                        style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                      ),
-                    )
-                  else
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.ctSurface2,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.ctBorder2),
-                      ),
-                      child: DropdownButton<String>(
-                        value: _dataSourceFlowSlug,
-                        isExpanded: true,
-                        underline: const SizedBox.shrink(),
-                        dropdownColor: AppColors.ctSurface,
-                        hint: Text('Selecciona un flow',
-                            style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
-                        items: _availableFlows.map((f) {
-                          final slug = f['slug'] as String? ?? '';
-                          final name = f['name'] as String? ?? slug;
-                          return DropdownMenuItem<String>(
-                            value: slug,
-                            child: Text(name,
-                                style: AppTextStyles.body),
-                          );
-                        }).toList(),
-                        onChanged: (v) =>
-                            setState(() => _dataSourceFlowSlug = v),
-                      ),
-                    ),
-                ],
               ],
 
               // Static options (select + static source only)
               if (_type == 'select' && _dataSourceBase == 'static') ...[
                 const SizedBox(height: 14),
-                const Text(
-                  'Opciones',
-                  style: AppTextStyles.btnSecondary,
+                Row(
+                  children: [
+                    Text('Opciones', style: AppTextStyles.formLabel),
+                    const SizedBox(width: 4),
+                    Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 if (_staticOptions.isNotEmpty) ...[
@@ -2116,57 +2383,15 @@ class _FieldDialogState extends State<_FieldDialog> {
                 ),
               ],
 
-              // Fill strategy (select type only, not for static)
-              if (_type == 'select' && _dataSourceBase != 'static') ...[
-                const SizedBox(height: 14),
-                const Text(
-                  'Cuando se ejecuta conversacionalmente',
-                  style: AppTextStyles.btnSecondary,
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.ctSurface2,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.ctBorder2),
-                  ),
-                  child: DropdownButton<String>(
-                    value: _fillStrategy,
-                    isExpanded: true,
-                    underline: const SizedBox.shrink(),
-                    dropdownColor: AppColors.ctSurface,
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'conversational_list',
-                        child: Text('Mostrar lista de opciones al operador',
-                            style: AppTextStyles.body),
-                      ),
-                      DropdownMenuItem(
-                        value: 'inherit_actor',
-                        child: Text('Usar el operador actual',
-                            style: AppTextStyles.body),
-                      ),
-                      DropdownMenuItem(
-                        value: 'defer_dashboard',
-                        child: Text('Pedir al supervisor en Tareas',
-                            style: AppTextStyles.body),
-                      ),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setState(() => _fillStrategy = v);
-                    },
-                  ),
-                ),
-              ],
               // Catalog selector (asset_ref type only)
               if (_type == 'asset_ref') ...[
                 const SizedBox(height: 14),
-                const Text(
-                  'Catálogo',
-                  style: AppTextStyles.btnSecondary,
+                Row(
+                  children: [
+                    Text('Catálogo', style: AppTextStyles.formLabel),
+                    const SizedBox(width: 4),
+                    Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 if (_loadingCatalogs)
@@ -2191,47 +2416,24 @@ class _FieldDialogState extends State<_FieldDialog> {
                     ),
                   )
                 else
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.ctSurface2,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: _catalogSlug == null && !_assetRefValid
-                            ? AppColors.ctDanger
-                            : AppColors.ctBorder2,
-                      ),
-                    ),
-                    child: DropdownButton<String>(
-                      value: _catalogSlug,
-                      isExpanded: true,
-                      underline: const SizedBox.shrink(),
-                      dropdownColor: AppColors.ctSurface,
-                      hint: Text(
-                        'Selecciona un catálogo',
-                        style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                      ),
-                      items: _availableCatalogs.map((cat) {
-                        final slug = cat['slug'] as String? ?? '';
-                        final name = cat['name'] as String? ?? slug;
-                        return DropdownMenuItem<String>(
-                          value: slug,
-                          child: Text(
-                            name,
-                            style: AppTextStyles.body,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (v) {
-                        setState(() {
-                          _catalogSlug = v;
-                          _selectedItemId = null;
-                          _selectedItemDisplay = null;
-                        });
-                      },
-                    ),
+                  AppDropdown<String>(
+                    value: _catalogSlug,
+                    hint: 'Selecciona un catálogo',
+                    errorText: _catalogSlug == null && !_assetRefValid
+                        ? 'Selecciona un catálogo'
+                        : null,
+                    items: _availableCatalogs.map((cat) {
+                      final slug = cat['slug'] as String? ?? '';
+                      final name = cat['name'] as String? ?? slug;
+                      return AppDropdownItem<String>(value: slug, label: name);
+                    }).toList(),
+                    onChanged: (v) {
+                      setState(() {
+                        _catalogSlug = v;
+                        _selectedItemId = null;
+                        _selectedItemDisplay = null;
+                      });
+                    },
                   ),
               if (_catalogSlug != null) ...[
                 const SizedBox(height: 10),
@@ -2324,121 +2526,139 @@ class _FieldDialogState extends State<_FieldDialog> {
                         style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                       ),
                       const SizedBox(height: 6),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.ctSurface2,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.ctBorder2),
-                        ),
-                        child: DropdownButton<String>(
-                          value: _showIfField,
-                          isExpanded: true,
-                          underline: const SizedBox.shrink(),
-                          dropdownColor: AppColors.ctSurface,
-                          hint: Text(
-                            'Selecciona un campo',
-                            style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+                      AppDropdown<String?>(
+                        value: _showIfField,
+                        hint: 'Selecciona un campo',
+                        items: [
+                          const AppDropdownItem<String?>(
+                            value: null,
+                            label: '— Sin condición —',
                           ),
-                          items: [
-                            DropdownMenuItem<String>(
-                              value: null,
-                              child: Text(
-                                '— Sin condición —',
-                                style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                              ),
-                            ),
-                            ...widget.flowFields.map((f) {
-                              final key = f['key'] as String? ?? '';
-                              final label = f['label'] as String? ?? key;
-                              return DropdownMenuItem<String>(
-                                value: key,
-                                child: Text(
-                                  label,
-                                  style: AppTextStyles.body,
-                                ),
-                              );
-                            }),
-                          ],
-                          onChanged: (v) => setState(() {
-                            _showIfField = v;
-                            if (v == null) _showIfOp = null;
+                          ...widget.flowFields
+                              .where((f) => !const ['photo', 'location']
+                                  .contains(f['type'] as String? ?? ''))
+                              .map((f) {
+                            final key = f['key'] as String? ?? '';
+                            final label = f['label'] as String? ?? key;
+                            return AppDropdownItem<String?>(value: key, label: label);
                           }),
-                        ),
+                        ],
+                        onChanged: (v) {
+                          final ref = v != null
+                              ? widget.flowFields.where((f) => f['key'] == v).firstOrNull
+                              : null;
+                          setState(() {
+                            _showIfField = v;
+                            _showIfRefType = ref?['type'] as String?;
+                            _showIfValueCtrl.text = '';
+                            _showIfValues = [];
+                            if (v == null) _showIfOp = null;
+                          });
+                        },
                       ),
                       if (_showIfField != null) ...[
                         const SizedBox(height: 8),
                         // Operator selector
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.ctSurface2,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.ctBorder2),
-                          ),
-                          child: DropdownButton<String>(
-                            value: _showIfOp,
-                            isExpanded: true,
-                            underline: const SizedBox.shrink(),
-                            dropdownColor: AppColors.ctSurface,
-                            hint: Text(
-                              'Operador',
-                              style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: 'eq',
-                                child: Text('es igual a',
-                                    style: AppTextStyles.body),
-                              ),
-                              DropdownMenuItem(
-                                value: 'neq',
-                                child: Text('es distinto de',
-                                    style: AppTextStyles.body),
-                              ),
-                              DropdownMenuItem(
-                                value: 'in',
-                                child: Text('está entre (separado por comas)',
-                                    style: AppTextStyles.body),
-                              ),
-                              DropdownMenuItem(
-                                value: 'not_in',
-                                child: Text('no está entre (separado por comas)',
-                                    style: AppTextStyles.body),
-                              ),
-                            ],
-                            onChanged: (v) =>
-                                setState(() => _showIfOp = v),
-                          ),
+                        AppDropdown<String>(
+                          value: _showIfOp,
+                          hint: 'Operador',
+                          items: const [
+                            AppDropdownItem(value: 'eq', label: 'es igual a'),
+                            AppDropdownItem(value: 'neq', label: 'es distinto de'),
+                            AppDropdownItem(value: 'in', label: 'está entre'),
+                            AppDropdownItem(value: 'not_in', label: 'no está entre'),
+                          ],
+                          onChanged: (v) => setState(() {
+                            _showIfOp = v;
+                            _showIfValueCtrl.text = '';
+                            _showIfValues = [];
+                          }),
                         ),
                         const SizedBox(height: 8),
-                        // Value input
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.ctSurface2,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.ctBorder2),
-                          ),
-                          child: TextField(
+                        // Value input — type-aware + multi-select for in/not_in
+                        if (_showIfOp == 'in' || _showIfOp == 'not_in')
+                          Builder(builder: (_) {
+                            final ref = widget.flowFields
+                                .where((f) => f['key'] == _showIfField)
+                                .firstOrNull;
+                            final opts = (ref?['options'] as List? ?? [])
+                                .map((e) => e.toString())
+                                .toList();
+                            if (opts.isEmpty) {
+                              return AppTextField(
+                                controller: _showIfValueCtrl,
+                                hint: 'Valores separados por coma…',
+                                helperText: 'Sin opciones definidas — escribe valores separados por coma',
+                              );
+                            }
+                            return AppMultiSelect<String>(
+                              items: opts
+                                  .map((o) => AppMultiSelectItem(value: o, label: o))
+                                  .toList(),
+                              selectedValues: _showIfValues,
+                              placeholder: 'Selecciona valores…',
+                              onChanged: (vals) => setState(() => _showIfValues = vals),
+                            );
+                          })
+                        else if (_showIfRefType == 'bool' || _showIfRefType == 'boolean')
+                          AppDropdown<String>(
+                            value: _showIfValueCtrl.text.isEmpty
+                                ? null
+                                : _showIfValueCtrl.text,
+                            hint: 'Valor',
+                            items: const [
+                              AppDropdownItem(value: 'true', label: 'Sí / Verdadero'),
+                              AppDropdownItem(value: 'false', label: 'No / Falso'),
+                            ],
+                            onChanged: (v) => setState(() {
+                              _showIfValueCtrl.text = v ?? '';
+                            }),
+                          )
+                        else if (_showIfRefType == 'select')
+                          Builder(builder: (_) {
+                            final ref = widget.flowFields
+                                .where((f) => f['key'] == _showIfField)
+                                .firstOrNull;
+                            final opts = (ref?['options'] as List? ?? [])
+                                .map((e) => e.toString())
+                                .toList();
+                            if (opts.isEmpty) {
+                              return AppTextField(
+                                controller: _showIfValueCtrl,
+                                hint: 'Valor…',
+                              );
+                            }
+                            return AppDropdown<String>(
+                              value: _showIfValueCtrl.text.isEmpty
+                                  ? null
+                                  : _showIfValueCtrl.text,
+                              hint: 'Selecciona un valor',
+                              items: opts
+                                  .map((o) => AppDropdownItem(value: o, label: o))
+                                  .toList(),
+                              onChanged: (v) => setState(() {
+                                _showIfValueCtrl.text = v ?? '';
+                              }),
+                            );
+                          })
+                        else if (_showIfRefType == 'photo')
+                          AppTextField(
                             controller: _showIfValueCtrl,
-                            style: AppTextStyles.body,
-                            decoration: InputDecoration(
-                              hintText: 'Valor…',
-                              hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                              border: InputBorder.none,
-                              isDense: true,
-                              contentPadding:
-                                  EdgeInsets.symmetric(vertical: 8),
-                            ),
+                            hint: 'No disponible',
+                            enabled: false,
+                            helperText: 'No es posible condicionar visibilidad por foto',
+                          )
+                        else if (_showIfRefType == 'number')
+                          AppTextField(
+                            controller: _showIfValueCtrl,
+                            hint: 'Valor numérico…',
+                            keyboardType: TextInputType.number,
+                          )
+                        else
+                          AppTextField(
+                            controller: _showIfValueCtrl,
+                            hint: 'Valor…',
                           ),
-                        ),
                       ],
                       const SizedBox(height: 8),
                     ],
@@ -3047,31 +3267,27 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: TextFormField(
-                                  controller: row.$2,
-                                  style: AppTextStyles.body,
-                                  decoration: InputDecoration(
-                                    labelText: 'Fuente',
-                                    labelStyle: AppTextStyles.bodySmall,
-                                    hintText: 'fields.nombre',
-                                    isDense: true,
-                                    contentPadding:
-                                        const EdgeInsets.symmetric(
-                                            horizontal: 10, vertical: 8),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                      borderSide: const BorderSide(
-                                          color: AppColors.ctBorder),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                      borderSide: const BorderSide(
-                                          color: AppColors.ctBorder),
-                                    ),
-                                  ),
+                                child: AppDropdown<String>(
+                                  value: row.$2.text.isEmpty ? null : row.$2.text,
+                                  hint: 'Campo fuente',
                                   enabled: widget.canManage,
-                                  onChanged: (_) =>
-                                      _updateProactiveTrigger(),
+                                  items: [
+                                    const AppDropdownItem(value: '', label: '— Sin campo —'),
+                                    ...widget.flowFields.map((f) {
+                                      final key = f['key'] as String? ?? '';
+                                      final label = f['label'] as String? ?? key;
+                                      return AppDropdownItem(
+                                        value: 'fields.$key',
+                                        label: label,
+                                      );
+                                    }),
+                                  ],
+                                  onChanged: (v) {
+                                    setState(() {
+                                      row.$2.text = v ?? '';
+                                    });
+                                    _updateProactiveTrigger();
+                                  },
                                 ),
                               ),
                               if (widget.canManage)
