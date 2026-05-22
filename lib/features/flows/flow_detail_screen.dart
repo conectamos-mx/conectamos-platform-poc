@@ -1487,20 +1487,77 @@ class _CamposTab extends StatelessWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Campos del flujo (${fields.length})',
-                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+                Row(
+                  children: [
+                    Text(
+                      'Campos del flujo (${fields.length})',
+                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const Spacer(),
+                    if (canManage)
+                      AppButton(
+                        label: '+ Agregar campo',
+                        variant: AppButtonVariant.ghost,
+                        size: AppButtonSize.sm,
+                        onPressed: onAddField,
+                      ),
+                  ],
                 ),
-                const Spacer(),
-                if (canManage)
-                  AppButton(
-                    label: '+ Agregar campo',
-                    variant: AppButtonVariant.ghost,
-                    size: AppButtonSize.sm,
-                    onPressed: onAddField,
+                if (fields.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Builder(builder: (_) {
+                    final requiredCount = fields.where((f) => f['required'] == true).length;
+                    final optionalCount = fields.where((f) => f['required'] != true && f['show_if'] == null).length;
+                    final conditionalCount = fields.where((f) => f['show_if'] != null).length;
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        if (requiredCount > 0)
+                          _CountBadge(
+                            icon: '⭐',
+                            count: requiredCount,
+                            label: requiredCount == 1 ? 'requerido' : 'requeridos',
+                            bgColor: AppColors.ctTealLight,
+                            textColor: AppColors.ctNavy,
+                          ),
+                        if (optionalCount > 0)
+                          _CountBadge(
+                            icon: '○',
+                            count: optionalCount,
+                            label: optionalCount == 1 ? 'opcional' : 'opcionales',
+                            bgColor: AppColors.ctSurface,
+                            textColor: AppColors.ctText2,
+                            borderColor: AppColors.ctBorder,
+                          ),
+                        if (conditionalCount > 0)
+                          _CountBadge(
+                            icon: '↳',
+                            count: conditionalCount,
+                            label: conditionalCount == 1 ? 'condicional' : 'condicionales',
+                            bgColor: AppColors.ctTealLight,
+                            textColor: AppColors.ctTeal,
+                          ),
+                      ],
+                    );
+                  }),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 4,
+                    children: [
+                      Text('⭐ Requerido · Debe completarse siempre',
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)),
+                      Text('○ Opcional · Puede dejarse vacío',
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)),
+                      Text('↳ Condicional · Aparece solo si se cumple la condición',
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)),
+                    ],
                   ),
+                ],
               ],
             ),
           ),
@@ -1590,11 +1647,24 @@ class _CamposTab extends StatelessWidget {
                         color: AppColors.ctTealLight,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        '↳ Si $fieldLabel = $valueStr',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.ctNavy,
-                          fontWeight: FontWeight.w600,
+                      child: RichText(
+                        text: TextSpan(
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctNavy),
+                          children: [
+                            const TextSpan(text: '↳ Si '),
+                            TextSpan(
+                              text: fieldLabel,
+                              style: const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            const TextSpan(text: ' = '),
+                            TextSpan(
+                              text: valueStr,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.ctTeal,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -1751,6 +1821,44 @@ class _FieldRow extends StatelessWidget {
             if (!isLast)
               const Divider(height: 1, color: AppColors.ctBorder),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── _CountBadge ──────────────────────────────────────────────────────────────
+
+class _CountBadge extends StatelessWidget {
+  const _CountBadge({
+    required this.icon,
+    required this.count,
+    required this.label,
+    required this.bgColor,
+    required this.textColor,
+    this.borderColor,
+  });
+  final String icon;
+  final int count;
+  final String label;
+  final Color bgColor;
+  final Color textColor;
+  final Color? borderColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+        border: borderColor != null ? Border.all(color: borderColor!) : null,
+      ),
+      child: Text(
+        '$icon $count $label',
+        style: AppTextStyles.bodySmall.copyWith(
+          color: textColor,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );
