@@ -583,8 +583,8 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
                           _ImpactRow(
                             icon: Icons.check_circle_outline,
                             color: AppColors.ctOk,
-                            text: 'Las ejecuciones existentes no se ven afectadas '
-                                '(tienen snapshot del flujo).',
+                            text: 'Las ejecuciones existentes no se verán afectadas '
+                                '(mantienen la estructura del flujo guardada).',
                           ),
                           const SizedBox(height: 8),
                           _ImpactRow(
