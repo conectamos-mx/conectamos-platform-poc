@@ -3267,31 +3267,27 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: TextFormField(
-                                  controller: row.$2,
-                                  style: AppTextStyles.body,
-                                  decoration: InputDecoration(
-                                    labelText: 'Fuente',
-                                    labelStyle: AppTextStyles.bodySmall,
-                                    hintText: 'fields.nombre',
-                                    isDense: true,
-                                    contentPadding:
-                                        const EdgeInsets.symmetric(
-                                            horizontal: 10, vertical: 8),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                      borderSide: const BorderSide(
-                                          color: AppColors.ctBorder),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                      borderSide: const BorderSide(
-                                          color: AppColors.ctBorder),
-                                    ),
-                                  ),
+                                child: AppDropdown<String>(
+                                  value: row.$2.text.isEmpty ? null : row.$2.text,
+                                  hint: 'Campo fuente',
                                   enabled: widget.canManage,
-                                  onChanged: (_) =>
-                                      _updateProactiveTrigger(),
+                                  items: [
+                                    const AppDropdownItem(value: '', label: '— Sin campo —'),
+                                    ...widget.flowFields.map((f) {
+                                      final key = f['key'] as String? ?? '';
+                                      final label = f['label'] as String? ?? key;
+                                      return AppDropdownItem(
+                                        value: 'fields.$key',
+                                        label: label,
+                                      );
+                                    }),
+                                  ],
+                                  onChanged: (v) {
+                                    setState(() {
+                                      row.$2.text = v ?? '';
+                                    });
+                                    _updateProactiveTrigger();
+                                  },
                                 ),
                               ),
                               if (widget.canManage)
