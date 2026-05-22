@@ -393,6 +393,7 @@ class _ConfigTabState extends ConsumerState<_ConfigTab> {
   late TextEditingController _descriptionCtrl;
   late TextEditingController _displayLabelCtrl;
   late TextEditingController _embedThresholdCtrl;
+  String? _displayField;
   List<Map<String, dynamic>> _fields = [];
 
   bool get _isAutoSource {
@@ -416,6 +417,8 @@ class _ConfigTabState extends ConsumerState<_ConfigTab> {
     final thresh = catalog['embed_threshold'];
     _embedThresholdCtrl = TextEditingController(
         text: thresh != null ? thresh.toString() : '');
+
+    _displayField = catalog['display_field'] as String?;
 
     final raw = catalog['fields_schema'];
     _fields = raw is List
@@ -445,6 +448,7 @@ class _ConfigTabState extends ConsumerState<_ConfigTab> {
     }
     final thresh = double.tryParse(_embedThresholdCtrl.text.trim());
     if (thresh != null) patch['embed_threshold'] = thresh;
+    if (_displayField != null) patch['display_field'] = _displayField;
     widget.onChanged(patch);
   }
 
@@ -503,6 +507,26 @@ class _ConfigTabState extends ConsumerState<_ConfigTab> {
                         decimal: true),
                     onChanged: (_) => _onIdentificationChanged(),
                   ),
+                  if (_fields.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Tooltip(
+                      message: 'Este campo se muestra como nombre del item '
+                          'al seleccionarlo en un flow',
+                      child: _KeyDropdown(
+                        label: 'Campo de display',
+                        value: _displayField,
+                        keys: _fields
+                            .map((f) => f['key'] as String? ?? '')
+                            .where((k) => k.isNotEmpty)
+                            .toList(),
+                        enabled: widget.canManage,
+                        onChanged: (v) {
+                          setState(() => _displayField = v);
+                          _onIdentificationChanged();
+                        },
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -2373,6 +2397,63 @@ class _SectionCard extends StatelessWidget {
           child,
         ],
       ),
+    );
+  }
+}
+
+class _KeyDropdown extends StatelessWidget {
+  const _KeyDropdown({
+    required this.label,
+    required this.value,
+    required this.keys,
+    required this.onChanged,
+    this.enabled = true,
+  });
+  final String label;
+  final String? value;
+  final List<String> keys;
+  final ValueChanged<String?> onChanged;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label,
+            style: AppFonts.geist(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.ctText2)),
+        const SizedBox(height: 4),
+        Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: AppColors.ctSurface,
+            border: Border.all(color: AppColors.ctBorder),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: (value != null && keys.contains(value)) ? value : null,
+              hint: Text('Seleccionar',
+                  style: AppFonts.geist(
+                      fontSize: 12, color: AppColors.ctText2)),
+              isDense: true,
+              isExpanded: true,
+              style: AppFonts.geist(fontSize: 12, color: AppColors.ctText),
+              icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                  size: 15, color: AppColors.ctText2),
+              items: keys
+                  .map((k) => DropdownMenuItem(value: k, child: Text(k)))
+                  .toList(),
+              onChanged: enabled ? onChanged : null,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

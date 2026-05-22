@@ -389,12 +389,13 @@ class _FieldsBlockState extends State<_FieldsBlock> {
   final Set<String> _hiddenTypes = {};
 
   static const List<(String, IconData, String)> _typeOrder = [
-    ('text',     Icons.notes_rounded,          'Texto'),
-    ('number',   Icons.tag_rounded,            'Número'),
-    ('date',     Icons.calendar_month_rounded, 'Fecha'),
-    ('yesno',    Icons.toggle_on_rounded,      'Sí/No'),
-    ('select',   Icons.checklist_rounded,      'Selección'),
-    ('location', Icons.location_on_rounded,    'Ubicación'),
+    ('text',      Icons.notes_rounded,          'Texto'),
+    ('number',    Icons.tag_rounded,             'Número'),
+    ('date',      Icons.calendar_month_rounded,  'Fecha'),
+    ('yesno',     Icons.toggle_on_rounded,       'Sí/No'),
+    ('select',    Icons.checklist_rounded,       'Selección'),
+    ('asset_ref', Icons.inventory_2_rounded,     'Catálogo'),
+    ('location',  Icons.location_on_rounded,     'Ubicación'),
   ];
 
   static String _normalizeType(String t) => t == 'photo' ? 'media' : t;
