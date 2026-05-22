@@ -1899,8 +1899,16 @@ class _FieldDialogState extends State<_FieldDialog> {
               const SizedBox(height: 20),
 
               // Label
+              Row(
+                children: [
+                  Text('Etiqueta', style: AppTextStyles.formLabel),
+                  const SizedBox(width: 4),
+                  Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
+                ],
+              ),
+              const SizedBox(height: 6),
               _FormField(
-                label: 'Etiqueta',
+                label: '',
                 controller: _labelCtrl,
                 placeholder: 'Ej: Número de guía',
               ),
@@ -1933,8 +1941,15 @@ class _FieldDialogState extends State<_FieldDialog> {
               const SizedBox(height: 14),
 
               // Type
+              Row(
+                children: [
+                  Text('Tipo', style: AppTextStyles.formLabel),
+                  const SizedBox(width: 4),
+                  Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
+                ],
+              ),
+              const SizedBox(height: 6),
               AppDropdown<String>(
-                label: 'Tipo',
                 value: _type,
                 hint: 'Selecciona un tipo',
                 items: kFieldTypes.map((entry) {
@@ -2012,9 +2027,16 @@ class _FieldDialogState extends State<_FieldDialog> {
                         style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                       ),
                     )
-                  else
+                  else ...[
+                    Row(
+                      children: [
+                        Text('Flow asignado', style: AppTextStyles.formLabel),
+                        const SizedBox(width: 4),
+                        Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
                     AppDropdown<String>(
-                      label: 'Flow asignado',
                       value: _dataSourceFlowSlug,
                       hint: 'Selecciona un flow',
                       items: _availableFlows.map((f) {
@@ -2025,15 +2047,19 @@ class _FieldDialogState extends State<_FieldDialog> {
                       onChanged: (v) =>
                           setState(() => _dataSourceFlowSlug = v),
                     ),
+                  ],
                 ],
               ],
 
               // Static options (select + static source only)
               if (_type == 'select' && _dataSourceBase == 'static') ...[
                 const SizedBox(height: 14),
-                const Text(
-                  'Opciones',
-                  style: AppTextStyles.btnSecondary,
+                Row(
+                  children: [
+                    Text('Opciones', style: AppTextStyles.formLabel),
+                    const SizedBox(width: 4),
+                    Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 if (_staticOptions.isNotEmpty) ...[
@@ -2120,9 +2146,12 @@ class _FieldDialogState extends State<_FieldDialog> {
               // Catalog selector (asset_ref type only)
               if (_type == 'asset_ref') ...[
                 const SizedBox(height: 14),
-                const Text(
-                  'Catálogo',
-                  style: AppTextStyles.btnSecondary,
+                Row(
+                  children: [
+                    Text('Catálogo', style: AppTextStyles.formLabel),
+                    const SizedBox(width: 4),
+                    Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 if (_loadingCatalogs)
