@@ -16,6 +16,7 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../shared/widgets/app_dropdown.dart';
 import '../../shared/widgets/app_multi_select.dart';
 import '../../shared/widgets/app_text_field.dart';
@@ -3925,6 +3926,14 @@ class _ActionDialogState extends State<_ActionDialog> {
   String _conditionOp = '==';
   final _conditionValueCtrl = TextEditingController();
 
+  // proactive message (open_flow)
+  bool _sendProactive = false;
+  String? _waChannelId;
+  List<Map<String, dynamic>> _approvedTemplates = [];
+  bool _loadingTemplates = false;
+  String? _selectedTemplateId;
+  List<Map<String, dynamic>> _proactiveMappingRows = [];
+
   // dynamic action types
   List<Map<String, dynamic>> _availableActionTypes = [];
   final Map<String, TextEditingController> _dynTextCtrls = {};
@@ -4093,7 +4102,9 @@ class _ActionDialogState extends State<_ActionDialog> {
       _columnMappingRows.add((TextEditingController(text: 'A'), TextEditingController()));
       _columnMappingKeys.add(null);
     }
+    _initProactiveMappingRows();
     _loadFlows();
+    _loadWaChannel();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadActionTypes());
     _loadCatalogSchemas();
   }
@@ -4164,6 +4175,52 @@ class _ActionDialogState extends State<_ActionDialog> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _loadingFlows = false);
+    }
+  }
+
+  Future<void> _loadWaChannel() async {
+    if (widget.tenantWorkerId.isEmpty) return;
+    try {
+      final channels = await ChannelsApi.listChannelsByWorker(
+        tenantWorkerId: widget.tenantWorkerId,
+      );
+      final waChannel = channels.firstWhere(
+        (c) => (c['channel_type'] as String?) == 'whatsapp',
+        orElse: () => {},
+      );
+      if (!mounted) return;
+      final channelId = waChannel['id'] as String?;
+      setState(() => _waChannelId = channelId);
+      if (channelId != null) await _loadTemplatesForAction(channelId);
+    } catch (_) {}
+  }
+
+  Future<void> _loadTemplatesForAction(String channelId) async {
+    setState(() => _loadingTemplates = true);
+    try {
+      final all = await ChannelsApi.listTemplates(channelId: channelId);
+      if (!mounted) return;
+      setState(() {
+        _approvedTemplates =
+            all.where((t) => (t['status'] as String?) == 'APPROVED').toList();
+        _loadingTemplates = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingTemplates = false);
+    }
+  }
+
+  void _initProactiveMappingRows() {
+    final pm = widget.action?['proactive_message'] as Map<String, dynamic>?;
+    if (pm != null) {
+      _sendProactive = true;
+      _selectedTemplateId = pm['template_id'] as String?;
+      final existing = (pm['variable_mapping'] as List? ?? [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      _proactiveMappingRows = existing;
     }
   }
 
@@ -4262,8 +4319,26 @@ class _ActionDialogState extends State<_ActionDialog> {
     switch (_type) {
       case 'open_flow':
         if (_selectedFlowSlug == null) return;
+        if (_sendProactive && _selectedTemplateId == null) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Selecciona una plantilla aprobada para el mensaje proactivo'),
+            backgroundColor: AppColors.ctDanger,
+          ));
+          return;
+        }
         updated['target_flow_slug'] = _selectedFlowSlug!;
         updated['carry_ancestors'] = _carryAncestors;
+        if (_sendProactive && _selectedTemplateId != null) {
+          updated['proactive_message'] = {
+            'template_id': _selectedTemplateId,
+            'variable_mapping': _proactiveMappingRows
+                .where((r) => (r['variable'] as String? ?? '').isNotEmpty)
+                .map((r) => {'variable': r['variable'], 'source': r['source']})
+                .toList(),
+          };
+        } else {
+          updated.remove('proactive_message');
+        }
         updated.remove('carry_fields');
         updated.remove('integration_id');
         updated.remove('include_ancestors');
@@ -4465,6 +4540,146 @@ class _ActionDialogState extends State<_ActionDialog> {
                   activeThumbColor: AppColors.ctTeal,
                   activeTrackColor: AppColors.ctTeal.withValues(alpha: 0.4),
                 ),
+                const Divider(height: 24, color: AppColors.ctBorder),
+                // ── Mensaje proactivo ──
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Enviar mensaje proactivo al operador',
+                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+                  subtitle: Text(
+                    'Se enviará una plantilla de WhatsApp al abrir el flujo',
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+                  ),
+                  value: _sendProactive,
+                  onChanged: (v) => setState(() {
+                    _sendProactive = v;
+                    if (!v) {
+                      _selectedTemplateId = null;
+                      _proactiveMappingRows = [];
+                    }
+                  }),
+                  activeColor: AppColors.ctTeal,
+                ),
+                if (_sendProactive) ...[
+                  const SizedBox(height: 8),
+                  if (_loadingTemplates)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.ctTeal),
+                      ),
+                    )
+                  else if (_waChannelId == null)
+                    Text(
+                      'No se encontró canal WhatsApp activo para este worker',
+                      style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
+                    )
+                  else if (_approvedTemplates.isEmpty)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('No hay plantillas aprobadas.',
+                            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)),
+                        const SizedBox(height: 6),
+                        AppButton(
+                          label: 'Crear plantilla en Meta',
+                          variant: AppButtonVariant.ghost,
+                          size: AppButtonSize.sm,
+                          onPressed: () => launchUrl(
+                            Uri.parse('https://business.facebook.com/wa/manage/message-templates/'),
+                          ),
+                        ),
+                      ],
+                    )
+                  else ...[
+                    AppDropdown<String>(
+                      label: 'Plantilla',
+                      value: _selectedTemplateId,
+                      hint: 'Selecciona una plantilla aprobada',
+                      items: _approvedTemplates.map((t) {
+                        final id = t['id'] as String? ?? t['name'] as String? ?? '';
+                        final name = t['name'] as String? ?? id;
+                        final lang = t['language'] as String? ?? '';
+                        return AppDropdownItem<String>(
+                          value: id,
+                          label: '$name ($lang)',
+                        );
+                      }).toList(),
+                      onChanged: (v) => setState(() => _selectedTemplateId = v),
+                    ),
+                    const SizedBox(height: 6),
+                    AppButton(
+                      label: 'Crear nueva plantilla',
+                      variant: AppButtonVariant.ghost,
+                      size: AppButtonSize.sm,
+                      onPressed: () => launchUrl(
+                        Uri.parse('https://business.facebook.com/wa/manage/message-templates/'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Text('Mapeo de variables', style: AppTextStyles.formLabel),
+                        const Spacer(),
+                        AppButton(
+                          label: '+ Agregar',
+                          variant: AppButtonVariant.ghost,
+                          size: AppButtonSize.sm,
+                          onPressed: () => setState(() =>
+                              _proactiveMappingRows.add({'variable': '', 'source': ''})),
+                        ),
+                      ],
+                    ),
+                    if (_proactiveMappingRows.isEmpty)
+                      Text('Sin variables configuradas',
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3))
+                    else
+                      ...List.generate(_proactiveMappingRows.length, (i) {
+                        final row = _proactiveMappingRows[i];
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: AppTextField(
+                                  controller: TextEditingController(text: row['variable'] as String? ?? ''),
+                                  hint: 'Ej: 1',
+                                  label: i == 0 ? 'Variable' : null,
+                                  onChanged: (v) => _proactiveMappingRows[i]['variable'] = v,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: AppDropdown<String>(
+                                  label: i == 0 ? 'Campo fuente' : null,
+                                  value: (row['source'] as String?)?.isEmpty == true
+                                      ? null
+                                      : row['source'] as String?,
+                                  hint: 'Campo fuente',
+                                  items: [
+                                    const AppDropdownItem(value: '', label: '— Sin campo —'),
+                                    ...widget.flowFields.map((f) {
+                                      final key = f['key'] as String? ?? '';
+                                      final lbl = f['label'] as String? ?? key;
+                                      return AppDropdownItem(value: 'fields.$key', label: lbl);
+                                    }),
+                                  ],
+                                  onChanged: (v) =>
+                                      setState(() => _proactiveMappingRows[i]['source'] = v ?? ''),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 16, color: AppColors.ctText3),
+                                onPressed: () =>
+                                    setState(() => _proactiveMappingRows.removeAt(i)),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                  ],
+                ],
               ] else if (_type == 'open_flow_n_times') ...[
                 Text(
                   'Flow slug',
