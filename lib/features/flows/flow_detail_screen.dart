@@ -1,4 +1,7 @@
+import 'dart:ui';
+
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +16,9 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_dropdown.dart';
+import '../../shared/widgets/app_multi_select.dart';
+import '../../shared/widgets/app_text_field.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -116,6 +122,7 @@ const _kTriggerSources = [
   ('conversational', 'Conversacional'),
   ('api', 'API / Sistema'),
   ('dashboard', 'Dashboard'),
+  ('scheduled', 'Programado'),
 ];
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -163,6 +170,14 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
   List<String> _allowedRoleIds = [];
   List<Map<String, dynamic>> _availableRoles = [];
 
+  // Worker flows (for delete reference check)
+  List<Map<String, dynamic>> _workerFlows = [];
+
+  // Delete modal state
+  bool _showDeleteModal = false;
+  bool _deleting = false;
+  final _deleteConfirmCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -175,6 +190,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
     _tabCtrl.dispose();
     _nameCtrl.dispose();
     _descCtrl.dispose();
+    _deleteConfirmCtrl.dispose();
     super.dispose();
   }
 
@@ -250,6 +266,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         _descCtrl.text = flow['description'] as String? ?? '';
         _loading = false;
       });
+      _loadWorkerFlows();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -257,6 +274,15 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         _loading = false;
       });
     }
+  }
+
+  Future<void> _loadWorkerFlows() async {
+    final twId = _flow?['tenant_worker_id'] as String? ?? '';
+    if (twId.isEmpty) return;
+    try {
+      final flows = await FlowsApi.getFlowsByWorker(tenantWorkerId: twId);
+      if (mounted) setState(() => _workerFlows = flows);
+    } catch (_) {}
   }
 
   Future<void> _save({bool silent = false}) async {
@@ -414,78 +440,336 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
     }
   }
 
-  Future<void> _saveField({String? name, String? description}) async {
-    if (_saving) return;
-    setState(() => _saving = true);
+  List<String> _computeReferencingFlows() {
+    final currentSlug = _flow?['slug'] as String? ?? '';
+    final refs = <String>[];
+    for (final f in _workerFlows) {
+      if ((f['slug'] as String?) == currentSlug) continue;
+      final precs = (f['preconditions'] as List? ?? []);
+      for (final p in precs) {
+        final pMap = p as Map?;
+        final params = (pMap?['params'] ?? pMap?['config']) as Map? ?? {};
+        final slugVal = params['sibling_slug'] as String?
+            ?? params['flow_slug'] as String?
+            ?? params['parent_flow_slug'] as String?
+            ?? params['child_flow_slug'] as String? ?? '';
+        if (slugVal == currentSlug) {
+          refs.add(f['name'] as String? ?? f['slug'] as String? ?? '');
+        }
+      }
+      final onComplete = (f['on_complete'] as Map<String, dynamic>?) ?? {};
+      final actions = (onComplete['actions'] as List? ?? []);
+      for (final a in actions) {
+        final aMap = a as Map? ?? {};
+        final slugVal = aMap['target_flow_slug'] as String?
+            ?? aMap['flow_slug'] as String? ?? '';
+        if (slugVal == currentSlug) {
+          refs.add(f['name'] as String? ?? f['slug'] as String? ?? '');
+        }
+      }
+    }
+    return refs.toSet().toList();
+  }
+
+  Future<void> _executeDelete() async {
+    setState(() => _deleting = true);
     try {
-      final updated = await FlowsApi.updateFlow(
-        flowId: widget.flowId,
-        name: name ?? (_flow!['name'] as String?),
-        description: description ?? (_flow!['description'] as String?),
-      );
+      await FlowsApi.deleteFlow(flowId: widget.flowId);
       if (!mounted) return;
-      if (name != null) _nameCtrl.text = name;
-      if (description != null) _descCtrl.text = description;
-      setState(() { _flow = updated; _saving = false; });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Guardado'), backgroundColor: AppColors.ctOk,
-        duration: Duration(seconds: 2),
-      ));
+      setState(() => _showDeleteModal = false);
+      widget.onBack();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _saving = false);
+      setState(() => _deleting = false);
+      final isDio = e is DioException;
+      final msg = isDio && e.response?.statusCode == 409
+          ? 'Este flujo tiene ejecuciones activas y no puede eliminarse'
+          : _dioError(e);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(_dioError(e)), backgroundColor: AppColors.ctDanger,
+        content: Text(msg), backgroundColor: AppColors.ctDanger,
       ));
     }
   }
 
-  Future<void> _confirmDelete() async {
-    final name = _flow?['name'] as String? ?? 'este flujo';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text(
-          'Eliminar flujo',
-          style: AppTextStyles.pageTitle,
-        ),
-        content: Text(
-          '¿Eliminar "$name"? Esta acción desactivará el flujo. Las ejecuciones existentes no se verán afectadas.',
-          style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-        ),
-        actions: [
-          AppButton(
-            label: 'Cancelar',
-            variant: AppButtonVariant.ghost,
-            size: AppButtonSize.sm,
-            onPressed: () => Navigator.of(ctx).pop(false),
+  Future<void> _saveWithResult({List<String>? triggerSources}) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await FlowsApi.updateFlow(
+        flowId: widget.flowId,
+        name: _nameCtrl.text.trim(),
+        slug: _derivedSlug,
+        description: _descCtrl.text.trim(),
+        fields: _fields,
+        behavior: {
+          'conditions': _conditions,
+          if (_proactiveTrigger.isNotEmpty)
+            'proactive_trigger': _proactiveTrigger,
+        },
+        onComplete: {'actions': _actions},
+        triggerSources: triggerSources ?? _triggerSources,
+        sendProactive: _sendProactive,
+        allowedRoleIds: _allowedRoleIds,
+        preconditions: _precondiciones,
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  String _parseTriggerError(Object e) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      final detail = data is Map ? data['detail'] as String? ?? '' : '';
+      if (detail.contains('scheduled') && detail.contains('proactive_trigger')) {
+        return 'Para usar el trigger "Programado" primero configura '
+            'la plantilla de WhatsApp en la tab Comportamiento.';
+      }
+      if (detail.isNotEmpty) return detail;
+    }
+    return 'No se pudo actualizar el trigger. Intenta de nuevo.';
+  }
+
+  Widget _buildDeleteModal() {
+    final flowName = _flow?['name'] as String? ?? 'este flujo';
+    final canConfirm = _deleteConfirmCtrl.text.trim() == flowName;
+    final referencingFlows = _computeReferencingFlows();
+
+    return Positioned.fill(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+        child: Container(
+          color: AppColors.ctDanger.withValues(alpha: 0.08),
+          child: Center(
+            child: Container(
+              width: 500,
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.85,
+              ),
+              margin: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppColors.ctSurface,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.ctDanger.withValues(alpha: 0.15),
+                    blurRadius: 32,
+                    offset: const Offset(0, 8),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 40, height: 40,
+                          decoration: BoxDecoration(
+                            color: AppColors.ctRedBg,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.warning_amber_rounded,
+                              color: AppColors.ctDanger, size: 22),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('¿Eliminar "$flowName"?',
+                                  style: AppTextStyles.cardTitle),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Esta acción es permanente e irreversible.',
+                                style: AppTextStyles.bodySmall
+                                    .copyWith(color: AppColors.ctText2),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18,
+                              color: AppColors.ctText2),
+                          onPressed: () => setState(() {
+                            _showDeleteModal = false;
+                            _deleteConfirmCtrl.clear();
+                          }),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.ctBg,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Qué ocurrirá:',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                  fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 10),
+                          _ImpactRow(
+                            icon: Icons.check_circle_outline,
+                            color: AppColors.ctOk,
+                            text: 'Las ejecuciones existentes no se verán afectadas '
+                                '(mantienen la estructura del flujo guardada).',
+                          ),
+                          const SizedBox(height: 8),
+                          _ImpactRow(
+                            icon: Icons.block_outlined,
+                            color: AppColors.ctDanger,
+                            text: 'No se podrán iniciar nuevas ejecuciones de este flujo.',
+                          ),
+                          const SizedBox(height: 8),
+                          _ImpactRow(
+                            icon: Icons.warning_amber_rounded,
+                            color: AppColors.ctWarn,
+                            text: 'Las ejecuciones activas en curso serán bloqueadas '
+                                'si el flujo tiene ejecuciones activas.',
+                          ),
+                          if (referencingFlows.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            _ImpactRow(
+                              icon: Icons.link_off_rounded,
+                              color: AppColors.ctDanger,
+                              text: 'Los siguientes flujos referencian este flujo y '
+                                  'fallarán silenciosamente: '
+                                  '${referencingFlows.join(", ")}.',
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.ctRedBg.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: AppColors.ctDanger.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36, height: 36,
+                            decoration: BoxDecoration(
+                              color: AppColors.ctSurface,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.ctBorder),
+                            ),
+                            child: const Icon(Icons.account_tree_outlined,
+                                size: 18, color: AppColors.ctText2),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(flowName,
+                                    style: AppTextStyles.body
+                                        .copyWith(fontWeight: FontWeight.w600)),
+                                Text(
+                                  _flow?['slug'] as String? ?? '',
+                                  style: AppTextStyles.caption
+                                      .copyWith(color: AppColors.ctText3,
+                                          fontFamily: 'Geist'),
+                                ),
+                              ],
+                            ),
+                          ),
+                          _MetricRow(
+                            label: 'Ejecuciones',
+                            value: (_flow?['execution_count'] as int? ?? 0)
+                                .toString(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Escribe "$flowName" para confirmar:',
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.ctText2),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _deleteConfirmCtrl,
+                      autofocus: true,
+                      style: AppTextStyles.body,
+                      decoration: InputDecoration(
+                        hintText: flowName,
+                        hintStyle: AppTextStyles.body
+                            .copyWith(color: AppColors.ctText3),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide:
+                              const BorderSide(color: AppColors.ctBorder),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide:
+                              const BorderSide(color: AppColors.ctBorder),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                              color: AppColors.ctDanger, width: 1.5),
+                        ),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        AppButton(
+                          label: 'Cancelar',
+                          variant: AppButtonVariant.ghost,
+                          size: AppButtonSize.sm,
+                          onPressed: () => setState(() {
+                            _showDeleteModal = false;
+                            _deleteConfirmCtrl.clear();
+                          }),
+                        ),
+                        const SizedBox(width: 10),
+                        AppButton(
+                          label: _deleting
+                              ? 'Eliminando...'
+                              : 'Sí, eliminar "$flowName"',
+                          variant: AppButtonVariant.danger,
+                          size: AppButtonSize.sm,
+                          isDisabled: !canConfirm || _deleting,
+                          isLoading: _deleting,
+                          onPressed: canConfirm ? _executeDelete : () {},
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          AppButton(
-            label: 'Eliminar',
-            variant: AppButtonVariant.danger,
-            size: AppButtonSize.sm,
-            onPressed: () => Navigator.of(ctx).pop(true),
-          ),
-        ],
+        ),
       ),
     );
-    if (confirmed != true || !mounted) return;
-    try {
-      await FlowsApi.deleteFlow(flowId: widget.flowId);
-      if (!mounted) return;
-      widget.onBack();
-    } catch (e) {
-      if (!mounted) return;
-      final isDioException = e is DioException;
-      final status = isDioException ? e.response?.statusCode : null;
-      final msg = status == 409
-          ? 'Este flujo tiene ejecuciones activas y no puede eliminarse'
-          : _dioError(e);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(msg),
-        backgroundColor: AppColors.ctDanger,
-      ));
-    }
   }
 
   // ── Build ───────────────────────────────────────────────────────────────────
@@ -513,18 +797,44 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
       );
     }
     final canManage = hasPermission(ref, 'flows', 'manage');
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
       children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
         _FlowSidePanel(
           flow: _flow!,
           isActive: _flow!['is_active'] as bool? ?? false,
           saving: _saving,
           onBack: widget.onBack,
           onToggleActive: _toggleActive,
-          onDelete: _confirmDelete,
-          onSaveName: (name) => _saveField(name: name),
-          onSaveDescription: (desc) => _saveField(description: desc),
+          onDelete: () {
+            _deleteConfirmCtrl.clear();
+            setState(() => _showDeleteModal = true);
+          },
+          triggerSources: _triggerSources,
+          onTriggerSourcesChanged: (updated) async {
+            final previous = List<String>.from(_triggerSources);
+            setState(() => _triggerSources = updated);
+            try {
+              await _saveWithResult(triggerSources: updated);
+            } catch (e) {
+              if (mounted) setState(() => _triggerSources = previous);
+              final msg = _parseTriggerError(e);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(msg),
+                  backgroundColor: AppColors.ctDanger,
+                  duration: const Duration(seconds: 4),
+                  action: SnackBarAction(
+                    label: 'Ir a Comportamiento',
+                    textColor: Colors.white,
+                    onPressed: () => _tabCtrl.animateTo(1),
+                  ),
+                ));
+              }
+            }
+          },
         ),
         Container(width: 1, color: AppColors.ctBorder),
         Expanded(
@@ -609,6 +919,9 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
             ],
           ),
         ),
+          ],
+        ),
+        if (_showDeleteModal) _buildDeleteModal(),
       ],
     );
   }
@@ -624,8 +937,8 @@ class _FlowSidePanel extends StatefulWidget {
     required this.onBack,
     required this.onToggleActive,
     required this.onDelete,
-    required this.onSaveName,
-    required this.onSaveDescription,
+    required this.triggerSources,
+    required this.onTriggerSourcesChanged,
   });
 
   final Map<String, dynamic> flow;
@@ -634,336 +947,232 @@ class _FlowSidePanel extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onToggleActive;
   final VoidCallback onDelete;
-  final ValueChanged<String> onSaveName;
-  final ValueChanged<String> onSaveDescription;
+  final List<String> triggerSources;
+  final ValueChanged<List<String>> onTriggerSourcesChanged;
 
   @override
   State<_FlowSidePanel> createState() => _FlowSidePanelState();
 }
 
 class _FlowSidePanelState extends State<_FlowSidePanel> {
-  bool _editingName = false;
-  bool _editingDesc = false;
-  late TextEditingController _nameCtrl;
-  late TextEditingController _descCtrl;
+  late List<String> _triggerSources;
 
   @override
   void initState() {
     super.initState();
-    _nameCtrl = TextEditingController(text: widget.flow['name'] as String? ?? '');
-    _descCtrl = TextEditingController(text: widget.flow['description'] as String? ?? '');
+    _triggerSources = List.from(widget.triggerSources);
   }
 
   @override
   void didUpdateWidget(_FlowSidePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final newName = widget.flow['name'] as String? ?? '';
-    final newDesc = widget.flow['description'] as String? ?? '';
-    if (oldWidget.flow['name'] != newName && !_editingName) {
-      _nameCtrl.text = newName;
+    if (!listEquals(oldWidget.triggerSources, widget.triggerSources)) {
+      setState(() => _triggerSources = List.from(widget.triggerSources));
     }
-    if (oldWidget.flow['description'] != newDesc && !_editingDesc) {
-      _descCtrl.text = newDesc;
-    }
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _descCtrl.dispose();
-    super.dispose();
-  }
-
-  List<Widget> _buildTriggerChips() {
-    const labels = {
-      'conversational': 'Conversacional',
-      'api': 'API',
-      'dashboard': 'Dashboard',
-    };
-    final sources = (widget.flow['trigger_sources'] as List? ?? [])
-        .map((s) => s.toString())
-        .toList();
-    if (sources.isEmpty) {
-      return [Text('—', style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3))];
-    }
-    return sources.map((s) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.ctTealLight,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        labels[s] ?? s,
-        style: AppTextStyles.caption.copyWith(
-            color: AppColors.ctTealDark, fontWeight: FontWeight.w500),
-      ),
-    )).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 220,
-      color: AppColors.ctSurface2,
-      child: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. Botón volver
-                  MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: widget.onBack,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: AppColors.ctNavy,
-                          border: Border.all(color: AppColors.ctNavy),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text('← Volver a flujos',
-                            style: AppTextStyles.bodySmall.copyWith(color: Colors.white)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // 2. Nombre — inline edit
-                  Row(
+          width: 220,
+          color: AppColors.ctSurface2,
+          child: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: _editingName
-                            ? TextField(
-                                controller: _nameCtrl,
-                                style: AppTextStyles.cardTitle,
-                                autofocus: true,
-                                maxLines: 2,
-                                decoration: InputDecoration(
-                                  border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: AppColors.ctBorder)),
-                                  focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: AppColors.ctTeal, width: 1.5)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                  isDense: true,
-                                ),
-                              )
-                            : Text(widget.flow['name'] as String? ?? '—',
-                                style: AppTextStyles.cardTitle),
-                      ),
-                      const SizedBox(width: 6),
-                      if (!_editingName)
-                        GestureDetector(
-                          onTap: () => setState(() => _editingName = true),
-                          child: const MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: Icon(Icons.edit_outlined, size: 14, color: AppColors.ctText3),
+                      // 1. Botón volver
+                      MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: widget.onBack,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: AppColors.ctNavy,
+                              border: Border.all(color: AppColors.ctNavy),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text('← Volver a flujos',
+                                style: AppTextStyles.bodySmall.copyWith(color: Colors.white)),
                           ),
                         ),
-                    ],
-                  ),
-                  if (_editingName) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        AppButton(
-                            label: 'Cancelar', variant: AppButtonVariant.ghost, size: AppButtonSize.sm,
-                            onPressed: () {
-                              _nameCtrl.text = widget.flow['name'] as String? ?? '';
-                              setState(() => _editingName = false);
-                            }),
-                        const SizedBox(width: 6),
-                        AppButton(
-                            label: 'Guardar', variant: AppButtonVariant.teal, size: AppButtonSize.sm,
-                            isLoading: widget.saving,
-                            onPressed: () {
-                              widget.onSaveName(_nameCtrl.text.trim());
-                              setState(() => _editingName = false);
-                            }),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 6),
+                      ),
+                      const SizedBox(height: 20),
 
-                  // 3. Slug — solo lectura, copiable
-                  GestureDetector(
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: widget.flow['slug'] as String? ?? ''));
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('Slug copiado'), duration: Duration(seconds: 2),
-                        backgroundColor: AppColors.ctOk,
-                      ));
-                    },
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.ctSurface,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.ctBorder),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(widget.flow['slug'] as String? ?? '—',
-                                  style: AppTextStyles.bodySmall.copyWith(
-                                    color: AppColors.ctText3,
-                                    fontFamily: 'Geist',
-                                  ),
-                                  overflow: TextOverflow.ellipsis),
+                      // 2. Nombre — solo lectura
+                      Text(
+                        widget.flow['name'] as String? ?? '—',
+                        style: AppTextStyles.cardTitle,
+                      ),
+                      const SizedBox(height: 6),
+
+                      // 3. Slug — solo lectura, copiable
+                      GestureDetector(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: widget.flow['slug'] as String? ?? ''));
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Slug copiado'),
+                            duration: Duration(seconds: 2),
+                            backgroundColor: AppColors.ctOk,
+                          ));
+                        },
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.ctSurface,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: AppColors.ctBorder),
                             ),
-                            const Icon(Icons.copy_rounded, size: 12, color: AppColors.ctText3),
-                          ],
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    widget.flow['slug'] as String? ?? '—',
+                                    style: AppTextStyles.bodySmall.copyWith(
+                                      color: AppColors.ctText3,
+                                      fontFamily: 'Geist',
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const Icon(Icons.copy_rounded, size: 12, color: AppColors.ctText3),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                      const SizedBox(height: 6),
 
-                  // 4. Descripción — inline edit
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _editingDesc
-                            ? TextField(
-                                controller: _descCtrl,
-                                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
-                                autofocus: true,
-                                maxLines: 3,
-                                decoration: InputDecoration(
-                                  border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: AppColors.ctBorder)),
-                                  focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: AppColors.ctTeal, width: 1.5)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                  isDense: true,
+                      // 4. Descripción — solo lectura
+                      if ((widget.flow['description'] as String?)?.isNotEmpty == true)
+                        Text(
+                          widget.flow['description'] as String,
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+                        )
+                      else
+                        Text(
+                          'Sin descripción',
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+                        ),
+                      const SizedBox(height: 20),
+
+                      const Divider(color: AppColors.ctBorder, height: 1),
+                      const SizedBox(height: 16),
+
+                      // 5. ESTADO
+                      Text('ESTADO', style: AppTextStyles.kpiLabel),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          AppBadge(
+                            label: widget.isActive ? 'Activo' : 'Inactivo',
+                            variant: widget.isActive ? AppBadgeVariant.ok : AppBadgeVariant.neutral,
+                          ),
+                          const Expanded(child: SizedBox()),
+                          Switch(
+                            value: widget.isActive,
+                            onChanged: (_) => widget.onToggleActive(),
+                            activeThumbColor: AppColors.ctTeal,
+                            activeTrackColor: AppColors.ctTealLight,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 6. TRIGGERS — editables
+                      Text('TRIGGERS', style: AppTextStyles.kpiLabel),
+                      const SizedBox(height: 8),
+                      Text(
+                        '¿Desde dónde puede iniciarse este flujo?',
+                        style: AppTextStyles.caption.copyWith(color: AppColors.ctText3),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: _kTriggerSources.map((entry) {
+                          final (value, label) = entry;
+                          final selected = _triggerSources.contains(value);
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                if (selected) {
+                                  if (_triggerSources.length > 1) {
+                                    _triggerSources.remove(value);
+                                  }
+                                } else {
+                                  _triggerSources.add(value);
+                                }
+                              });
+                              widget.onTriggerSourcesChanged(List.from(_triggerSources));
+                            },
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: selected ? AppColors.ctTealLight : AppColors.ctSurface,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: selected ? AppColors.ctTeal : AppColors.ctBorder,
+                                  ),
                                 ),
-                              )
-                            : Text(
-                                (widget.flow['description'] as String?)?.isNotEmpty == true
-                                    ? widget.flow['description'] as String
-                                    : 'Sin descripción',
-                                style: AppTextStyles.bodySmall.copyWith(
-                                  color: (widget.flow['description'] as String?)?.isNotEmpty == true
-                                      ? AppColors.ctText2
-                                      : AppColors.ctText3,
+                                child: Text(
+                                  label,
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: selected ? AppColors.ctTealDark : AppColors.ctText2,
+                                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                                  ),
                                 ),
                               ),
+                            ),
+                          );
+                        }).toList(),
                       ),
-                      const SizedBox(width: 6),
-                      if (!_editingDesc)
-                        GestureDetector(
-                          onTap: () => setState(() => _editingDesc = true),
-                          child: const MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: Icon(Icons.edit_outlined, size: 14, color: AppColors.ctText3),
-                          ),
-                        ),
+                      const SizedBox(height: 16),
+
+                      const Divider(color: AppColors.ctBorder, height: 1),
+                      const SizedBox(height: 16),
+
+                      // 7. MÉTRICAS
+                      Text('MÉTRICAS', style: AppTextStyles.kpiLabel),
+                      const SizedBox(height: 10),
+                      _MetricRow(
+                        label: 'Ejecuciones totales',
+                        value: (widget.flow['execution_count'] as int? ?? 0).toString(),
+                      ),
+                      const SizedBox(height: 6),
+                      _MetricRow(
+                        label: 'Campos configurados',
+                        value: ((widget.flow['fields'] as List?)?.length ?? 0).toString(),
+                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
-                  if (_editingDesc) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        AppButton(
-                            label: 'Cancelar', variant: AppButtonVariant.ghost, size: AppButtonSize.sm,
-                            onPressed: () {
-                              _descCtrl.text = widget.flow['description'] as String? ?? '';
-                              setState(() => _editingDesc = false);
-                            }),
-                        const SizedBox(width: 6),
-                        AppButton(
-                            label: 'Guardar', variant: AppButtonVariant.teal, size: AppButtonSize.sm,
-                            isLoading: widget.saving,
-                            onPressed: () {
-                              widget.onSaveDescription(_descCtrl.text.trim());
-                              setState(() => _editingDesc = false);
-                            }),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-
-                  const Divider(color: AppColors.ctBorder, height: 1),
-                  const SizedBox(height: 16),
-
-                  // 5. ESTADO
-                  Text('ESTADO', style: AppTextStyles.kpiLabel),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      AppBadge(
-                        label: widget.isActive ? 'Activo' : 'Inactivo',
-                        variant: widget.isActive ? AppBadgeVariant.ok : AppBadgeVariant.neutral,
-                      ),
-                      const Expanded(child: SizedBox()),
-                      Switch(
-                        value: widget.isActive,
-                        onChanged: (_) => widget.onToggleActive(),
-                        activeThumbColor: AppColors.ctTeal,
-                        activeTrackColor: AppColors.ctTealLight,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // 6. TRIGGERS
-                  Text('TRIGGERS', style: AppTextStyles.kpiLabel),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: _buildTriggerChips(),
-                  ),
-                  const SizedBox(height: 16),
-
-                  const Divider(color: AppColors.ctBorder, height: 1),
-                  const SizedBox(height: 16),
-
-                  // 7. MÉTRICAS
-                  Text('MÉTRICAS', style: AppTextStyles.kpiLabel),
-                  const SizedBox(height: 10),
-                  _MetricRow(
-                    label: 'Ejecuciones totales',
-                    value: (widget.flow['execution_count'] as int? ?? 0).toString(),
-                  ),
-                  const SizedBox(height: 6),
-                  _MetricRow(
-                    label: 'Campos configurados',
-                    value: ((widget.flow['fields'] as List?)?.length ?? 0).toString(),
-                  ),
-                  const SizedBox(height: 24),
-                ],
+                ),
               ),
-            ),
+              // 8. Botón eliminar — fuera del scroll
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: AppButton(
+                  label: 'Eliminar flujo',
+                  variant: AppButtonVariant.danger,
+                  size: AppButtonSize.sm,
+                  expand: true,
+                  onPressed: widget.onDelete,
+                ),
+              ),
+            ],
           ),
-          // 8. Botón eliminar — fuera del scroll
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: AppButton(
-              label: 'Eliminar flujo',
-              variant: AppButtonVariant.danger,
-              size: AppButtonSize.sm,
-              expand: true,
-              onPressed: widget.onDelete,
-            ),
-          ),
-        ],
-      ),
-    );
+        );
   }
 }
 
@@ -981,6 +1190,32 @@ class _MetricRow extends StatelessWidget {
       Text(label, style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
       Text(value, style: AppTextStyles.body.copyWith(
           fontWeight: FontWeight.w700, color: AppColors.ctTeal)),
+    ],
+  );
+}
+
+// ── _ImpactRow ───────────────────────────────────────────────────────────────
+
+class _ImpactRow extends StatelessWidget {
+  const _ImpactRow({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, size: 14, color: color),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(text,
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
+      ),
     ],
   );
 }
@@ -1428,7 +1663,6 @@ class _FieldDialog extends StatefulWidget {
 const _kDataSources = [
   ('static', 'Opciones estáticas'),
   ('system:operators', 'Operadores del tenant'),
-  ('system:operators_with_flow', 'Operadores con flow asignado'),
 ];
 
 class _FieldDialogState extends State<_FieldDialog> {
@@ -1438,10 +1672,6 @@ class _FieldDialogState extends State<_FieldDialog> {
 
   // select type state
   String _dataSourceBase = 'system:operators';
-  String? _dataSourceFlowSlug;
-  String _fillStrategy = 'conversational_list';
-  List<Map<String, dynamic>> _availableFlows = [];
-  bool _loadingFlows = false;
 
   // static options state
   List<String> _staticOptions = [];
@@ -1458,7 +1688,9 @@ class _FieldDialogState extends State<_FieldDialog> {
   // show_if condition state
   String? _showIfField;
   String? _showIfOp;
+  String? _showIfRefType;
   final _showIfValueCtrl = TextEditingController();
+  List<String> _showIfValues = []; // for op in/not_in
 
   bool get _isEdit => widget.field != null;
   bool get _assetRefValid => _type != 'asset_ref' || _catalogSlug != null;
@@ -1466,22 +1698,11 @@ class _FieldDialogState extends State<_FieldDialog> {
   String get _fieldKey => _fieldKeyify(_labelCtrl.text.trim());
   bool get _fieldKeyValid => _fieldKey.length >= 2;
 
-  String get _resolvedDataSource {
-    if (_dataSourceBase == 'static') return 'static';
-    if (_dataSourceBase == 'system:operators_with_flow') {
-      if (_dataSourceFlowSlug == null) return _dataSourceBase;
-      return 'system:operators_with_flow:$_dataSourceFlowSlug';
-    }
-    return _dataSourceBase;
-  }
-
   bool get _selectValid =>
       _type != 'select' ||
       (_dataSourceBase == 'static'
           ? _staticOptions.isNotEmpty
-          : (_dataSourceBase == 'system:operators' ||
-              (_dataSourceBase == 'system:operators_with_flow' &&
-                  _dataSourceFlowSlug != null)));
+          : _dataSourceBase == 'system:operators');
 
   @override
   void initState() {
@@ -1493,15 +1714,13 @@ class _FieldDialogState extends State<_FieldDialog> {
       _descCtrl.text = widget.field!['description'] as String? ?? '';
       final ds = widget.field!['data_source'] as String?;
       if (ds != null) {
-        if (ds.startsWith('system:operators_with_flow:')) {
-          _dataSourceBase = 'system:operators_with_flow';
-          _dataSourceFlowSlug = ds.substring('system:operators_with_flow:'.length);
+        // Migrate legacy operators_with_flow to system:operators
+        if (ds.startsWith('system:operators_with_flow')) {
+          _dataSourceBase = 'system:operators';
         } else {
           _dataSourceBase = ds;
         }
       }
-      _fillStrategy = widget.field!['fill_strategy'] as String? ??
-          'conversational_list';
       final rawOpts = widget.field!['options'];
       if (rawOpts is List) {
         _staticOptions = List<String>.from(rawOpts.map((e) => e.toString()));
@@ -1515,36 +1734,26 @@ class _FieldDialogState extends State<_FieldDialog> {
     if (showIf != null) {
       _showIfField = showIf['field'] as String?;
       _showIfOp = showIf['op'] as String?;
-      _showIfValueCtrl.text = showIf['value'] as String? ?? '';
+      final rawValue = showIf['value'];
+      if (_showIfOp == 'in' || _showIfOp == 'not_in') {
+        if (rawValue is List) {
+          _showIfValues = List<String>.from(rawValue.map((e) => e.toString()));
+        } else if (rawValue is String && rawValue.isNotEmpty) {
+          _showIfValues = rawValue.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        }
+      } else {
+        _showIfValueCtrl.text = rawValue as String? ?? '';
+      }
+      if (_showIfField != null) {
+        final ref = widget.flowFields.where((f) => f['key'] == _showIfField).firstOrNull;
+        _showIfRefType = ref?['type'] as String?;
+      }
     }
     _labelCtrl.addListener(_onLabelChanged);
-    if (_type == 'select') _loadFlows();
     if (_type == 'asset_ref') _loadCatalogs();
   }
 
   void _onLabelChanged() => setState(() {});
-
-  Future<void> _loadFlows() async {
-    if (widget.tenantWorkerId.isEmpty) return;
-    setState(() => _loadingFlows = true);
-    try {
-      final flows = await FlowsApi.getFlowsByWorker(
-        tenantWorkerId: widget.tenantWorkerId,
-      );
-      if (!mounted) return;
-      setState(() {
-        _availableFlows = flows;
-        if (_dataSourceFlowSlug != null &&
-            !flows.any((f) => f['slug'] == _dataSourceFlowSlug)) {
-          _dataSourceFlowSlug = null;
-        }
-        _loadingFlows = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loadingFlows = false);
-    }
-  }
 
   Future<void> _loadCatalogs() async {
     if (_loadingCatalogs) return;
@@ -1599,17 +1808,15 @@ class _FieldDialogState extends State<_FieldDialog> {
       if (_dataSourceBase == 'static') {
         updated['options'] = List<String>.from(_staticOptions);
         updated.remove('data_source');
-        updated.remove('fill_strategy');
       } else {
-        updated['data_source'] = _resolvedDataSource;
-        updated['fill_strategy'] = _fillStrategy;
+        updated['data_source'] = _dataSourceBase;
         updated.remove('options');
       }
     } else {
       updated.remove('data_source');
-      updated.remove('fill_strategy');
       updated.remove('options');
     }
+    updated.remove('fill_strategy');
     if (_type == 'asset_ref') {
       updated['catalog_slug'] = _catalogSlug;
       if (_selectedItemId != null) {
@@ -1625,10 +1832,11 @@ class _FieldDialogState extends State<_FieldDialog> {
       updated.remove('item_display');
     }
     if (_showIfField != null && _showIfOp != null) {
+      final isMultiOp = _showIfOp == 'in' || _showIfOp == 'not_in';
       updated['show_if'] = {
         'field': _showIfField,
         'op': _showIfOp,
-        'value': _showIfValueCtrl.text.trim(),
+        'value': isMultiOp ? _showIfValues : _showIfValueCtrl.text.trim(),
       };
     } else {
       updated.remove('show_if');
@@ -1665,8 +1873,16 @@ class _FieldDialogState extends State<_FieldDialog> {
               const SizedBox(height: 20),
 
               // Label
+              Row(
+                children: [
+                  Text('Etiqueta', style: AppTextStyles.formLabel),
+                  const SizedBox(width: 4),
+                  Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
+                ],
+              ),
+              const SizedBox(height: 6),
               _FormField(
-                label: 'Etiqueta',
+                label: '',
                 controller: _labelCtrl,
                 placeholder: 'Ej: Número de guía',
               ),
@@ -1680,201 +1896,87 @@ class _FieldDialogState extends State<_FieldDialog> {
               const SizedBox(height: 14),
 
               // Description
-              const Text(
-                'Descripción / alias de detección',
-                style: AppTextStyles.btnSecondary,
+              Text(
+                'Contexto para el asistente',
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Describe cómo el operador se refiere a este dato. '
+                'Tu Worker lo usa para identificar y capturar el campo correctamente.',
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
               ),
               const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.ctSurface2,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.ctBorder2),
-                ),
-                child: TextField(
-                  controller: _descCtrl,
-                  maxLines: 3,
-                  style: AppTextStyles.body,
-                  decoration: InputDecoration(
-                    hintText: 'Opcional',
-                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
+              AppTextField(
+                controller: _descCtrl,
+                hint: 'Opcional — ej: "número de seguimiento", "guía del paquete"',
+                maxLines: 3,
               ),
               const SizedBox(height: 14),
 
               // Type
-              const Text(
-                'Tipo',
-                style: AppTextStyles.btnSecondary,
+              Row(
+                children: [
+                  Text('Tipo', style: AppTextStyles.formLabel),
+                  const SizedBox(width: 4),
+                  Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
+                ],
               ),
               const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.ctSurface2,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.ctBorder2),
-                ),
-                child: DropdownButton<String>(
-                  value: _type,
-                  isExpanded: true,
-                  underline: const SizedBox.shrink(),
-                  dropdownColor: AppColors.ctSurface,
-                  items: kFieldTypes.map((entry) {
-                    final (value, label) = entry;
-                    return DropdownMenuItem(
-                      value: value,
-                      child: Row(
-                        children: [
-                          Icon(_fieldIcon(value),
-                              size: 16, color: AppColors.ctText2),
-                          const SizedBox(width: 8),
-                          Text(
-                            label,
-                            style: AppTextStyles.body,
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (v) {
-                    if (v != null) {
-                      setState(() {
-                        _type = v;
-                        if (v != 'asset_ref') {
-                          _catalogSlug = null;
-                          _selectedItemId = null;
-                          _selectedItemDisplay = null;
-                        }
-                      });
-                      if (v == 'select' && _availableFlows.isEmpty) {
-                        _loadFlows();
+              AppDropdown<String>(
+                value: _type,
+                hint: 'Selecciona un tipo',
+                items: kFieldTypes.map((entry) {
+                  final (value, label) = entry;
+                  return AppDropdownItem<String>(
+                    value: value,
+                    label: label,
+                    icon: _fieldIcon(value),
+                  );
+                }).toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() {
+                      _type = v;
+                      if (v != 'asset_ref') {
+                        _catalogSlug = null;
+                        _selectedItemId = null;
+                        _selectedItemDisplay = null;
                       }
-                      if (v == 'asset_ref' && _availableCatalogs.isEmpty) {
-                        _loadCatalogs();
-                      }
+                    });
+                    if (v == 'asset_ref' && _availableCatalogs.isEmpty) {
+                      _loadCatalogs();
                     }
-                  },
-                ),
+                  }
+                },
               ),
 
               // Data source (select type only)
               if (_type == 'select') ...[
                 const SizedBox(height: 14),
-                const Text(
-                  'Fuente de datos',
-                  style: AppTextStyles.btnSecondary,
+                AppDropdown<String>(
+                  label: 'Fuente de datos',
+                  value: _dataSourceBase,
+                  hint: 'Selecciona fuente',
+                  items: _kDataSources.map((entry) {
+                    final (value, label) = entry;
+                    return AppDropdownItem<String>(value: value, label: label);
+                  }).toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _dataSourceBase = v);
+                  },
                 ),
-                const SizedBox(height: 6),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.ctSurface2,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.ctBorder2),
-                  ),
-                  child: DropdownButton<String>(
-                    value: _dataSourceBase,
-                    isExpanded: true,
-                    underline: const SizedBox.shrink(),
-                    dropdownColor: AppColors.ctSurface,
-                    items: _kDataSources.map((entry) {
-                      final (value, label) = entry;
-                      return DropdownMenuItem(
-                        value: value,
-                        child: Text(label, style: AppTextStyles.body),
-                      );
-                    }).toList(),
-                    onChanged: (v) {
-                      if (v != null) {
-                        setState(() {
-                          _dataSourceBase = v;
-                          _dataSourceFlowSlug = null;
-                        });
-                        if (v == 'system:operators_with_flow' &&
-                            _availableFlows.isEmpty) {
-                          _loadFlows();
-                        }
-                      }
-                    },
-                  ),
-                ),
-                if (_dataSourceBase == 'system:operators_with_flow') ...[
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Flow asignado',
-                    style: AppTextStyles.btnSecondary,
-                  ),
-                  const SizedBox(height: 6),
-                  if (_loadingFlows)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: CircularProgressIndicator(
-                            color: AppColors.ctTeal, strokeWidth: 2),
-                      ),
-                    )
-                  else if (_availableFlows.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.ctBorder),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'No hay flujos disponibles para este worker',
-                        style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                      ),
-                    )
-                  else
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.ctSurface2,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.ctBorder2),
-                      ),
-                      child: DropdownButton<String>(
-                        value: _dataSourceFlowSlug,
-                        isExpanded: true,
-                        underline: const SizedBox.shrink(),
-                        dropdownColor: AppColors.ctSurface,
-                        hint: Text('Selecciona un flow',
-                            style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
-                        items: _availableFlows.map((f) {
-                          final slug = f['slug'] as String? ?? '';
-                          final name = f['name'] as String? ?? slug;
-                          return DropdownMenuItem<String>(
-                            value: slug,
-                            child: Text(name,
-                                style: AppTextStyles.body),
-                          );
-                        }).toList(),
-                        onChanged: (v) =>
-                            setState(() => _dataSourceFlowSlug = v),
-                      ),
-                    ),
-                ],
               ],
 
               // Static options (select + static source only)
               if (_type == 'select' && _dataSourceBase == 'static') ...[
                 const SizedBox(height: 14),
-                const Text(
-                  'Opciones',
-                  style: AppTextStyles.btnSecondary,
+                Row(
+                  children: [
+                    Text('Opciones', style: AppTextStyles.formLabel),
+                    const SizedBox(width: 4),
+                    Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 if (_staticOptions.isNotEmpty) ...[
@@ -1941,57 +2043,15 @@ class _FieldDialogState extends State<_FieldDialog> {
                 ),
               ],
 
-              // Fill strategy (select type only, not for static)
-              if (_type == 'select' && _dataSourceBase != 'static') ...[
-                const SizedBox(height: 14),
-                const Text(
-                  'Cuando se ejecuta conversacionalmente',
-                  style: AppTextStyles.btnSecondary,
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.ctSurface2,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.ctBorder2),
-                  ),
-                  child: DropdownButton<String>(
-                    value: _fillStrategy,
-                    isExpanded: true,
-                    underline: const SizedBox.shrink(),
-                    dropdownColor: AppColors.ctSurface,
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'conversational_list',
-                        child: Text('Mostrar lista de opciones al operador',
-                            style: AppTextStyles.body),
-                      ),
-                      DropdownMenuItem(
-                        value: 'inherit_actor',
-                        child: Text('Usar el operador actual',
-                            style: AppTextStyles.body),
-                      ),
-                      DropdownMenuItem(
-                        value: 'defer_dashboard',
-                        child: Text('Pedir al supervisor en Tareas',
-                            style: AppTextStyles.body),
-                      ),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setState(() => _fillStrategy = v);
-                    },
-                  ),
-                ),
-              ],
               // Catalog selector (asset_ref type only)
               if (_type == 'asset_ref') ...[
                 const SizedBox(height: 14),
-                const Text(
-                  'Catálogo',
-                  style: AppTextStyles.btnSecondary,
+                Row(
+                  children: [
+                    Text('Catálogo', style: AppTextStyles.formLabel),
+                    const SizedBox(width: 4),
+                    Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 if (_loadingCatalogs)
@@ -2016,47 +2076,24 @@ class _FieldDialogState extends State<_FieldDialog> {
                     ),
                   )
                 else
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.ctSurface2,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: _catalogSlug == null && !_assetRefValid
-                            ? AppColors.ctDanger
-                            : AppColors.ctBorder2,
-                      ),
-                    ),
-                    child: DropdownButton<String>(
-                      value: _catalogSlug,
-                      isExpanded: true,
-                      underline: const SizedBox.shrink(),
-                      dropdownColor: AppColors.ctSurface,
-                      hint: Text(
-                        'Selecciona un catálogo',
-                        style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                      ),
-                      items: _availableCatalogs.map((cat) {
-                        final slug = cat['slug'] as String? ?? '';
-                        final name = cat['name'] as String? ?? slug;
-                        return DropdownMenuItem<String>(
-                          value: slug,
-                          child: Text(
-                            name,
-                            style: AppTextStyles.body,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (v) {
-                        setState(() {
-                          _catalogSlug = v;
-                          _selectedItemId = null;
-                          _selectedItemDisplay = null;
-                        });
-                      },
-                    ),
+                  AppDropdown<String>(
+                    value: _catalogSlug,
+                    hint: 'Selecciona un catálogo',
+                    errorText: _catalogSlug == null && !_assetRefValid
+                        ? 'Selecciona un catálogo'
+                        : null,
+                    items: _availableCatalogs.map((cat) {
+                      final slug = cat['slug'] as String? ?? '';
+                      final name = cat['name'] as String? ?? slug;
+                      return AppDropdownItem<String>(value: slug, label: name);
+                    }).toList(),
+                    onChanged: (v) {
+                      setState(() {
+                        _catalogSlug = v;
+                        _selectedItemId = null;
+                        _selectedItemDisplay = null;
+                      });
+                    },
                   ),
               if (_catalogSlug != null) ...[
                 const SizedBox(height: 10),
@@ -2149,121 +2186,139 @@ class _FieldDialogState extends State<_FieldDialog> {
                         style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                       ),
                       const SizedBox(height: 6),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.ctSurface2,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.ctBorder2),
-                        ),
-                        child: DropdownButton<String>(
-                          value: _showIfField,
-                          isExpanded: true,
-                          underline: const SizedBox.shrink(),
-                          dropdownColor: AppColors.ctSurface,
-                          hint: Text(
-                            'Selecciona un campo',
-                            style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+                      AppDropdown<String?>(
+                        value: _showIfField,
+                        hint: 'Selecciona un campo',
+                        items: [
+                          const AppDropdownItem<String?>(
+                            value: null,
+                            label: '— Sin condición —',
                           ),
-                          items: [
-                            DropdownMenuItem<String>(
-                              value: null,
-                              child: Text(
-                                '— Sin condición —',
-                                style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                              ),
-                            ),
-                            ...widget.flowFields.map((f) {
-                              final key = f['key'] as String? ?? '';
-                              final label = f['label'] as String? ?? key;
-                              return DropdownMenuItem<String>(
-                                value: key,
-                                child: Text(
-                                  label,
-                                  style: AppTextStyles.body,
-                                ),
-                              );
-                            }),
-                          ],
-                          onChanged: (v) => setState(() {
-                            _showIfField = v;
-                            if (v == null) _showIfOp = null;
+                          ...widget.flowFields
+                              .where((f) => !const ['photo', 'location']
+                                  .contains(f['type'] as String? ?? ''))
+                              .map((f) {
+                            final key = f['key'] as String? ?? '';
+                            final label = f['label'] as String? ?? key;
+                            return AppDropdownItem<String?>(value: key, label: label);
                           }),
-                        ),
+                        ],
+                        onChanged: (v) {
+                          final ref = v != null
+                              ? widget.flowFields.where((f) => f['key'] == v).firstOrNull
+                              : null;
+                          setState(() {
+                            _showIfField = v;
+                            _showIfRefType = ref?['type'] as String?;
+                            _showIfValueCtrl.text = '';
+                            _showIfValues = [];
+                            if (v == null) _showIfOp = null;
+                          });
+                        },
                       ),
                       if (_showIfField != null) ...[
                         const SizedBox(height: 8),
                         // Operator selector
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.ctSurface2,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.ctBorder2),
-                          ),
-                          child: DropdownButton<String>(
-                            value: _showIfOp,
-                            isExpanded: true,
-                            underline: const SizedBox.shrink(),
-                            dropdownColor: AppColors.ctSurface,
-                            hint: Text(
-                              'Operador',
-                              style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: 'eq',
-                                child: Text('es igual a',
-                                    style: AppTextStyles.body),
-                              ),
-                              DropdownMenuItem(
-                                value: 'neq',
-                                child: Text('es distinto de',
-                                    style: AppTextStyles.body),
-                              ),
-                              DropdownMenuItem(
-                                value: 'in',
-                                child: Text('está entre (separado por comas)',
-                                    style: AppTextStyles.body),
-                              ),
-                              DropdownMenuItem(
-                                value: 'not_in',
-                                child: Text('no está entre (separado por comas)',
-                                    style: AppTextStyles.body),
-                              ),
-                            ],
-                            onChanged: (v) =>
-                                setState(() => _showIfOp = v),
-                          ),
+                        AppDropdown<String>(
+                          value: _showIfOp,
+                          hint: 'Operador',
+                          items: const [
+                            AppDropdownItem(value: 'eq', label: 'es igual a'),
+                            AppDropdownItem(value: 'neq', label: 'es distinto de'),
+                            AppDropdownItem(value: 'in', label: 'está entre'),
+                            AppDropdownItem(value: 'not_in', label: 'no está entre'),
+                          ],
+                          onChanged: (v) => setState(() {
+                            _showIfOp = v;
+                            _showIfValueCtrl.text = '';
+                            _showIfValues = [];
+                          }),
                         ),
                         const SizedBox(height: 8),
-                        // Value input
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.ctSurface2,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.ctBorder2),
-                          ),
-                          child: TextField(
+                        // Value input — type-aware + multi-select for in/not_in
+                        if (_showIfOp == 'in' || _showIfOp == 'not_in')
+                          Builder(builder: (_) {
+                            final ref = widget.flowFields
+                                .where((f) => f['key'] == _showIfField)
+                                .firstOrNull;
+                            final opts = (ref?['options'] as List? ?? [])
+                                .map((e) => e.toString())
+                                .toList();
+                            if (opts.isEmpty) {
+                              return AppTextField(
+                                controller: _showIfValueCtrl,
+                                hint: 'Valores separados por coma…',
+                                helperText: 'Sin opciones definidas — escribe valores separados por coma',
+                              );
+                            }
+                            return AppMultiSelect<String>(
+                              items: opts
+                                  .map((o) => AppMultiSelectItem(value: o, label: o))
+                                  .toList(),
+                              selectedValues: _showIfValues,
+                              placeholder: 'Selecciona valores…',
+                              onChanged: (vals) => setState(() => _showIfValues = vals),
+                            );
+                          })
+                        else if (_showIfRefType == 'bool')
+                          AppDropdown<String>(
+                            value: _showIfValueCtrl.text.isEmpty
+                                ? null
+                                : _showIfValueCtrl.text,
+                            hint: 'Valor',
+                            items: const [
+                              AppDropdownItem(value: 'true', label: 'Sí / Verdadero'),
+                              AppDropdownItem(value: 'false', label: 'No / Falso'),
+                            ],
+                            onChanged: (v) => setState(() {
+                              _showIfValueCtrl.text = v ?? '';
+                            }),
+                          )
+                        else if (_showIfRefType == 'select')
+                          Builder(builder: (_) {
+                            final ref = widget.flowFields
+                                .where((f) => f['key'] == _showIfField)
+                                .firstOrNull;
+                            final opts = (ref?['options'] as List? ?? [])
+                                .map((e) => e.toString())
+                                .toList();
+                            if (opts.isEmpty) {
+                              return AppTextField(
+                                controller: _showIfValueCtrl,
+                                hint: 'Valor…',
+                              );
+                            }
+                            return AppDropdown<String>(
+                              value: _showIfValueCtrl.text.isEmpty
+                                  ? null
+                                  : _showIfValueCtrl.text,
+                              hint: 'Selecciona un valor',
+                              items: opts
+                                  .map((o) => AppDropdownItem(value: o, label: o))
+                                  .toList(),
+                              onChanged: (v) => setState(() {
+                                _showIfValueCtrl.text = v ?? '';
+                              }),
+                            );
+                          })
+                        else if (_showIfRefType == 'photo')
+                          AppTextField(
                             controller: _showIfValueCtrl,
-                            style: AppTextStyles.body,
-                            decoration: InputDecoration(
-                              hintText: 'Valor…',
-                              hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                              border: InputBorder.none,
-                              isDense: true,
-                              contentPadding:
-                                  EdgeInsets.symmetric(vertical: 8),
-                            ),
+                            hint: 'No disponible',
+                            enabled: false,
+                            helperText: 'No es posible condicionar visibilidad por foto',
+                          )
+                        else if (_showIfRefType == 'number')
+                          AppTextField(
+                            controller: _showIfValueCtrl,
+                            hint: 'Valor numérico…',
+                            keyboardType: TextInputType.number,
+                          )
+                        else
+                          AppTextField(
+                            controller: _showIfValueCtrl,
+                            hint: 'Valor…',
                           ),
-                        ),
                       ],
                       const SizedBox(height: 8),
                     ],
@@ -3737,6 +3792,9 @@ class _ActionDialogState extends State<_ActionDialog> {
   // google_sheets_append_row
   final _spreadsheetIdCtrl = TextEditingController();
   final _sheetNameCtrl = TextEditingController();
+  // catalog schemas for asset_ref fields: {catalog_slug: fields_schema}
+  Map<String, List<Map<String, dynamic>>> _catalogSchemas = {};
+  bool _loadingCatalogSchemas = false;
   // Each entry: (col: controller, val: controller)
   final List<(TextEditingController, TextEditingController)> _columnMappingRows = [];
   // Parallel list: selected flowField key per row (null = custom text mode)
@@ -3886,7 +3944,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         _spreadsheetIdCtrl.text = cfg['spreadsheet_id'] as String? ?? '';
         _sheetNameCtrl.text = cfg['sheet_name'] as String? ?? 'Sheet1';
         final mapping = cfg['column_mapping'] as Map? ?? {};
-        final fieldKeyRe = RegExp(r'^\{\{fields\.(\w+)\}\}$');
+        final fieldKeyRe = RegExp(r'^\{\{fields\.([\w.]+)\}\}$');
         for (final e in mapping.entries) {
           final valStr = e.value.toString();
           final m = fieldKeyRe.firstMatch(valStr);
@@ -3917,6 +3975,50 @@ class _ActionDialogState extends State<_ActionDialog> {
     }
     _loadFlows();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadActionTypes());
+    _loadCatalogSchemas();
+  }
+
+  Future<void> _loadCatalogSchemas() async {
+    debugPrint('[_loadCatalogSchemas] flowFields: ${widget.flowFields.map((f) => '${f['key']}(type=${f['type']}, slug=${f['catalog_slug']})').toList()}');
+    final assetRefFields = widget.flowFields
+        .where((f) =>
+            (f['type'] as String?) == 'asset_ref' &&
+            f['catalog_slug'] != null &&
+            (f['catalog_slug'] as String).isNotEmpty)
+        .toList();
+    debugPrint('[_loadCatalogSchemas] assetRefFields count: ${assetRefFields.length}');
+    if (assetRefFields.isEmpty) return;
+
+    setState(() => _loadingCatalogSchemas = true);
+    try {
+      final slugs = assetRefFields
+          .map((f) => f['catalog_slug'] as String)
+          .toSet();
+      debugPrint('[_loadCatalogSchemas] slugs to fetch: $slugs');
+      final futures = slugs.map((slug) async {
+        final catalog = await CatalogsApi.getCatalogBySlug(
+          tenantId: widget.tenantId,
+          slug: slug,
+        );
+        debugPrint('[_loadCatalogSchemas] catalog response for $slug: ${catalog.keys.toList()}');
+        final schema = (catalog['fields_schema'] as List?)
+                ?.cast<Map<String, dynamic>>() ??
+            [];
+        debugPrint('[_loadCatalogSchemas] schema for $slug: $schema');
+        return MapEntry(slug, schema);
+      });
+      final entries = await Future.wait(futures);
+      if (!mounted) return;
+      setState(() {
+        _catalogSchemas = Map.fromEntries(entries);
+        _loadingCatalogSchemas = false;
+      });
+      debugPrint('[_loadCatalogSchemas] loaded schemas: ${_catalogSchemas.keys.toList()}');
+    } catch (e) {
+      debugPrint('[_loadCatalogSchemas] ERROR: $e');
+      if (!mounted) return;
+      setState(() => _loadingCatalogSchemas = false);
+    }
   }
 
   Future<void> _loadFlows() async {
@@ -3958,6 +4060,66 @@ class _ActionDialogState extends State<_ActionDialog> {
     _conditionValueCtrl.dispose();
     for (final c in _dynTextCtrls.values) { c.dispose(); }
     super.dispose();
+  }
+
+  Set<String> _buildAllValidKeys() {
+    final keys = <String>{};
+    for (final f in widget.flowFields) {
+      final key = f['key'] as String? ?? '';
+      if (key.isEmpty) continue;
+      final type = f['type'] as String?;
+      final slug = f['catalog_slug'] as String?;
+      if (type == 'asset_ref' && slug != null && _catalogSchemas.containsKey(slug)) {
+        for (final col in _catalogSchemas[slug]!) {
+          final colKey = col['key'] as String? ?? '';
+          if (colKey.isNotEmpty) keys.add('$key.data.$colKey');
+        }
+      } else {
+        keys.add(key);
+      }
+    }
+    return keys;
+  }
+
+  List<DropdownMenuItem<String?>> _buildFieldDropdownItems() {
+    final items = <DropdownMenuItem<String?>>[];
+    for (final f in widget.flowFields) {
+      final key = f['key'] as String? ?? '';
+      final label = f['label'] as String? ?? key;
+      final type = f['type'] as String?;
+      final slug = f['catalog_slug'] as String?;
+      if (type == 'asset_ref' && slug != null && _catalogSchemas.containsKey(slug)) {
+        for (final col in _catalogSchemas[slug]!) {
+          final colKey = col['key'] as String? ?? '';
+          final colLabel = col['label'] as String? ?? colKey;
+          if (colKey.isEmpty) continue;
+          items.add(DropdownMenuItem<String?>(
+            value: '$key.data.$colKey',
+            child: Text(
+              '$label > $colLabel',
+              style: const TextStyle(
+                fontFamily: 'Geist',
+                fontSize: 13,
+                color: AppColors.ctText,
+              ),
+            ),
+          ));
+        }
+      } else {
+        items.add(DropdownMenuItem<String?>(
+          value: key,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'Geist',
+              fontSize: 13,
+              color: AppColors.ctText,
+            ),
+          ),
+        ));
+      }
+    }
+    return items;
   }
 
   String? _buildConditionExpression() {
@@ -4341,9 +4503,12 @@ class _ActionDialogState extends State<_ActionDialog> {
                   final row = entry.value;
                   final selectedKey = _columnMappingKeys.length > i ? _columnMappingKeys[i] : null;
                   final hasFields = widget.flowFields.isNotEmpty;
-                  // If selected key is no longer in flowFields (e.g. field deleted), treat as custom
+                  // Validate against expanded keys (includes compound asset_ref keys)
+                  // While schemas are loading, trust compound keys (contain dots)
+                  final allKeys = _buildAllValidKeys();
                   final effectiveKey = (selectedKey != null &&
-                      widget.flowFields.any((f) => (f['key'] as String?) == selectedKey))
+                      (allKeys.contains(selectedKey) ||
+                       (_loadingCatalogSchemas && selectedKey.contains('.'))))
                       ? selectedKey
                       : null;
                   return Padding(
@@ -4375,7 +4540,9 @@ class _ActionDialogState extends State<_ActionDialog> {
                                     underline: const SizedBox.shrink(),
                                     dropdownColor: AppColors.ctSurface,
                                     hint: Text(
-                                      'Campo del flujo…',
+                                      _loadingCatalogSchemas
+                                          ? 'Cargando campos…'
+                                          : 'Campo del flujo…',
                                       style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                                     ),
                                     items: [
@@ -4386,17 +4553,19 @@ class _ActionDialogState extends State<_ActionDialog> {
                                           style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
                                         ),
                                       ),
-                                      ...widget.flowFields.map((f) {
-                                        final key = f['key'] as String? ?? '';
-                                        final label = f['label'] as String? ?? key;
-                                        return DropdownMenuItem<String?>(
-                                          value: key,
+                                      ..._buildFieldDropdownItems(),
+                                      // Temporary item while schemas load for compound keys
+                                      if (_loadingCatalogSchemas &&
+                                          effectiveKey != null &&
+                                          effectiveKey.contains('.') &&
+                                          !_buildAllValidKeys().contains(effectiveKey))
+                                        DropdownMenuItem<String?>(
+                                          value: effectiveKey,
                                           child: Text(
-                                            label,
-                                            style: AppTextStyles.body,
+                                            'Cargando…',
+                                            style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
                                           ),
-                                        );
-                                      }),
+                                        ),
                                     ],
                                     onChanged: (v) => setState(() {
                                       if (_columnMappingKeys.length > i) {

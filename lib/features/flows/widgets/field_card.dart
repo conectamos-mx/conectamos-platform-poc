@@ -80,24 +80,26 @@ class _FieldHeader extends StatelessWidget {
   final bool isInherited;
 
   static IconData _typeIcon(String type) => switch (type) {
-        'number'   => Icons.pin_rounded,
-        'date'     => Icons.calendar_month_rounded,
-        'yesno'    => Icons.toggle_on_rounded,
-        'select'   => Icons.checklist_rounded,
+        'number'    => Icons.pin_rounded,
+        'date'      => Icons.calendar_month_rounded,
+        'yesno'     => Icons.toggle_on_rounded,
+        'select'    => Icons.checklist_rounded,
         'photo' || 'media' => Icons.camera_alt_rounded,
-        'location' => Icons.location_on_rounded,
-        _          => Icons.notes_rounded,
+        'asset_ref' => Icons.inventory_2_rounded,
+        'location'  => Icons.location_on_rounded,
+        _           => Icons.notes_rounded,
       };
 
   static String _typeLabel(String type) => switch (type) {
-        'number'   => 'Número',
-        'date'     => 'Fecha',
-        'yesno'    => 'Sí / No',
-        'select'   => 'Selección',
-        'photo'    => 'Foto',
-        'media'    => 'Foto/Media',
-        'location' => 'Ubicación',
-        _          => 'Texto',
+        'number'    => 'Número',
+        'date'      => 'Fecha',
+        'yesno'     => 'Sí / No',
+        'select'    => 'Selección',
+        'photo'     => 'Foto',
+        'media'     => 'Foto/Media',
+        'asset_ref' => 'Catálogo',
+        'location'  => 'Ubicación',
+        _           => 'Texto',
       };
 
   @override
