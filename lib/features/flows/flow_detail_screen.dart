@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -487,6 +488,45 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
     }
   }
 
+  Future<void> _saveWithResult({List<String>? triggerSources}) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await FlowsApi.updateFlow(
+        flowId: widget.flowId,
+        name: _nameCtrl.text.trim(),
+        slug: _derivedSlug,
+        description: _descCtrl.text.trim(),
+        fields: _fields,
+        behavior: {
+          'conditions': _conditions,
+          if (_proactiveTrigger.isNotEmpty)
+            'proactive_trigger': _proactiveTrigger,
+        },
+        onComplete: {'actions': _actions},
+        triggerSources: triggerSources ?? _triggerSources,
+        sendProactive: _sendProactive,
+        allowedRoleIds: _allowedRoleIds,
+        preconditions: _precondiciones,
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  String _parseTriggerError(Object e) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      final detail = data is Map ? data['detail'] as String? ?? '' : '';
+      if (detail.contains('scheduled') && detail.contains('proactive_trigger')) {
+        return 'Para usar el trigger "Programado" primero configura '
+            'la plantilla de WhatsApp en la tab Comportamiento.';
+      }
+      if (detail.isNotEmpty) return detail;
+    }
+    return 'No se pudo actualizar el trigger. Intenta de nuevo.';
+  }
+
   Widget _buildDeleteModal() {
     final flowName = _flow?['name'] as String? ?? 'este flujo';
     final canConfirm = _deleteConfirmCtrl.text.trim() == flowName;
@@ -769,9 +809,28 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
             _deleteConfirmCtrl.clear();
             setState(() => _showDeleteModal = true);
           },
-          onTriggerSourcesChanged: (updated) {
+          triggerSources: _triggerSources,
+          onTriggerSourcesChanged: (updated) async {
+            final previous = List<String>.from(_triggerSources);
             setState(() => _triggerSources = updated);
-            _save(silent: true);
+            try {
+              await _saveWithResult(triggerSources: updated);
+            } catch (e) {
+              if (mounted) setState(() => _triggerSources = previous);
+              final msg = _parseTriggerError(e);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(msg),
+                  backgroundColor: AppColors.ctDanger,
+                  duration: const Duration(seconds: 4),
+                  action: SnackBarAction(
+                    label: 'Ir a Comportamiento',
+                    textColor: Colors.white,
+                    onPressed: () => _tabCtrl.animateTo(1),
+                  ),
+                ));
+              }
+            }
           },
         ),
         Container(width: 1, color: AppColors.ctBorder),
@@ -875,6 +934,7 @@ class _FlowSidePanel extends StatefulWidget {
     required this.onBack,
     required this.onToggleActive,
     required this.onDelete,
+    required this.triggerSources,
     required this.onTriggerSourcesChanged,
   });
 
@@ -884,6 +944,7 @@ class _FlowSidePanel extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onToggleActive;
   final VoidCallback onDelete;
+  final List<String> triggerSources;
   final ValueChanged<List<String>> onTriggerSourcesChanged;
 
   @override
@@ -896,18 +957,14 @@ class _FlowSidePanelState extends State<_FlowSidePanel> {
   @override
   void initState() {
     super.initState();
-    _triggerSources = List<String>.from(
-      (widget.flow['trigger_sources'] as List? ?? []).map((s) => s.toString()),
-    );
+    _triggerSources = List.from(widget.triggerSources);
   }
 
   @override
   void didUpdateWidget(_FlowSidePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.flow['trigger_sources'] != widget.flow['trigger_sources']) {
-      _triggerSources = List<String>.from(
-        (widget.flow['trigger_sources'] as List? ?? []).map((s) => s.toString()),
-      );
+    if (!listEquals(oldWidget.triggerSources, widget.triggerSources)) {
+      setState(() => _triggerSources = List.from(widget.triggerSources));
     }
   }
 
