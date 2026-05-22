@@ -365,8 +365,89 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
     });
   }
 
+  List<String> _findFieldReferences(String fieldKey) {
+    final refs = <String>[];
+    for (final f in _fields) {
+      final showIf = f['show_if'] as Map<String, dynamic>?;
+      if (showIf != null && showIf['field'] == fieldKey) {
+        refs.add('Campo "${f['label'] ?? f['key']}" (condición de visibilidad)');
+      }
+    }
+    for (final action in _actions) {
+      if ((action as Map)['count_field_key'] == fieldKey) {
+        refs.add('Acción "${action['type']}" en Al cerrar (campo de conteo)');
+      }
+      final colMap = action['config']?['column_mapping'] as Map?;
+      if (colMap != null && colMap.containsKey(fieldKey)) {
+        refs.add('Acción "${action['type']}" en Al cerrar (mapeo de columna)');
+      }
+    }
+    final varMapping = _proactiveTrigger['variable_mapping'] as List?;
+    if (varMapping != null) {
+      for (final vm in varMapping) {
+        if ((vm as Map)['source'] == 'fields.$fieldKey') {
+          refs.add('Mensaje proactivo (variable_mapping)');
+        }
+      }
+    }
+    return refs;
+  }
+
   void _confirmDeleteField(Map<String, dynamic> field, int index) {
     final label = field['label'] as String? ?? field['key'] as String? ?? 'este campo';
+    final fieldKey = field['key'] as String? ?? '';
+    final refs = _findFieldReferences(fieldKey);
+
+    if (refs.isNotEmpty) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.ctSurface,
+          title: Text(
+            'No se puede eliminar "$label"',
+            style: AppTextStyles.pageTitle,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Este campo está siendo usado en:',
+                style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+              ),
+              const SizedBox(height: 8),
+              ...refs.map((r) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('• ', style: AppTextStyles.body.copyWith(color: AppColors.ctDanger)),
+                        Expanded(
+                          child: Text(r, style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
+                        ),
+                      ],
+                    ),
+                  )),
+              const SizedBox(height: 8),
+              Text(
+                'Edita o elimina esas referencias primero.',
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+              ),
+            ],
+          ),
+          actions: [
+            AppButton(
+              label: 'Entendido',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.sm,
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
