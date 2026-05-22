@@ -60,6 +60,7 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
   final _triggerKey = GlobalKey();
   final _searchCtrl = TextEditingController();
   bool _open = false;
+  bool _closing = false;
   List<AppDropdownItem<T>> _filtered = [];
 
   double _getTriggerWidth() {
@@ -111,26 +112,33 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
 
   void _toggle() {
     if (!widget.enabled) return;
-    setState(() => _open = !_open);
+    if (_closing) return;
     if (_open) {
+      _close();
+    } else {
+      setState(() => _open = true);
       _searchCtrl.clear();
       _filtered = widget.items;
       _controller.show();
-    } else {
-      _controller.hide();
     }
   }
 
   void _close() {
     if (!_open) return;
+    _closing = true;
     setState(() => _open = false);
     _controller.hide();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _closing = false;
+    });
   }
 
   void _select(AppDropdownItem<T> item) {
     if (!item.enabled) return;
-    widget.onChanged(item.value);
     _close();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onChanged(item.value);
+    });
   }
 
   void _onSearch(String query) {
@@ -157,10 +165,10 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
           child: OverlayPortal(
             controller: _controller,
             overlayChildBuilder: (_) => _buildOverlay(),
-            child: GestureDetector(
-              onTap: _toggle,
-              child: TapRegion(
-                onTapOutside: (_) => _close(),
+            child: TapRegion(
+              onTapOutside: (_) => _close(),
+              child: GestureDetector(
+                onTap: _toggle,
                 child: AnimatedContainer(
                   key: _triggerKey,
                   duration: const Duration(milliseconds: 150),
