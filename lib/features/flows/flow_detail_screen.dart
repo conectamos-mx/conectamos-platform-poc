@@ -16,6 +16,8 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_dropdown.dart';
+import '../../shared/widgets/app_text_field.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1912,90 +1914,55 @@ class _FieldDialogState extends State<_FieldDialog> {
               const SizedBox(height: 14),
 
               // Description
-              const Text(
-                'Descripción / alias de detección',
-                style: AppTextStyles.btnSecondary,
+              Text(
+                'Contexto para el asistente',
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Describe cómo el operador se refiere a este dato. '
+                'Tu Worker lo usa para identificar y capturar el campo correctamente.',
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
               ),
               const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.ctSurface2,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.ctBorder2),
-                ),
-                child: TextField(
-                  controller: _descCtrl,
-                  maxLines: 3,
-                  style: AppTextStyles.body,
-                  decoration: InputDecoration(
-                    hintText: 'Opcional',
-                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
+              AppTextField(
+                controller: _descCtrl,
+                hint: 'Opcional — ej: "número de seguimiento", "guía del paquete"',
+                maxLines: 3,
               ),
               const SizedBox(height: 14),
 
               // Type
-              const Text(
-                'Tipo',
-                style: AppTextStyles.btnSecondary,
-              ),
-              const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.ctSurface2,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.ctBorder2),
-                ),
-                child: DropdownButton<String>(
-                  value: _type,
-                  isExpanded: true,
-                  underline: const SizedBox.shrink(),
-                  dropdownColor: AppColors.ctSurface,
-                  items: kFieldTypes.map((entry) {
-                    final (value, label) = entry;
-                    return DropdownMenuItem(
-                      value: value,
-                      child: Row(
-                        children: [
-                          Icon(_fieldIcon(value),
-                              size: 16, color: AppColors.ctText2),
-                          const SizedBox(width: 8),
-                          Text(
-                            label,
-                            style: AppTextStyles.body,
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (v) {
-                    if (v != null) {
-                      setState(() {
-                        _type = v;
-                        if (v != 'asset_ref') {
-                          _catalogSlug = null;
-                          _selectedItemId = null;
-                          _selectedItemDisplay = null;
-                        }
-                      });
-                      if (v == 'select' && _availableFlows.isEmpty) {
-                        _loadFlows();
+              AppDropdown<String>(
+                label: 'Tipo',
+                value: _type,
+                hint: 'Selecciona un tipo',
+                items: kFieldTypes.map((entry) {
+                  final (value, label) = entry;
+                  return AppDropdownItem<String>(
+                    value: value,
+                    label: label,
+                    icon: _fieldIcon(value),
+                  );
+                }).toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() {
+                      _type = v;
+                      if (v != 'asset_ref') {
+                        _catalogSlug = null;
+                        _selectedItemId = null;
+                        _selectedItemDisplay = null;
                       }
-                      if (v == 'asset_ref' && _availableCatalogs.isEmpty) {
-                        _loadCatalogs();
-                      }
+                    });
+                    if (v == 'select' && _availableFlows.isEmpty) {
+                      _loadFlows();
                     }
-                  },
-                ),
+                    if (v == 'asset_ref' && _availableCatalogs.isEmpty) {
+                      _loadCatalogs();
+                    }
+                  }
+                },
               ),
 
               // Data source (select type only)
