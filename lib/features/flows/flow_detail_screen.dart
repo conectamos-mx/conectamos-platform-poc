@@ -1968,52 +1968,29 @@ class _FieldDialogState extends State<_FieldDialog> {
               // Data source (select type only)
               if (_type == 'select') ...[
                 const SizedBox(height: 14),
-                const Text(
-                  'Fuente de datos',
-                  style: AppTextStyles.btnSecondary,
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.ctSurface2,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.ctBorder2),
-                  ),
-                  child: DropdownButton<String>(
-                    value: _dataSourceBase,
-                    isExpanded: true,
-                    underline: const SizedBox.shrink(),
-                    dropdownColor: AppColors.ctSurface,
-                    items: _kDataSources.map((entry) {
-                      final (value, label) = entry;
-                      return DropdownMenuItem(
-                        value: value,
-                        child: Text(label, style: AppTextStyles.body),
-                      );
-                    }).toList(),
-                    onChanged: (v) {
-                      if (v != null) {
-                        setState(() {
-                          _dataSourceBase = v;
-                          _dataSourceFlowSlug = null;
-                        });
-                        if (v == 'system:operators_with_flow' &&
-                            _availableFlows.isEmpty) {
-                          _loadFlows();
-                        }
+                AppDropdown<String>(
+                  label: 'Fuente de datos',
+                  value: _dataSourceBase,
+                  hint: 'Selecciona fuente',
+                  items: _kDataSources.map((entry) {
+                    final (value, label) = entry;
+                    return AppDropdownItem<String>(value: value, label: label);
+                  }).toList(),
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() {
+                        _dataSourceBase = v;
+                        _dataSourceFlowSlug = null;
+                      });
+                      if (v == 'system:operators_with_flow' &&
+                          _availableFlows.isEmpty) {
+                        _loadFlows();
                       }
-                    },
-                  ),
+                    }
+                  },
                 ),
                 if (_dataSourceBase == 'system:operators_with_flow') ...[
                   const SizedBox(height: 10),
-                  const Text(
-                    'Flow asignado',
-                    style: AppTextStyles.btnSecondary,
-                  ),
-                  const SizedBox(height: 6),
                   if (_loadingFlows)
                     const Center(
                       child: Padding(
@@ -2036,34 +2013,17 @@ class _FieldDialogState extends State<_FieldDialog> {
                       ),
                     )
                   else
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.ctSurface2,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.ctBorder2),
-                      ),
-                      child: DropdownButton<String>(
-                        value: _dataSourceFlowSlug,
-                        isExpanded: true,
-                        underline: const SizedBox.shrink(),
-                        dropdownColor: AppColors.ctSurface,
-                        hint: Text('Selecciona un flow',
-                            style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
-                        items: _availableFlows.map((f) {
-                          final slug = f['slug'] as String? ?? '';
-                          final name = f['name'] as String? ?? slug;
-                          return DropdownMenuItem<String>(
-                            value: slug,
-                            child: Text(name,
-                                style: AppTextStyles.body),
-                          );
-                        }).toList(),
-                        onChanged: (v) =>
-                            setState(() => _dataSourceFlowSlug = v),
-                      ),
+                    AppDropdown<String>(
+                      label: 'Flow asignado',
+                      value: _dataSourceFlowSlug,
+                      hint: 'Selecciona un flow',
+                      items: _availableFlows.map((f) {
+                        final slug = f['slug'] as String? ?? '';
+                        final name = f['name'] as String? ?? slug;
+                        return AppDropdownItem<String>(value: slug, label: name);
+                      }).toList(),
+                      onChanged: (v) =>
+                          setState(() => _dataSourceFlowSlug = v),
                     ),
                 ],
               ],
@@ -2143,46 +2103,18 @@ class _FieldDialogState extends State<_FieldDialog> {
               // Fill strategy (select type only, not for static)
               if (_type == 'select' && _dataSourceBase != 'static') ...[
                 const SizedBox(height: 14),
-                const Text(
-                  'Cuando se ejecuta conversacionalmente',
-                  style: AppTextStyles.btnSecondary,
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.ctSurface2,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.ctBorder2),
-                  ),
-                  child: DropdownButton<String>(
-                    value: _fillStrategy,
-                    isExpanded: true,
-                    underline: const SizedBox.shrink(),
-                    dropdownColor: AppColors.ctSurface,
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'conversational_list',
-                        child: Text('Mostrar lista de opciones al operador',
-                            style: AppTextStyles.body),
-                      ),
-                      DropdownMenuItem(
-                        value: 'inherit_actor',
-                        child: Text('Usar el operador actual',
-                            style: AppTextStyles.body),
-                      ),
-                      DropdownMenuItem(
-                        value: 'defer_dashboard',
-                        child: Text('Pedir al supervisor en Tareas',
-                            style: AppTextStyles.body),
-                      ),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setState(() => _fillStrategy = v);
-                    },
-                  ),
+                AppDropdown<String>(
+                  label: 'Cuando se ejecuta conversacionalmente',
+                  value: _fillStrategy,
+                  hint: 'Selecciona estrategia',
+                  items: const [
+                    AppDropdownItem(value: 'conversational_list', label: 'Mostrar lista de opciones al operador'),
+                    AppDropdownItem(value: 'inherit_actor', label: 'Usar el operador actual'),
+                    AppDropdownItem(value: 'defer_dashboard', label: 'Pedir al supervisor en Tareas'),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setState(() => _fillStrategy = v);
+                  },
                 ),
               ],
               // Catalog selector (asset_ref type only)
@@ -2215,47 +2147,24 @@ class _FieldDialogState extends State<_FieldDialog> {
                     ),
                   )
                 else
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.ctSurface2,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: _catalogSlug == null && !_assetRefValid
-                            ? AppColors.ctDanger
-                            : AppColors.ctBorder2,
-                      ),
-                    ),
-                    child: DropdownButton<String>(
-                      value: _catalogSlug,
-                      isExpanded: true,
-                      underline: const SizedBox.shrink(),
-                      dropdownColor: AppColors.ctSurface,
-                      hint: Text(
-                        'Selecciona un catálogo',
-                        style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                      ),
-                      items: _availableCatalogs.map((cat) {
-                        final slug = cat['slug'] as String? ?? '';
-                        final name = cat['name'] as String? ?? slug;
-                        return DropdownMenuItem<String>(
-                          value: slug,
-                          child: Text(
-                            name,
-                            style: AppTextStyles.body,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (v) {
-                        setState(() {
-                          _catalogSlug = v;
-                          _selectedItemId = null;
-                          _selectedItemDisplay = null;
-                        });
-                      },
-                    ),
+                  AppDropdown<String>(
+                    value: _catalogSlug,
+                    hint: 'Selecciona un catálogo',
+                    errorText: _catalogSlug == null && !_assetRefValid
+                        ? 'Selecciona un catálogo'
+                        : null,
+                    items: _availableCatalogs.map((cat) {
+                      final slug = cat['slug'] as String? ?? '';
+                      final name = cat['name'] as String? ?? slug;
+                      return AppDropdownItem<String>(value: slug, label: name);
+                    }).toList(),
+                    onChanged: (v) {
+                      setState(() {
+                        _catalogSlug = v;
+                        _selectedItemId = null;
+                        _selectedItemDisplay = null;
+                      });
+                    },
                   ),
               if (_catalogSlug != null) ...[
                 const SizedBox(height: 10),
@@ -2348,96 +2257,39 @@ class _FieldDialogState extends State<_FieldDialog> {
                         style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                       ),
                       const SizedBox(height: 6),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.ctSurface2,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.ctBorder2),
-                        ),
-                        child: DropdownButton<String>(
-                          value: _showIfField,
-                          isExpanded: true,
-                          underline: const SizedBox.shrink(),
-                          dropdownColor: AppColors.ctSurface,
-                          hint: Text(
-                            'Selecciona un campo',
-                            style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+                      AppDropdown<String?>(
+                        value: _showIfField,
+                        hint: 'Selecciona un campo',
+                        items: [
+                          const AppDropdownItem<String?>(
+                            value: null,
+                            label: '— Sin condición —',
                           ),
-                          items: [
-                            DropdownMenuItem<String>(
-                              value: null,
-                              child: Text(
-                                '— Sin condición —',
-                                style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                              ),
-                            ),
-                            ...widget.flowFields.map((f) {
-                              final key = f['key'] as String? ?? '';
-                              final label = f['label'] as String? ?? key;
-                              return DropdownMenuItem<String>(
-                                value: key,
-                                child: Text(
-                                  label,
-                                  style: AppTextStyles.body,
-                                ),
-                              );
-                            }),
-                          ],
-                          onChanged: (v) => setState(() {
-                            _showIfField = v;
-                            if (v == null) _showIfOp = null;
+                          ...widget.flowFields.map((f) {
+                            final key = f['key'] as String? ?? '';
+                            final label = f['label'] as String? ?? key;
+                            return AppDropdownItem<String?>(value: key, label: label);
                           }),
-                        ),
+                        ],
+                        onChanged: (v) => setState(() {
+                          _showIfField = v;
+                          if (v == null) _showIfOp = null;
+                        }),
                       ),
                       if (_showIfField != null) ...[
                         const SizedBox(height: 8),
                         // Operator selector
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.ctSurface2,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.ctBorder2),
-                          ),
-                          child: DropdownButton<String>(
-                            value: _showIfOp,
-                            isExpanded: true,
-                            underline: const SizedBox.shrink(),
-                            dropdownColor: AppColors.ctSurface,
-                            hint: Text(
-                              'Operador',
-                              style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: 'eq',
-                                child: Text('es igual a',
-                                    style: AppTextStyles.body),
-                              ),
-                              DropdownMenuItem(
-                                value: 'neq',
-                                child: Text('es distinto de',
-                                    style: AppTextStyles.body),
-                              ),
-                              DropdownMenuItem(
-                                value: 'in',
-                                child: Text('está entre (separado por comas)',
-                                    style: AppTextStyles.body),
-                              ),
-                              DropdownMenuItem(
-                                value: 'not_in',
-                                child: Text('no está entre (separado por comas)',
-                                    style: AppTextStyles.body),
-                              ),
-                            ],
-                            onChanged: (v) =>
-                                setState(() => _showIfOp = v),
-                          ),
+                        AppDropdown<String>(
+                          value: _showIfOp,
+                          hint: 'Operador',
+                          items: const [
+                            AppDropdownItem(value: 'eq', label: 'es igual a'),
+                            AppDropdownItem(value: 'neq', label: 'es distinto de'),
+                            AppDropdownItem(value: 'in', label: 'está entre (separado por comas)'),
+                            AppDropdownItem(value: 'not_in', label: 'no está entre (separado por comas)'),
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _showIfOp = v),
                         ),
                         const SizedBox(height: 8),
                         // Value input
