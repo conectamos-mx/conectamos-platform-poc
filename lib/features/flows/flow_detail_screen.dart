@@ -1663,7 +1663,6 @@ class _FieldDialog extends StatefulWidget {
 const _kDataSources = [
   ('static', 'Opciones estáticas'),
   ('system:operators', 'Operadores del tenant'),
-  ('system:operators_with_flow', 'Operadores con flow asignado'),
 ];
 
 class _FieldDialogState extends State<_FieldDialog> {
@@ -1673,10 +1672,6 @@ class _FieldDialogState extends State<_FieldDialog> {
 
   // select type state
   String _dataSourceBase = 'system:operators';
-  String? _dataSourceFlowSlug;
-  String _fillStrategy = 'conversational_list';
-  List<Map<String, dynamic>> _availableFlows = [];
-  bool _loadingFlows = false;
 
   // static options state
   List<String> _staticOptions = [];
@@ -1703,22 +1698,11 @@ class _FieldDialogState extends State<_FieldDialog> {
   String get _fieldKey => _fieldKeyify(_labelCtrl.text.trim());
   bool get _fieldKeyValid => _fieldKey.length >= 2;
 
-  String get _resolvedDataSource {
-    if (_dataSourceBase == 'static') return 'static';
-    if (_dataSourceBase == 'system:operators_with_flow') {
-      if (_dataSourceFlowSlug == null) return _dataSourceBase;
-      return 'system:operators_with_flow:$_dataSourceFlowSlug';
-    }
-    return _dataSourceBase;
-  }
-
   bool get _selectValid =>
       _type != 'select' ||
       (_dataSourceBase == 'static'
           ? _staticOptions.isNotEmpty
-          : (_dataSourceBase == 'system:operators' ||
-              (_dataSourceBase == 'system:operators_with_flow' &&
-                  _dataSourceFlowSlug != null)));
+          : _dataSourceBase == 'system:operators');
 
   @override
   void initState() {
@@ -1730,15 +1714,13 @@ class _FieldDialogState extends State<_FieldDialog> {
       _descCtrl.text = widget.field!['description'] as String? ?? '';
       final ds = widget.field!['data_source'] as String?;
       if (ds != null) {
-        if (ds.startsWith('system:operators_with_flow:')) {
-          _dataSourceBase = 'system:operators_with_flow';
-          _dataSourceFlowSlug = ds.substring('system:operators_with_flow:'.length);
+        // Migrate legacy operators_with_flow to system:operators
+        if (ds.startsWith('system:operators_with_flow')) {
+          _dataSourceBase = 'system:operators';
         } else {
           _dataSourceBase = ds;
         }
       }
-      _fillStrategy = widget.field!['fill_strategy'] as String? ??
-          'conversational_list';
       final rawOpts = widget.field!['options'];
       if (rawOpts is List) {
         _staticOptions = List<String>.from(rawOpts.map((e) => e.toString()));
@@ -1768,33 +1750,10 @@ class _FieldDialogState extends State<_FieldDialog> {
       }
     }
     _labelCtrl.addListener(_onLabelChanged);
-    if (_type == 'select') _loadFlows();
     if (_type == 'asset_ref') _loadCatalogs();
   }
 
   void _onLabelChanged() => setState(() {});
-
-  Future<void> _loadFlows() async {
-    if (widget.tenantWorkerId.isEmpty) return;
-    setState(() => _loadingFlows = true);
-    try {
-      final flows = await FlowsApi.getFlowsByWorker(
-        tenantWorkerId: widget.tenantWorkerId,
-      );
-      if (!mounted) return;
-      setState(() {
-        _availableFlows = flows;
-        if (_dataSourceFlowSlug != null &&
-            !flows.any((f) => f['slug'] == _dataSourceFlowSlug)) {
-          _dataSourceFlowSlug = null;
-        }
-        _loadingFlows = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loadingFlows = false);
-    }
-  }
 
   Future<void> _loadCatalogs() async {
     if (_loadingCatalogs) return;
@@ -1849,17 +1808,15 @@ class _FieldDialogState extends State<_FieldDialog> {
       if (_dataSourceBase == 'static') {
         updated['options'] = List<String>.from(_staticOptions);
         updated.remove('data_source');
-        updated.remove('fill_strategy');
       } else {
-        updated['data_source'] = _resolvedDataSource;
-        updated['fill_strategy'] = _fillStrategy;
+        updated['data_source'] = _dataSourceBase;
         updated.remove('options');
       }
     } else {
       updated.remove('data_source');
-      updated.remove('fill_strategy');
       updated.remove('options');
     }
+    updated.remove('fill_strategy');
     if (_type == 'asset_ref') {
       updated['catalog_slug'] = _catalogSlug;
       if (_selectedItemId != null) {
@@ -1987,9 +1944,6 @@ class _FieldDialogState extends State<_FieldDialog> {
                         _selectedItemDisplay = null;
                       }
                     });
-                    if (v == 'select' && _availableFlows.isEmpty) {
-                      _loadFlows();
-                    }
                     if (v == 'asset_ref' && _availableCatalogs.isEmpty) {
                       _loadCatalogs();
                     }
@@ -2009,63 +1963,9 @@ class _FieldDialogState extends State<_FieldDialog> {
                     return AppDropdownItem<String>(value: value, label: label);
                   }).toList(),
                   onChanged: (v) {
-                    if (v != null) {
-                      setState(() {
-                        _dataSourceBase = v;
-                        _dataSourceFlowSlug = null;
-                      });
-                      if (v == 'system:operators_with_flow' &&
-                          _availableFlows.isEmpty) {
-                        _loadFlows();
-                      }
-                    }
+                    if (v != null) setState(() => _dataSourceBase = v);
                   },
                 ),
-                if (_dataSourceBase == 'system:operators_with_flow') ...[
-                  const SizedBox(height: 10),
-                  if (_loadingFlows)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: CircularProgressIndicator(
-                            color: AppColors.ctTeal, strokeWidth: 2),
-                      ),
-                    )
-                  else if (_availableFlows.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.ctBorder),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'No hay flujos disponibles para este worker',
-                        style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                      ),
-                    )
-                  else ...[
-                    Row(
-                      children: [
-                        Text('Flow asignado', style: AppTextStyles.formLabel),
-                        const SizedBox(width: 4),
-                        Text('*', style: AppTextStyles.formLabel.copyWith(color: AppColors.ctDanger)),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    AppDropdown<String>(
-                      value: _dataSourceFlowSlug,
-                      hint: 'Selecciona un flow',
-                      items: _availableFlows.map((f) {
-                        final slug = f['slug'] as String? ?? '';
-                        final name = f['name'] as String? ?? slug;
-                        return AppDropdownItem<String>(value: slug, label: name);
-                      }).toList(),
-                      onChanged: (v) =>
-                          setState(() => _dataSourceFlowSlug = v),
-                    ),
-                  ],
-                ],
               ],
 
               // Static options (select + static source only)
@@ -2143,23 +2043,6 @@ class _FieldDialogState extends State<_FieldDialog> {
                 ),
               ],
 
-              // Fill strategy (select type only, not for static)
-              if (_type == 'select' && _dataSourceBase != 'static') ...[
-                const SizedBox(height: 14),
-                AppDropdown<String>(
-                  label: 'Cuando se ejecuta conversacionalmente',
-                  value: _fillStrategy,
-                  hint: 'Selecciona estrategia',
-                  items: const [
-                    AppDropdownItem(value: 'conversational_list', label: 'Mostrar lista de opciones al operador'),
-                    AppDropdownItem(value: 'inherit_actor', label: 'Usar el operador actual'),
-                    AppDropdownItem(value: 'defer_dashboard', label: 'Pedir al supervisor en Tareas'),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) setState(() => _fillStrategy = v);
-                  },
-                ),
-              ],
               // Catalog selector (asset_ref type only)
               if (_type == 'asset_ref') ...[
                 const SizedBox(height: 14),
