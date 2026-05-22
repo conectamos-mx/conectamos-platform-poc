@@ -17,6 +17,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_dropdown.dart';
+import '../../shared/widgets/app_multi_select.dart';
 import '../../shared/widgets/app_text_field.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1694,6 +1695,7 @@ class _FieldDialogState extends State<_FieldDialog> {
   String? _showIfOp;
   String? _showIfRefType;
   final _showIfValueCtrl = TextEditingController();
+  List<String> _showIfValues = []; // for op in/not_in
 
   bool get _isEdit => widget.field != null;
   bool get _assetRefValid => _type != 'asset_ref' || _catalogSlug != null;
@@ -1750,7 +1752,16 @@ class _FieldDialogState extends State<_FieldDialog> {
     if (showIf != null) {
       _showIfField = showIf['field'] as String?;
       _showIfOp = showIf['op'] as String?;
-      _showIfValueCtrl.text = showIf['value'] as String? ?? '';
+      final rawValue = showIf['value'];
+      if (_showIfOp == 'in' || _showIfOp == 'not_in') {
+        if (rawValue is List) {
+          _showIfValues = List<String>.from(rawValue.map((e) => e.toString()));
+        } else if (rawValue is String && rawValue.isNotEmpty) {
+          _showIfValues = rawValue.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        }
+      } else {
+        _showIfValueCtrl.text = rawValue as String? ?? '';
+      }
       if (_showIfField != null) {
         final ref = widget.flowFields.where((f) => f['key'] == _showIfField).firstOrNull;
         _showIfRefType = ref?['type'] as String?;
@@ -1864,10 +1875,11 @@ class _FieldDialogState extends State<_FieldDialog> {
       updated.remove('item_display');
     }
     if (_showIfField != null && _showIfOp != null) {
+      final isMultiOp = _showIfOp == 'in' || _showIfOp == 'not_in';
       updated['show_if'] = {
         'field': _showIfField,
         'op': _showIfOp,
-        'value': _showIfValueCtrl.text.trim(),
+        'value': isMultiOp ? _showIfValues : _showIfValueCtrl.text.trim(),
       };
     } else {
       updated.remove('show_if');
@@ -2316,6 +2328,7 @@ class _FieldDialogState extends State<_FieldDialog> {
                             _showIfField = v;
                             _showIfRefType = ref?['type'] as String?;
                             _showIfValueCtrl.text = '';
+                            _showIfValues = [];
                             if (v == null) _showIfOp = null;
                           });
                         },
@@ -2329,15 +2342,42 @@ class _FieldDialogState extends State<_FieldDialog> {
                           items: const [
                             AppDropdownItem(value: 'eq', label: 'es igual a'),
                             AppDropdownItem(value: 'neq', label: 'es distinto de'),
-                            AppDropdownItem(value: 'in', label: 'está entre (separado por comas)'),
-                            AppDropdownItem(value: 'not_in', label: 'no está entre (separado por comas)'),
+                            AppDropdownItem(value: 'in', label: 'está entre'),
+                            AppDropdownItem(value: 'not_in', label: 'no está entre'),
                           ],
-                          onChanged: (v) =>
-                              setState(() => _showIfOp = v),
+                          onChanged: (v) => setState(() {
+                            _showIfOp = v;
+                            _showIfValueCtrl.text = '';
+                            _showIfValues = [];
+                          }),
                         ),
                         const SizedBox(height: 8),
-                        // Value input — type-aware
-                        if (_showIfRefType == 'bool')
+                        // Value input — type-aware + multi-select for in/not_in
+                        if (_showIfOp == 'in' || _showIfOp == 'not_in')
+                          Builder(builder: (_) {
+                            final ref = widget.flowFields
+                                .where((f) => f['key'] == _showIfField)
+                                .firstOrNull;
+                            final opts = (ref?['options'] as List? ?? [])
+                                .map((e) => e.toString())
+                                .toList();
+                            if (opts.isEmpty) {
+                              return AppTextField(
+                                controller: _showIfValueCtrl,
+                                hint: 'Valores separados por coma…',
+                                helperText: 'Sin opciones definidas — escribe valores separados por coma',
+                              );
+                            }
+                            return AppMultiSelect<String>(
+                              items: opts
+                                  .map((o) => AppMultiSelectItem(value: o, label: o))
+                                  .toList(),
+                              selectedValues: _showIfValues,
+                              placeholder: 'Selecciona valores…',
+                              onChanged: (vals) => setState(() => _showIfValues = vals),
+                            );
+                          })
+                        else if (_showIfRefType == 'bool')
                           AppDropdown<String>(
                             value: _showIfValueCtrl.text.isEmpty
                                 ? null
