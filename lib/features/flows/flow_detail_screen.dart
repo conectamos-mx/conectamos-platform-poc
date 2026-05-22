@@ -2299,7 +2299,10 @@ class _FieldDialogState extends State<_FieldDialog> {
                             value: null,
                             label: '— Sin condición —',
                           ),
-                          ...widget.flowFields.map((f) {
+                          ...widget.flowFields
+                              .where((f) => !const ['photo', 'location']
+                                  .contains(f['type'] as String? ?? ''))
+                              .map((f) {
                             final key = f['key'] as String? ?? '';
                             final label = f['label'] as String? ?? key;
                             return AppDropdownItem<String?>(value: key, label: label);
