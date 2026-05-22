@@ -1692,6 +1692,7 @@ class _FieldDialogState extends State<_FieldDialog> {
   // show_if condition state
   String? _showIfField;
   String? _showIfOp;
+  String? _showIfRefType;
   final _showIfValueCtrl = TextEditingController();
 
   bool get _isEdit => widget.field != null;
@@ -1750,6 +1751,10 @@ class _FieldDialogState extends State<_FieldDialog> {
       _showIfField = showIf['field'] as String?;
       _showIfOp = showIf['op'] as String?;
       _showIfValueCtrl.text = showIf['value'] as String? ?? '';
+      if (_showIfField != null) {
+        final ref = widget.flowFields.where((f) => f['key'] == _showIfField).firstOrNull;
+        _showIfRefType = ref?['type'] as String?;
+      }
     }
     _labelCtrl.addListener(_onLabelChanged);
     if (_type == 'select') _loadFlows();
@@ -2300,10 +2305,17 @@ class _FieldDialogState extends State<_FieldDialog> {
                             return AppDropdownItem<String?>(value: key, label: label);
                           }),
                         ],
-                        onChanged: (v) => setState(() {
-                          _showIfField = v;
-                          if (v == null) _showIfOp = null;
-                        }),
+                        onChanged: (v) {
+                          final ref = v != null
+                              ? widget.flowFields.where((f) => f['key'] == v).firstOrNull
+                              : null;
+                          setState(() {
+                            _showIfField = v;
+                            _showIfRefType = ref?['type'] as String?;
+                            _showIfValueCtrl.text = '';
+                            if (v == null) _showIfOp = null;
+                          });
+                        },
                       ),
                       if (_showIfField != null) ...[
                         const SizedBox(height: 8),
@@ -2321,29 +2333,66 @@ class _FieldDialogState extends State<_FieldDialog> {
                               setState(() => _showIfOp = v),
                         ),
                         const SizedBox(height: 8),
-                        // Value input
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.ctSurface2,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.ctBorder2),
-                          ),
-                          child: TextField(
+                        // Value input — type-aware
+                        if (_showIfRefType == 'bool')
+                          AppDropdown<String>(
+                            value: _showIfValueCtrl.text.isEmpty
+                                ? null
+                                : _showIfValueCtrl.text,
+                            hint: 'Valor',
+                            items: const [
+                              AppDropdownItem(value: 'true', label: 'Sí / Verdadero'),
+                              AppDropdownItem(value: 'false', label: 'No / Falso'),
+                            ],
+                            onChanged: (v) => setState(() {
+                              _showIfValueCtrl.text = v ?? '';
+                            }),
+                          )
+                        else if (_showIfRefType == 'select')
+                          Builder(builder: (_) {
+                            final ref = widget.flowFields
+                                .where((f) => f['key'] == _showIfField)
+                                .firstOrNull;
+                            final opts = (ref?['options'] as List? ?? [])
+                                .map((e) => e.toString())
+                                .toList();
+                            if (opts.isEmpty) {
+                              return AppTextField(
+                                controller: _showIfValueCtrl,
+                                hint: 'Valor…',
+                              );
+                            }
+                            return AppDropdown<String>(
+                              value: _showIfValueCtrl.text.isEmpty
+                                  ? null
+                                  : _showIfValueCtrl.text,
+                              hint: 'Selecciona un valor',
+                              items: opts
+                                  .map((o) => AppDropdownItem(value: o, label: o))
+                                  .toList(),
+                              onChanged: (v) => setState(() {
+                                _showIfValueCtrl.text = v ?? '';
+                              }),
+                            );
+                          })
+                        else if (_showIfRefType == 'photo')
+                          AppTextField(
                             controller: _showIfValueCtrl,
-                            style: AppTextStyles.body,
-                            decoration: InputDecoration(
-                              hintText: 'Valor…',
-                              hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                              border: InputBorder.none,
-                              isDense: true,
-                              contentPadding:
-                                  EdgeInsets.symmetric(vertical: 8),
-                            ),
+                            hint: 'No disponible',
+                            enabled: false,
+                            helperText: 'No es posible condicionar visibilidad por foto',
+                          )
+                        else if (_showIfRefType == 'number')
+                          AppTextField(
+                            controller: _showIfValueCtrl,
+                            hint: 'Valor numérico…',
+                            keyboardType: TextInputType.number,
+                          )
+                        else
+                          AppTextField(
+                            controller: _showIfValueCtrl,
+                            hint: 'Valor…',
                           ),
-                        ),
                       ],
                       const SizedBox(height: 8),
                     ],
