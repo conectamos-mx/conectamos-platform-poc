@@ -2519,7 +2519,7 @@ class _FieldDialogState extends State<_FieldDialog> {
                               onChanged: (vals) => setState(() => _showIfValues = vals),
                             );
                           })
-                        else if (_showIfRefType == 'bool')
+                        else if (_showIfRefType == 'bool' || _showIfRefType == 'boolean')
                           AppDropdown<String>(
                             value: _showIfValueCtrl.text.isEmpty
                                 ? null
