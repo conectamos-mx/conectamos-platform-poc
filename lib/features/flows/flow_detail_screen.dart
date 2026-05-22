@@ -1453,8 +1453,34 @@ class _CamposTab extends StatelessWidget {
   final void Function(Map<String, dynamic> field, int index) onDeleteField;
   final VoidCallback onAddField;
 
+  String _resolveFieldLabel(String key) {
+    final match = fields.where((f) => f['key'] == key).firstOrNull;
+    return match?['label'] as String? ?? match?['key'] as String? ?? key;
+  }
+
+  Map<String, List<Map<String, dynamic>>> _groupByCondition(
+      List<Map<String, dynamic>> conds) {
+    final groups = <String, List<Map<String, dynamic>>>{};
+    for (final f in conds) {
+      final si = f['show_if'] as Map<String, dynamic>;
+      final field = si['field'] as String? ?? '';
+      final value = si['value'];
+      final valueStr =
+          value is List ? value.join(', ') : value.toString();
+      final key = '$field::$valueStr';
+      groups.putIfAbsent(key, () => []).add(f);
+    }
+    return groups;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final alwaysFields =
+        fields.where((f) => f['show_if'] == null).toList();
+    final conditionalFields =
+        fields.where((f) => f['show_if'] != null).toList();
+    final condGroups = _groupByCondition(conditionalFields);
+
     return CustomScrollView(
       slivers: [
         // Header
@@ -1492,27 +1518,115 @@ class _CamposTab extends StatelessWidget {
               ),
             ),
           )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            sliver: SliverReorderableList(
-              itemCount: fields.length,
-              onReorder: canManage ? onReorder : (int a, int b) {},
-              itemBuilder: (context, i) {
-                final field = fields[i];
-                final id = field['id']?.toString() ?? i.toString();
-                return _FieldRow(
-                  key: ValueKey(id),
-                  field: field,
-                  index: i,
-                  canManage: canManage,
-                  isLast: i == fields.length - 1,
-                  onEdit: () => onEditField(field, i),
-                  onDelete: () => onDeleteField(field, i),
-                );
-              },
+        else ...[
+          // ── Siempre presentes ──
+          if (alwaysFields.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _SectionDivider(
+                  label: 'SIEMPRE PRESENTES — ${alwaysFields.length}',
+                ),
+              ),
             ),
-          ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: SliverReorderableList(
+                itemCount: alwaysFields.length,
+                onReorder: canManage
+                    ? (oldIdx, newIdx) {
+                        // Map local indices back to global indices
+                        final globalOld = fields.indexOf(alwaysFields[oldIdx]);
+                        var globalNew = newIdx >= alwaysFields.length
+                            ? fields.indexOf(alwaysFields.last) + 1
+                            : fields.indexOf(alwaysFields[newIdx]);
+                        if (globalNew > globalOld) globalNew--;
+                        onReorder(globalOld, globalNew > globalOld ? globalNew + 1 : globalNew);
+                      }
+                    : (int a, int b) {},
+                itemBuilder: (context, i) {
+                  final field = alwaysFields[i];
+                  final id = field['id']?.toString() ?? 'a$i';
+                  return _FieldRow(
+                    key: ValueKey(id),
+                    field: field,
+                    index: i,
+                    canManage: canManage,
+                    isLast: i == alwaysFields.length - 1,
+                    onEdit: () => onEditField(field, fields.indexOf(field)),
+                    onDelete: () => onDeleteField(field, fields.indexOf(field)),
+                  );
+                },
+              ),
+            ),
+          ],
+
+          // ── Condicionales ──
+          if (conditionalFields.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _SectionDivider(
+                  label: 'CONDICIONALES — ${conditionalFields.length}',
+                  labelColor: AppColors.ctTeal,
+                ),
+              ),
+            ),
+            ...condGroups.entries.expand((entry) {
+              final parts = entry.key.split('::');
+              final fieldKey = parts.first;
+              final valueStr = parts.length > 1 ? parts.sublist(1).join('::') : '';
+              final fieldLabel = _resolveFieldLabel(fieldKey);
+              final groupFields = entry.value;
+
+              return [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.ctTealLight,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '↳ Si $fieldLabel = $valueStr',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.ctNavy,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, i) {
+                        final field = groupFields[i];
+                        return _FieldRow(
+                          key: ValueKey(field['id']?.toString() ?? 'c$i'),
+                          field: field,
+                          index: i,
+                          canManage: canManage,
+                          isLast: i == groupFields.length - 1,
+                          indented: true,
+                          onEdit: () =>
+                              onEditField(field, fields.indexOf(field)),
+                          onDelete: () =>
+                              onDeleteField(field, fields.indexOf(field)),
+                        );
+                      },
+                      childCount: groupFields.length,
+                    ),
+                  ),
+                ),
+              ];
+            }),
+          ],
+        ],
 
         const SliverToBoxAdapter(child: SizedBox(height: 20)),
       ],
@@ -1531,6 +1645,7 @@ class _FieldRow extends StatelessWidget {
     required this.isLast,
     required this.onEdit,
     required this.onDelete,
+    this.indented = false,
   });
 
   final Map<String, dynamic> field;
@@ -1539,6 +1654,7 @@ class _FieldRow extends StatelessWidget {
   final bool isLast;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final bool indented;
 
   @override
   Widget build(BuildContext context) {
@@ -1551,14 +1667,16 @@ class _FieldRow extends StatelessWidget {
         .map((e) => e.$2)
         .firstOrNull ?? type;
 
-    return Container(
-      color: AppColors.ctSurface,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-            child: Row(
+    return Padding(
+      padding: EdgeInsets.only(left: indented ? 16.0 : 0.0),
+      child: Container(
+        color: AppColors.ctSurface,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              child: Row(
               children: [
                 if (canManage)
                   ReorderableDragStartListener(
@@ -1630,8 +1748,41 @@ class _FieldRow extends StatelessWidget {
               ],
             ),
           ),
-          if (!isLast)
-            const Divider(height: 1, color: AppColors.ctBorder),
+            if (!isLast)
+              const Divider(height: 1, color: AppColors.ctBorder),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── _SectionDivider ──────────────────────────────────────────────────────────
+
+class _SectionDivider extends StatelessWidget {
+  const _SectionDivider({required this.label, this.labelColor});
+  final String label;
+  final Color? labelColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = labelColor ?? AppColors.ctText3;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: AppColors.ctBorder, height: 1)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              label,
+              style: AppTextStyles.kpiLabel.copyWith(
+                color: color,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: AppColors.ctBorder, height: 1)),
         ],
       ),
     );
