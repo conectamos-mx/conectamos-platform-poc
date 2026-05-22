@@ -59,8 +59,8 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
   final _link = LayerLink();
   final _triggerKey = GlobalKey();
   final _searchCtrl = TextEditingController();
+  final _tapGroupId = Object();
   bool _open = false;
-  bool _closing = false;
   List<AppDropdownItem<T>> _filtered = [];
 
   double _getTriggerWidth() {
@@ -77,9 +77,7 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
   @override
   void didUpdateWidget(AppDropdown<T> old) {
     super.didUpdateWidget(old);
-    if (old.value != widget.value) {
-      setState(() {});
-    }
+    if (old.value != widget.value) setState(() {});
     if (old.items != widget.items) {
       setState(() {
         _filtered = widget.items
@@ -102,50 +100,39 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
 
   bool get _hasError => widget.errorText != null;
 
-  Color get _borderColor {
-    if (_hasError) return AppColors.ctDanger;
-    if (_open) return AppColors.ctTeal;
-    return AppColors.ctBorder2;
-  }
-
-  double get _borderWidth => _open ? 1.5 : 1.0;
-
-  void _toggle() {
-    if (!widget.enabled) return;
-    if (_closing) return;
-    if (_open) {
-      _close();
-    } else {
-      setState(() => _open = true);
-      _searchCtrl.clear();
-      _filtered = widget.items;
-      _controller.show();
-    }
+  void _open_() {
+    if (!widget.enabled || _open) return;
+    _searchCtrl.clear();
+    _filtered = widget.items;
+    setState(() => _open = true);
+    _controller.show();
   }
 
   void _close() {
     if (!_open) return;
-    _closing = true;
     setState(() => _open = false);
     _controller.hide();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _closing = false;
-    });
+  }
+
+  void _toggle() {
+    if (_open) {
+      _close();
+    } else {
+      _open_();
+    }
   }
 
   void _select(AppDropdownItem<T> item) {
     if (!item.enabled) return;
+    final value = item.value;
     _close();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.onChanged(item.value);
-    });
+    widget.onChanged(value);
   }
 
   void _onSearch(String query) {
     setState(() {
       _filtered = widget.items
-          .where((i) =>
-              i.label.toLowerCase().contains(query.toLowerCase()))
+          .where((i) => i.label.toLowerCase().contains(query.toLowerCase()))
           .toList();
     });
   }
@@ -166,8 +153,10 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
             controller: _controller,
             overlayChildBuilder: (_) => _buildOverlay(),
             child: TapRegion(
+              groupId: _tapGroupId,
               onTapOutside: (_) => _close(),
               child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: _toggle,
                 child: AnimatedContainer(
                   key: _triggerKey,
@@ -181,8 +170,12 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
                         : AppColors.ctSurface2,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: _borderColor,
-                      width: _borderWidth,
+                      color: _hasError
+                          ? AppColors.ctDanger
+                          : _open
+                              ? AppColors.ctTeal
+                              : AppColors.ctBorder2,
+                      width: _open ? 1.5 : 1.0,
                     ),
                   ),
                   child: Row(
@@ -226,18 +219,14 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
         ),
         if (_hasError) ...[
           const SizedBox(height: 3),
-          Text(
-            widget.errorText!,
-            style:
-                AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
-          ),
+          Text(widget.errorText!,
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.ctDanger)),
         ] else if (widget.helperText != null) ...[
           const SizedBox(height: 3),
-          Text(
-            widget.helperText!,
-            style:
-                AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
-          ),
+          Text(widget.helperText!,
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.ctText3)),
         ],
       ],
     );
@@ -252,10 +241,10 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
       offset: const Offset(0, 4),
       child: Align(
         alignment: Alignment.topLeft,
-        child: Material(
-          color: Colors.transparent,
-          child: TapRegion(
-            onTapOutside: (_) => _close(),
+        child: TapRegion(
+          groupId: _tapGroupId,
+          child: Material(
+            color: Colors.transparent,
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 maxHeight: widget.maxOverlayHeight,
@@ -298,13 +287,13 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
                                 horizontal: 10, vertical: 8),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(6),
-                              borderSide: const BorderSide(
-                                  color: AppColors.ctBorder),
+                              borderSide:
+                                  const BorderSide(color: AppColors.ctBorder),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(6),
-                              borderSide: const BorderSide(
-                                  color: AppColors.ctBorder),
+                              borderSide:
+                                  const BorderSide(color: AppColors.ctBorder),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(6),
@@ -321,11 +310,9 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
                       child: _filtered.isEmpty
                           ? Padding(
                               padding: const EdgeInsets.all(16),
-                              child: Text(
-                                'Sin resultados',
-                                style: AppTextStyles.body
-                                    .copyWith(color: AppColors.ctText3),
-                              ),
+                              child: Text('Sin resultados',
+                                  style: AppTextStyles.body
+                                      .copyWith(color: AppColors.ctText3)),
                             )
                           : ListView.builder(
                               shrinkWrap: true,
@@ -334,11 +321,9 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
                               itemCount: _filtered.length,
                               itemBuilder: (_, i) {
                                 final item = _filtered[i];
-                                final isSelected =
-                                    item.value == widget.value;
                                 return _DropdownItemTile(
                                   item: item,
-                                  isSelected: isSelected,
+                                  isSelected: item.value == widget.value,
                                   onTap: () => _select(item),
                                 );
                               },
