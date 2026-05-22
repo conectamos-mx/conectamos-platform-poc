@@ -57,9 +57,15 @@ class AppDropdown<T> extends StatefulWidget {
 class _AppDropdownState<T> extends State<AppDropdown<T>> {
   final _controller = OverlayPortalController();
   final _link = LayerLink();
+  final _triggerKey = GlobalKey();
   final _searchCtrl = TextEditingController();
   bool _open = false;
   List<AppDropdownItem<T>> _filtered = [];
+
+  double _getTriggerWidth() {
+    final box = _triggerKey.currentContext?.findRenderObject() as RenderBox?;
+    return box?.size.width ?? 240;
+  }
 
   @override
   void initState() {
@@ -70,12 +76,17 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
   @override
   void didUpdateWidget(AppDropdown<T> old) {
     super.didUpdateWidget(old);
+    if (old.value != widget.value) {
+      setState(() {});
+    }
     if (old.items != widget.items) {
-      _filtered = widget.items
-          .where((i) => i.label
-              .toLowerCase()
-              .contains(_searchCtrl.text.toLowerCase()))
-          .toList();
+      setState(() {
+        _filtered = widget.items
+            .where((i) => i.label
+                .toLowerCase()
+                .contains(_searchCtrl.text.toLowerCase()))
+            .toList();
+      });
     }
   }
 
@@ -151,6 +162,7 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
               child: TapRegion(
                 onTapOutside: (_) => _close(),
                 child: AnimatedContainer(
+                  key: _triggerKey,
                   duration: const Duration(milliseconds: 150),
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(
@@ -239,7 +251,8 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 maxHeight: widget.maxOverlayHeight,
-                minWidth: 200,
+                minWidth: _getTriggerWidth(),
+                maxWidth: _getTriggerWidth(),
               ),
               child: Container(
                 decoration: BoxDecoration(
@@ -336,7 +349,7 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
 
 // ── _DropdownItemTile ────────────────────────────────────────────────────────
 
-class _DropdownItemTile<T> extends StatefulWidget {
+class _DropdownItemTile<T> extends StatelessWidget {
   const _DropdownItemTile({
     required this.item,
     required this.isSelected,
@@ -348,81 +361,73 @@ class _DropdownItemTile<T> extends StatefulWidget {
   final VoidCallback onTap;
 
   @override
-  State<_DropdownItemTile<T>> createState() => _DropdownItemTileState<T>();
-}
-
-class _DropdownItemTileState<T> extends State<_DropdownItemTile<T>> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      cursor: widget.item.enabled
+      cursor: item.enabled
           ? SystemMouseCursors.click
           : SystemMouseCursors.basic,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 100),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          decoration: BoxDecoration(
-            color: widget.isSelected
-                ? AppColors.ctTealLight
-                : _hovered
-                    ? AppColors.ctSurface2
-                    : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          margin: const EdgeInsets.symmetric(horizontal: 6),
-          child: Row(
-            children: [
-              if (widget.item.icon != null) ...[
-                Icon(
-                  widget.item.icon,
-                  size: 15,
-                  color: widget.isSelected
-                      ? AppColors.ctTealDark
-                      : widget.item.enabled
-                          ? AppColors.ctText2
-                          : AppColors.ctText3,
-                ),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.item.label,
-                      style: AppTextStyles.body.copyWith(
-                        color: widget.isSelected
-                            ? AppColors.ctTealDark
-                            : widget.item.enabled
-                                ? AppColors.ctText
-                                : AppColors.ctText3,
-                        fontWeight: widget.isSelected
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                      ),
-                    ),
-                    if (widget.item.subtitle != null) ...[
-                      const SizedBox(height: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: item.enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(6),
+          hoverColor: AppColors.ctSurface2,
+          splashColor: AppColors.ctTealLight.withValues(alpha: 0.5),
+          highlightColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: isSelected ? AppColors.ctTealLight : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            child: Row(
+              children: [
+                if (item.icon != null) ...[
+                  Icon(
+                    item.icon,
+                    size: 15,
+                    color: isSelected
+                        ? AppColors.ctTealDark
+                        : item.enabled
+                            ? AppColors.ctText2
+                            : AppColors.ctText3,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        widget.item.subtitle!,
-                        style: AppTextStyles.bodySmall
-                            .copyWith(color: AppColors.ctText3),
+                        item.label,
+                        style: AppTextStyles.body.copyWith(
+                          color: isSelected
+                              ? AppColors.ctTealDark
+                              : item.enabled
+                                  ? AppColors.ctText
+                                  : AppColors.ctText3,
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                        ),
                       ),
+                      if (item.subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          item.subtitle!,
+                          style: AppTextStyles.bodySmall
+                              .copyWith(color: AppColors.ctText3),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              if (widget.isSelected)
-                const Icon(Icons.check_rounded,
-                    size: 14, color: AppColors.ctTealDark),
-            ],
+                if (isSelected)
+                  const Icon(Icons.check_rounded,
+                      size: 14, color: AppColors.ctTealDark),
+              ],
+            ),
           ),
         ),
       ),
