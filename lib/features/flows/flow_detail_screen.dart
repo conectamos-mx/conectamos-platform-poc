@@ -605,7 +605,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
       final detail = data is Map ? data['detail'] as String? ?? '' : '';
       if (detail.contains('scheduled') && detail.contains('proactive_trigger')) {
         return 'Para usar el trigger "Programado" primero configura '
-            'la plantilla de WhatsApp en la tab Comportamiento.';
+            'la plantilla de mensaje proactivo en esta misma tab.';
       }
       if (detail.isNotEmpty) return detail;
     }
@@ -2691,8 +2691,7 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
     _conditions = List.from(widget.conditions);
     _allowedRoleIds = List.from(widget.allowedRoleIds);
     _triggerSources = List.from(widget.triggerSources);
-    if (widget.triggerSources.contains('scheduled') &&
-        widget.tenantWorkerId.isNotEmpty) {
+    if (widget.tenantWorkerId.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _loadWaChannel();
         _initMappingRows();
@@ -2720,13 +2719,6 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
     }
     if (!listEquals(old.triggerSources, widget.triggerSources)) {
       setState(() => _triggerSources = List.from(widget.triggerSources));
-    }
-    // When scheduled trigger is added, load WA channel
-    final wasScheduled = old.triggerSources.contains('scheduled');
-    final isScheduled = widget.triggerSources.contains('scheduled');
-    if (!wasScheduled && isScheduled && widget.tenantWorkerId.isNotEmpty) {
-      _loadWaChannel();
-      _initMappingRows();
     }
   }
 
@@ -2957,27 +2949,26 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
           ),
           const SizedBox(height: 16),
 
-          // ── 2. Plantilla de inicio programado (scheduled) ──────────────
-          if (widget.triggerSources.contains('scheduled')) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.ctSurface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.ctBorder),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Plantilla de inicio programado',
-                    style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Selecciona la plantilla de WhatsApp aprobada que se enviará cuando este flujo se dispare de forma programada.',
-                    style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
-                  ),
+          // ── 2. Plantilla de mensaje proactivo ─────────────────────────
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.ctSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.ctBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Plantilla de mensaje proactivo para eventos programados',
+                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Se enviará al operador cuando este flujo sea iniciado por una asignación programada.',
+                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
+                ),
                   const SizedBox(height: 12),
                   if (_waChannelId == null)
                     Text(
@@ -3118,9 +3109,8 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                   ],
                 ],
               ),
-            ),
-            const SizedBox(height: 16),
-          ],
+          ),
+          const SizedBox(height: 16),
 
           // ── 3. Roles autorizados ───────────────────────────────────────
           Container(
