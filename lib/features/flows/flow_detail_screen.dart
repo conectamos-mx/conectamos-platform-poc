@@ -2886,6 +2886,35 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
     );
   }
 
+  Widget _buildTemplateBodyPreview(String body) {
+    final spans = <TextSpan>[];
+    final regex = RegExp(r'(\{\{\d+\}\})');
+    int lastEnd = 0;
+    for (final match in regex.allMatches(body)) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(
+          text: body.substring(lastEnd, match.start),
+          style: AppTextStyles.body,
+        ));
+      }
+      spans.add(TextSpan(
+        text: match.group(0),
+        style: AppTextStyles.body.copyWith(
+          color: AppColors.ctTeal,
+          fontWeight: FontWeight.w600,
+        ),
+      ));
+      lastEnd = match.end;
+    }
+    if (lastEnd < body.length) {
+      spans.add(TextSpan(
+        text: body.substring(lastEnd),
+        style: AppTextStyles.body,
+      ));
+    }
+    return RichText(text: TextSpan(children: spans));
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -3032,6 +3061,55 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                         if (v != null) _updateProactiveTrigger(templateId: v);
                       },
                     ),
+                    // ── Template preview ──
+                    Builder(builder: (_) {
+                      final tid = widget.proactiveTrigger['template_id'] as String?;
+                      final sel = tid == null
+                          ? null
+                          : _approvedTemplates
+                              .where((t) => (t['id'] as String? ?? t['name'] as String? ?? '') == tid)
+                              .firstOrNull;
+                      if (sel == null) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.ctSurface,
+                            border: Border.all(color: AppColors.ctBorder),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if ((sel['header_text'] as String?) != null) ...[
+                                Text(
+                                  sel['header_text'] as String,
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.ctText2,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                              ],
+                              _buildTemplateBodyPreview(
+                                sel['body_text'] as String? ?? '',
+                              ),
+                              if ((sel['footer_text'] as String?) != null) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  sel['footer_text'] as String,
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.ctText3,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
                     const SizedBox(height: 16),
                     Row(
                       children: [
