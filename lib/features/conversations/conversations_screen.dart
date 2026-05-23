@@ -47,6 +47,7 @@ final replyingToProvider =
     StateProvider<Map<String, dynamic>?>((ref) => null);
 final selectedConvOperatorIdProvider = StateProvider<String?>((ref) => null);
 final selectedChannelTypeProvider    = StateProvider<String?>((ref) => null);
+final selectedChannelWorkerTypeProvider = StateProvider<String?>((ref) => null);
 final selectedConvPhotoUrlProvider   = StateProvider<String?>((ref) => null);
 final channelUnreadProvider = StateProvider<Map<String, int>>((ref) => const {});
 // chat_id → 0 override set when user opens a chat; read by _loadAllChannelUnreads
@@ -137,10 +138,15 @@ class _ConversationsBodyState extends ConsumerState<_ConversationsBody> {
       if (!mounted) return;
       setState(() { _channels = active; _loadingChannels = false; });
       if (active.isNotEmpty && ref.read(selectedChannelIdProvider) == null) {
-        ref.read(selectedChannelIdProvider.notifier).state =
-            active.first['id'] as String?;
+        // Set worker type and channel type BEFORE channel ID,
+        // because the channel ID change triggers _fetchConversations
+        // which needs worker type to be already set.
         ref.read(selectedChannelTypeProvider.notifier).state =
             active.first['channel_type'] as String?;
+        ref.read(selectedChannelWorkerTypeProvider.notifier).state =
+            active.first['worker_type'] as String?;
+        ref.read(selectedChannelIdProvider.notifier).state =
+            active.first['id'] as String?;
       }
       _loadAllChannelUnreads(active, tenantId);
     } catch (_) {
@@ -232,9 +238,11 @@ class _ConversationsBodyState extends ConsumerState<_ConversationsBody> {
                 (c) => (c['id'] as String?) == id,
                 orElse: () => {},
               );
-              ref.read(selectedChannelIdProvider.notifier).state = id;
               ref.read(selectedChannelTypeProvider.notifier).state =
                   ch['channel_type'] as String?;
+              ref.read(selectedChannelWorkerTypeProvider.notifier).state =
+                  ch['worker_type'] as String?;
+              ref.read(selectedChannelIdProvider.notifier).state = id;
               ref.read(selectedChannelTabProvider.notifier).state = 0;
               ref.read(selectedChatIdProvider.notifier).state = null;
               ref.read(selectedChatNameProvider.notifier).state = null;
@@ -762,8 +770,11 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
     setState(() => _loading = true);
     try {
       final tenantId = ref.read(activeTenantIdProvider);
+      final wt = ref.read(selectedChannelWorkerTypeProvider);
+      final isSales = wt == 'sales' || wt == 'custom';
       final convs = await ConversationsApi.listConversations(
         channelId: channelId,
+        includeUnregistered: isSales,
       );
       if (mounted) {
         setState(() { _conversations = convs; _loading = false; });
@@ -945,11 +956,13 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
     });
 
     final selectedChatId = ref.watch(selectedChatIdProvider);
+    final workerType = ref.watch(selectedChannelWorkerTypeProvider);
+    final isSalesChannel = workerType == 'sales' || workerType == 'custom';
     final filtered = _conversations.where((conv) {
       final chatIdVal = conv['chat_id'] as String?;
       if (chatIdVal == null || chatIdVal.isEmpty) return false;
-      // Exclude unregistered — shown in archived panel below
-      if (conv['operator_id'] == null) return false;
+      // Exclude unregistered — shown in archived panel below (only for operative channels)
+      if (!isSalesChannel && conv['operator_id'] == null) return false;
       final name = conv['display_name'] as String? ?? '';
       return name.toLowerCase().contains(_search.toLowerCase());
     }).toList();
@@ -961,13 +974,13 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
       child: Column(
         children: [
           _searchBar(),
-          if (_archivedConvs.isNotEmpty)
+          if (!isSalesChannel && _archivedConvs.isNotEmpty)
             _ArchivedEntryButton(
               count: _archivedConvs.length,
               expanded: _showArchived,
               onTap: () => setState(() => _showArchived = !_showArchived),
             ),
-          if (_showArchived && _archivedConvs.isNotEmpty)
+          if (!isSalesChannel && _showArchived && _archivedConvs.isNotEmpty)
             _ArchivedPanel(
               convs: _archivedConvs,
               channelId: channelId,
