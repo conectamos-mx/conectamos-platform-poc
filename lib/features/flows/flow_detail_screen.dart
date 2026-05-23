@@ -2908,12 +2908,12 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                   'Disparadores del flujo',
                   style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 Text(
                   '¿Desde dónde puede iniciarse este flujo?',
                   style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
@@ -2991,31 +2991,29 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                   'Plantilla de mensaje proactivo para eventos programados',
                   style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 Text(
                   'Se enviará al operador cuando este flujo sea iniciado por una asignación programada.',
-                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
+                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                 ),
-                  const SizedBox(height: 12),
-                  if (_waChannelId == null)
-                    Text(
-                      'No se encontró canal de WhatsApp activo en este worker.',
-                      style: AppTextStyles.bodySmall.copyWith(
-                          fontSize: 12, color: AppColors.ctText3),
-                    )
-                  else if (_loadingTemplates)
-                    const SizedBox(
-                      height: 24, width: 24,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.ctTeal),
-                    )
-                  else if (_approvedTemplates.isEmpty)
-                    Text(
-                      'No hay plantillas aprobadas. Sincroniza las plantillas en Canales.',
-                      style: AppTextStyles.bodySmall.copyWith(
-                          fontSize: 12, color: AppColors.ctText3),
-                    )
-                  else ...[
+                const SizedBox(height: 12),
+                if (_waChannelId == null)
+                  Text(
+                    'No se encontró canal de WhatsApp activo en este worker.',
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+                  )
+                else if (_loadingTemplates)
+                  const SizedBox(
+                    height: 24, width: 24,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppColors.ctTeal),
+                  )
+                else if (_approvedTemplates.isEmpty)
+                  Text(
+                    'No hay plantillas aprobadas. Sincroniza las plantillas en Canales.',
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+                  )
+                else ...[
                     AppDropdown<String>(
                       label: 'Plantilla',
                       value: widget.proactiveTrigger['template_id'] as String?,
@@ -3060,8 +3058,7 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                     if (_mappingRows.isEmpty)
                       Text(
                         'Sin variables mapeadas. La plantilla se enviará sin reemplazos.',
-                        style: AppTextStyles.bodySmall.copyWith(
-                            fontSize: 12, color: AppColors.ctText3),
+                        style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                       )
                     else
                       ...List.generate(_mappingRows.length, (i) {
@@ -3116,21 +3113,24 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                       }),
                     if (_mappingRows.isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      AppButton(
-                        label: 'Guardar mapeo',
-                        variant: AppButtonVariant.primary,
-                        size: AppButtonSize.sm,
-                        onPressed: () {
-                          if (!widget.canManage) return;
-                          _updateProactiveTrigger();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Mapeo guardado'),
-                              backgroundColor: AppColors.ctOk,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        },
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: AppButton(
+                          label: 'Guardar mapeo',
+                          variant: AppButtonVariant.primary,
+                          size: AppButtonSize.sm,
+                          onPressed: () {
+                            if (!widget.canManage) return;
+                            _updateProactiveTrigger();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Mapeo guardado'),
+                                backgroundColor: AppColors.ctOk,
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ],
@@ -3154,17 +3154,16 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                   'Roles con acceso',
                   style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 Text(
                   'Solo los operadores con estos roles podrán iniciar este flujo. Si no se selecciona ninguno, todos los roles tienen acceso.',
-                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
+                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                 ),
                 const SizedBox(height: 12),
                 if (widget.availableRoles.isEmpty)
                   Text(
                     'No hay roles definidos. Crea roles en Operadores → Roles.',
-                    style: AppTextStyles.bodySmall.copyWith(
-                        fontSize: 12, color: AppColors.ctText3),
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                   )
                 else
                   Wrap(
