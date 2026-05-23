@@ -2021,8 +2021,16 @@ bool get _step1Valid =>
         ..._flowDefs.map((f) {
           final id = f['id'] as String? ?? '';
           final name = f['name'] as String? ?? f['slug'] as String? ?? id;
+          final triggerSources = (f['trigger_sources'] as List<dynamic>?) ?? [];
+          final supportsScheduled = triggerSources.contains('scheduled');
           final isSelected = _selectedFlows.containsKey(id);
           final behavior = _selectedFlows[id] ?? 'permissive';
+          // Reset stale scheduled behavior if flow no longer supports it
+          if (!supportsScheduled && behavior == 'scheduled' && isSelected) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _selectedFlows[id] = 'permissive');
+            });
+          }
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: InkWell(
@@ -2062,14 +2070,16 @@ bool get _step1Valid =>
                         onChanged: (v) =>
                             setState(() => _selectedFlows[id] = v),
                       ),
-                      const SizedBox(width: 4),
-                      _BehaviorBtn(
-                        label: 'Automático',
-                        value: 'scheduled',
-                        current: behavior,
-                        onChanged: (v) =>
-                            setState(() => _selectedFlows[id] = v),
-                      ),
+                      if (supportsScheduled) ...[
+                        const SizedBox(width: 4),
+                        _BehaviorBtn(
+                          label: 'Automático',
+                          value: 'scheduled',
+                          current: behavior,
+                          onChanged: (v) =>
+                              setState(() => _selectedFlows[id] = v),
+                        ),
+                      ],
                     ],
                   ],
                 ),
