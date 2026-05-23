@@ -3043,22 +3043,30 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                     style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                   )
                 else ...[
-                    AppDropdown<String>(
+                    AppDropdown<String?>(
                       label: 'Plantilla',
                       value: widget.proactiveTrigger['template_id'] as String?,
                       hint: 'Selecciona plantilla',
                       enabled: widget.canManage,
-                      items: _approvedTemplates.map((t) {
-                        final id = t['id'] as String? ?? t['name'] as String? ?? '';
-                        final name = t['name'] as String? ?? id;
-                        final lang = t['language'] as String? ?? '';
-                        return AppDropdownItem<String>(
-                          value: id,
-                          label: '$name ($lang)',
-                        );
-                      }).toList(),
+                      items: [
+                        const AppDropdownItem<String?>(
+                            value: null, label: '— Sin plantilla —'),
+                        ..._approvedTemplates.map((t) {
+                          final id = t['id'] as String? ?? t['name'] as String? ?? '';
+                          final name = t['name'] as String? ?? id;
+                          final lang = t['language'] as String? ?? '';
+                          return AppDropdownItem<String?>(
+                            value: id,
+                            label: '$name ($lang)',
+                          );
+                        }),
+                      ],
                       onChanged: (v) {
-                        if (v != null) _updateProactiveTrigger(templateId: v);
+                        if (v == null) {
+                          widget.onProactiveTriggerChanged({});
+                        } else {
+                          _updateProactiveTrigger(templateId: v);
+                        }
                       },
                     ),
                     // ── Template preview ──
@@ -3191,24 +3199,26 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                       }),
                     if (_mappingRows.isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: AppButton(
-                          label: 'Guardar mapeo',
-                          variant: AppButtonVariant.primary,
-                          size: AppButtonSize.sm,
-                          onPressed: () {
-                            if (!widget.canManage) return;
-                            _updateProactiveTrigger();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Mapeo guardado'),
-                                backgroundColor: AppColors.ctOk,
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                          },
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          AppButton(
+                            label: 'Guardar mapeo',
+                            variant: AppButtonVariant.primary,
+                            size: AppButtonSize.sm,
+                            onPressed: () {
+                              if (!widget.canManage) return;
+                              _updateProactiveTrigger();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Mapeo guardado'),
+                                  backgroundColor: AppColors.ctOk,
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ],
