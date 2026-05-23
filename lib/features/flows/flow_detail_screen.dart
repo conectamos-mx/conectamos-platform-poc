@@ -122,8 +122,8 @@ const _kTimezones = [
 const _kTriggerSources = [
   ('conversational', 'Conversacional'),
   ('ingest', 'API / Ingest'),
-  ('dashboard', 'Dashboard'),
   ('scheduled', 'Programado'),
+  ('on_complete', 'Al completar otro flujo'),
 ];
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -1928,6 +1928,7 @@ class _FieldDialogState extends State<_FieldDialog> {
   final _labelCtrl = TextEditingController();
   String _type = 'text';
   bool _required = false;
+  String? _fillStrategy;
 
   // select type state
   String _dataSourceBase = 'system:operators';
@@ -1970,6 +1971,7 @@ class _FieldDialogState extends State<_FieldDialog> {
       _labelCtrl.text = widget.field!['label'] as String? ?? '';
       _type = widget.field!['type'] as String? ?? 'text';
       _required = widget.field!['required'] as bool? ?? false;
+      _fillStrategy = widget.field!['fill_strategy'] as String?;
       _descCtrl.text = widget.field!['description'] as String? ?? '';
       final ds = widget.field!['data_source'] as String?;
       if (ds != null) {
@@ -2075,7 +2077,11 @@ class _FieldDialogState extends State<_FieldDialog> {
       updated.remove('data_source');
       updated.remove('options');
     }
-    updated.remove('fill_strategy');
+    if (_fillStrategy != null) {
+      updated['fill_strategy'] = _fillStrategy;
+    } else {
+      updated.remove('fill_strategy');
+    }
     if (_type == 'asset_ref') {
       updated['catalog_slug'] = _catalogSlug;
       if (_selectedItemId != null) {
@@ -2395,6 +2401,27 @@ class _FieldDialogState extends State<_FieldDialog> {
                         AppColors.ctTeal.withValues(alpha: 0.3),
                   ),
                 ],
+              ),
+              const SizedBox(height: 14),
+
+              // Fill strategy
+              AppDropdown<String?>(
+                label: '¿Cómo se captura este campo?',
+                value: _fillStrategy,
+                hint: 'Conversacional',
+                items: const [
+                  AppDropdownItem(
+                    value: null,
+                    label: 'Conversacional',
+                    subtitle: 'El Worker lo solicita al operador durante la conversación',
+                  ),
+                  AppDropdownItem(
+                    value: 'defer_dashboard',
+                    label: 'Desde el dashboard',
+                    subtitle: 'Un supervisor lo llena manualmente desde el panel de ejecuciones',
+                  ),
+                ],
+                onChanged: (v) => setState(() => _fillStrategy = v),
               ),
               const SizedBox(height: 8),
 
