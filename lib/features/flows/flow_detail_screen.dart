@@ -121,7 +121,7 @@ const _kTimezones = [
 
 const _kTriggerSources = [
   ('conversational', 'Conversacional'),
-  ('api', 'API / Sistema'),
+  ('ingest', 'API / Ingest'),
   ('dashboard', 'Dashboard'),
   ('scheduled', 'Programado'),
 ];
