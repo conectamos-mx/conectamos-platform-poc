@@ -5663,58 +5663,261 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
 
   @override
   Widget build(BuildContext context) {
+    final declared = _rules.where((r) => r['source'] != 'chaining').toList();
+    final inherited = _rules.where((r) => r['source'] == 'chaining').toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── [A] Header ──
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Reglas de inicio',
-                style: AppTextStyles.pageTitle,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Precondiciones',
+                      style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 17,
+                          color: const Color(0xFF1E2722)),
+                    ),
+                    const SizedBox(height: 6),
+                    RichText(
+                      text: TextSpan(
+                        style: AppTextStyles.bodySmall.copyWith(
+                            fontSize: 13,
+                            color: const Color(0xFF4C5D73),
+                            height: 1.55),
+                        children: const [
+                          TextSpan(
+                              text: 'Reglas que el sistema evalúa antes de permitir que el operador inicie este flow. Se evalúan en orden — un bloqueo '),
+                          TextSpan(
+                              text: 'duro',
+                              style: TextStyle(fontStyle: FontStyle.italic)),
+                          TextSpan(
+                              text: ' detiene la cadena, un bloqueo '),
+                          TextSpan(
+                              text: 'suave',
+                              style: TextStyle(fontStyle: FontStyle.italic)),
+                          TextSpan(
+                              text: ' registra el fallo y continúa.'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
-              if (widget.canManage)
+              if (widget.canManage) ...[
+                const SizedBox(width: 16),
                 AppButton(
-                  label: '+ Agregar regla',
-                  variant: AppButtonVariant.ghost,
+                  label: '+ Nueva precondición',
+                  variant: AppButtonVariant.primary,
                   size: AppButtonSize.sm,
                   onPressed: () => _openRuleDialog(null),
                 ),
+              ],
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Se verifican antes de iniciar el flujo. Si alguna falla, el flow no se ejecuta.',
-            style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctText2),
-          ),
-          const SizedBox(height: 16),
-          if (_rules.isEmpty)
-            const SizedBox(
-              height: 200,
-              child: _EmptyState(
-                icon: Icons.rule_outlined,
-                message:
-                    'Este flow no tiene reglas de inicio configuradas.',
-              ),
-            )
-          else
+
+          // ── [B] EvaluationChainPreview ──
+          if (declared.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _EvaluationChainPreview(rules: declared),
+          ],
+
+          // ── [C] Inherited by chaining ──
+          if (inherited.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _precondSectionLabel(
+              '🔗 HEREDADAS POR ENCADENAMIENTO — ${inherited.length}',
+              const Color(0xFF8B5CF6),
+            ),
+            const SizedBox(height: 10),
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: _rules.length,
-              separatorBuilder: (context2, i2) => const SizedBox(height: 8),
+              itemCount: inherited.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (_, i) => _RuleCard(
-                rule: _rules[i],
+                rule: inherited[i],
                 index: i,
-                typeLabel: _typeLabel(_rules[i]['type'] as String? ?? ''),
-                canManage: widget.canManage,
-                onEdit: () => _openRuleDialog(_rules[i]),
-                onDelete: () => _deleteRule(_rules[i]),
+                typeLabel: _typeLabel(inherited[i]['type'] as String? ?? ''),
+                canManage: false,
+                onEdit: () {},
+                onDelete: () {},
               ),
             ),
+          ],
+
+          // ── [D] Declared in this flow ──
+          if (declared.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _precondSectionLabel(
+              'DECLARADAS EN ESTE FLOW — ${declared.length}',
+              const Color(0xFF6B7280),
+            ),
+            const SizedBox(height: 10),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: declared.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (_, i) => _RuleCard(
+                rule: declared[i],
+                index: i,
+                typeLabel: _typeLabel(declared[i]['type'] as String? ?? ''),
+                canManage: widget.canManage,
+                onEdit: () => _openRuleDialog(declared[i]),
+                onDelete: () => _deleteRule(declared[i]),
+              ),
+            ),
+          ],
+
+          // ── Empty state ──
+          if (declared.isEmpty && inherited.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 16),
+              child: SizedBox(
+                height: 200,
+                child: _EmptyState(
+                  icon: Icons.rule_outlined,
+                  message: 'Este flow no tiene reglas de inicio configuradas.',
+                ),
+              ),
+            ),
+
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  static Widget _precondSectionLabel(String label, Color color) => Row(
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                  letterSpacing: 0.5)),
+          const SizedBox(width: 10),
+          Expanded(child: Divider(color: color.withValues(alpha: 0.2), height: 1)),
+        ],
+      );
+}
+
+// ── _EvaluationChainPreview ──────────────────────────────────────────────────
+
+class _EvaluationChainPreview extends StatelessWidget {
+  const _EvaluationChainPreview({required this.rules});
+  final List<Map<String, dynamic>> rules;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFF1F1F1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '▶  ORDEN DE EVALUACIÓN AL INICIAR EL FLOW',
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.08,
+              color: const Color(0xFF6B7280),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (var i = 0; i < rules.length; i++) ...[
+                _chainChip(rules[i], i),
+                if (i < rules.length - 1)
+                  Text(' → ',
+                      style: TextStyle(
+                          fontSize: 11, color: const Color(0xFFD1D5DB))),
+              ],
+              // Final chip: ✓ Iniciar flow
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: const Color(0xFF15803D).withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  '✓ Iniciar flow',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF15803D),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chainChip(Map<String, dynamic> rule, int index) {
+    final type = rule['type'] as String? ?? '';
+    final catColor = _precondCatColor(type);
+    final shortLabel = _kPrecondShortLabels[type] ?? type;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: catColor.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: catColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              color: catColor,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            shortLabel,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: catColor,
+            ),
+          ),
         ],
       ),
     );
@@ -5722,6 +5925,23 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
 }
 
 // ── Category color for precondition types ────────────────────────────────────
+
+Color _precondCatColor(String type) =>
+    _kPrecondCatColors[type] ?? AppColors.ctTeal;
+
+const _kPrecondShortLabels = {
+  'no_active_execution': 'Sin instancia abierta',
+  'requires_active_execution': 'Otro flow en curso',
+  'no_concurrent_execution': 'Sin duplicado',
+  'requires_completed_sibling': 'Hermano completado',
+  'no_active_sibling': 'Sin hermano activo',
+  'all_children_completed': 'Hijos completados',
+  'requires_parent': 'Solo como hijo',
+  'operator_role_in': 'Rol requerido',
+  'requires_active_assignment': 'Asignación vigente',
+  'field_unique_in_window': 'Campo único',
+  'time_window': 'En horario',
+};
 
 const _kPrecondCatColors = {
   'no_active_execution': Color(0xFF3B82F6),
@@ -5780,7 +6000,7 @@ class _RuleCardState extends State<_RuleCard> {
     final message = widget.rule['message'] as String? ?? '';
     final action = widget.rule['action'] as String? ?? 'block';
     final escalate = widget.rule['escalate'] as bool? ?? false;
-    final catColor = _kPrecondCatColors[ruleType] ?? AppColors.ctTeal;
+    final catColor = _precondCatColor(ruleType);
     final catLabel = _kPrecondCatLabels[ruleType] ?? '';
 
     return MouseRegion(
