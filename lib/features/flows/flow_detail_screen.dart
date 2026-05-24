@@ -3167,14 +3167,20 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                                   value: row.$2.text.isEmpty ? null : row.$2.text,
                                   hint: 'Campo fuente',
                                   enabled: widget.canManage,
-                                  items: [
-                                    const AppDropdownItem(value: '', label: '— Sin campo —'),
-                                    ...widget.flowFields.map((f) {
-                                      final key = f['key'] as String? ?? '';
-                                      final lbl = f['label'] as String? ?? key;
-                                      return AppDropdownItem(
-                                          value: 'fields.$key', label: lbl);
-                                    }),
+                                  items: const [
+                                    AppDropdownItem<String>(value: '', label: '— Sin campo —'),
+                                    AppDropdownItem<String>(
+                                      value: 'system:operator.name',
+                                      label: 'Nombre del operador',
+                                    ),
+                                    AppDropdownItem<String>(
+                                      value: 'system:operator.phone',
+                                      label: 'Teléfono del operador',
+                                    ),
+                                    AppDropdownItem<String>(
+                                      value: 'system:tenant.name',
+                                      label: 'Nombre de la empresa',
+                                    ),
                                   ],
                                   onChanged: (v) {
                                     setState(() => row.$2.text = v ?? '');
