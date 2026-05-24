@@ -16,6 +16,8 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
+import '../config/template_create_dialog.dart';
+import 'widgets/precond_mini_diagram.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../shared/widgets/app_dropdown.dart';
 import '../../shared/widgets/app_multi_select.dart';
@@ -2710,7 +2712,7 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
   String? _waChannelId;
   List<Map<String, dynamic>> _approvedTemplates = [];
   bool _loadingTemplates = false;
-  List<(TextEditingController, TextEditingController)> _mappingRows = [];
+  Map<String, String> _mappingRows = {};
 
   @override
   void initState() {
@@ -2728,10 +2730,6 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
 
   @override
   void dispose() {
-    for (final row in _mappingRows) {
-      row.$1.dispose();
-      row.$2.dispose();
-    }
     super.dispose();
   }
 
@@ -2778,47 +2776,89 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
             all.where((t) => (t['status'] as String?) == 'APPROVED').toList();
         _loadingTemplates = false;
       });
+      // Auto-init mapping rows from selected template
+      final tid = widget.proactiveTrigger['template_id'] as String?;
+      if (tid != null) {
+        final t = _approvedTemplates
+            .where((t) => (t['id'] as String? ?? t['name'] as String? ?? '') == tid)
+            .firstOrNull;
+        if (t != null) _initMappingFromTemplate(t);
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => _loadingTemplates = false);
     }
   }
 
-  void _initMappingRows() {
-    for (final row in _mappingRows) {
-      row.$1.dispose();
-      row.$2.dispose();
+  void _initMappingFromTemplate(Map<String, dynamic> template) {
+    // 1. Variables declaradas en el template
+    final declared = ((template['variables'] as List<dynamic>?) ?? [])
+        .map((v) => {
+              'slot': (v as Map)['slot'] as int? ?? 0,
+              'key': v['key'] as String? ?? '',
+            })
+        .toList();
+
+    // 2. Slots presentes en body_text via {{N}}
+    final body = template['body_text'] as String? ?? '';
+    final bodySlots = RegExp(r'\{\{(\d+)\}\}')
+        .allMatches(body)
+        .map((m) => int.tryParse(m.group(1) ?? '') ?? 0)
+        .where((s) => s > 0)
+        .toSet();
+
+    // 3. Agregar entradas sintéticas para slots en body pero no en variables
+    final declaredSlots = declared.map((v) => v['slot'] as int).toSet();
+    final missing = bodySlots.difference(declaredSlots);
+    for (final slot in missing.toList()..sort()) {
+      declared.add({'slot': slot, 'key': 'variable_$slot'});
     }
+
+    // 4. Ordenar por slot
+    declared.sort((a, b) =>
+        (a['slot'] as int).compareTo(b['slot'] as int));
+
+    // 5. Existing mapping para preservar selecciones previas
+    final existing = Map<String, String>.fromEntries(
+      ((widget.proactiveTrigger['variable_mapping'] as List<dynamic>?) ?? [])
+          .map((e) => MapEntry(
+                (e as Map)['variable'] as String? ?? '',
+                e['source'] as String? ?? '',
+              ))
+          .where((e) => e.key.isNotEmpty),
+    );
+
+    setState(() {
+      _mappingRows = {
+        for (final v in declared)
+          (v['key'] as String): existing[v['key'] as String] ?? '',
+      };
+    });
+  }
+
+  void _initMappingRows() {
+    // Legacy fallback: load from existing variable_mapping without template
     final existing = (widget.proactiveTrigger['variable_mapping'] as List? ?? [])
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
     setState(() {
-      _mappingRows = existing
-          .map((e) => (
-                TextEditingController(text: e['variable'] as String? ?? ''),
-                TextEditingController(text: e['source'] as String? ?? ''),
-              ))
-          .toList();
+      _mappingRows = {
+        for (final e in existing)
+          (e['variable'] as String? ?? ''): (e['source'] as String? ?? ''),
+      };
     });
   }
 
-  void _updateProactiveTrigger({
-    String? templateId,
-    List<(TextEditingController, TextEditingController)>? rows,
-  }) {
+  void _updateProactiveTrigger({String? templateId}) {
     final effectiveTemplateId =
         templateId ?? widget.proactiveTrigger['template_id'] as String?;
-    final effectiveRows = rows ?? _mappingRows;
-    final mapping = effectiveRows
-        .where((r) => r.$1.text.trim().isNotEmpty)
-        .map((r) => {
-              'variable': r.$1.text.trim(),
-              'source': r.$2.text.trim(),
-            })
+    final mapping = _mappingRows.entries
+        .where((e) => e.key.isNotEmpty && e.value.isNotEmpty)
+        .map((e) => {'variable': e.key, 'source': e.value})
         .toList();
     final updated = <String, dynamic>{
-      'template_id': ?effectiveTemplateId,
+      if (effectiveTemplateId != null) 'template_id': effectiveTemplateId,
       if (mapping.isNotEmpty) 'variable_mapping': mapping,
     };
     widget.onProactiveTriggerChanged(updated);
@@ -2886,6 +2926,35 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
     );
   }
 
+  Widget _buildTemplateBodyPreview(String body) {
+    final spans = <TextSpan>[];
+    final regex = RegExp(r'(\{\{\d+\}\})');
+    int lastEnd = 0;
+    for (final match in regex.allMatches(body)) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(
+          text: body.substring(lastEnd, match.start),
+          style: AppTextStyles.body,
+        ));
+      }
+      spans.add(TextSpan(
+        text: match.group(0),
+        style: AppTextStyles.body.copyWith(
+          color: AppColors.ctTeal,
+          fontWeight: FontWeight.w600,
+        ),
+      ));
+      lastEnd = match.end;
+    }
+    if (lastEnd < body.length) {
+      spans.add(TextSpan(
+        text: body.substring(lastEnd),
+        style: AppTextStyles.body,
+      ));
+    }
+    return RichText(text: TextSpan(children: spans));
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -2908,12 +2977,12 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                   'Disparadores del flujo',
                   style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 Text(
                   '¿Desde dónde puede iniciarse este flujo?',
                   style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
@@ -2991,147 +3060,239 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                   'Plantilla de mensaje proactivo para eventos programados',
                   style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 Text(
                   'Se enviará al operador cuando este flujo sea iniciado por una asignación programada.',
-                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
+                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                 ),
-                  const SizedBox(height: 12),
-                  if (_waChannelId == null)
-                    Text(
-                      'No se encontró canal de WhatsApp activo en este worker.',
-                      style: AppTextStyles.bodySmall.copyWith(
-                          fontSize: 12, color: AppColors.ctText3),
-                    )
-                  else if (_loadingTemplates)
-                    const SizedBox(
-                      height: 24, width: 24,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.ctTeal),
-                    )
-                  else if (_approvedTemplates.isEmpty)
-                    Text(
-                      'No hay plantillas aprobadas. Sincroniza las plantillas en Canales.',
-                      style: AppTextStyles.bodySmall.copyWith(
-                          fontSize: 12, color: AppColors.ctText3),
-                    )
-                  else ...[
-                    AppDropdown<String>(
+                const SizedBox(height: 12),
+                if (_waChannelId == null)
+                  Text(
+                    'No se encontró canal de WhatsApp activo en este worker.',
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+                  )
+                else if (_loadingTemplates)
+                  const SizedBox(
+                    height: 24, width: 24,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppColors.ctTeal),
+                  )
+                else if (_approvedTemplates.isEmpty)
+                  Text(
+                    'No hay plantillas aprobadas. Sincroniza las plantillas en Canales.',
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+                  )
+                else ...[
+                    AppDropdown<String?>(
                       label: 'Plantilla',
                       value: widget.proactiveTrigger['template_id'] as String?,
                       hint: 'Selecciona plantilla',
                       enabled: widget.canManage,
-                      items: _approvedTemplates.map((t) {
-                        final id = t['id'] as String? ?? t['name'] as String? ?? '';
-                        final name = t['name'] as String? ?? id;
-                        final lang = t['language'] as String? ?? '';
-                        return AppDropdownItem<String>(
-                          value: id,
-                          label: '$name ($lang)',
-                        );
-                      }).toList(),
+                      items: [
+                        const AppDropdownItem<String?>(
+                            value: null, label: '— Sin plantilla —'),
+                        ..._approvedTemplates.map((t) {
+                          final id = t['id'] as String? ?? t['name'] as String? ?? '';
+                          final name = t['name'] as String? ?? id;
+                          final lang = t['language'] as String? ?? '';
+                          return AppDropdownItem<String?>(
+                            value: id,
+                            label: '$name ($lang)',
+                          );
+                        }),
+                        const AppDropdownItem<String?>(
+                          value: '__create__',
+                          label: '＋ Crear nueva plantilla',
+                        ),
+                      ],
                       onChanged: (v) {
-                        if (v != null) _updateProactiveTrigger(templateId: v);
+                        if (v == '__create__') {
+                          if (_waChannelId == null) return;
+                          showDialog<void>(
+                            context: context,
+                            builder: (_) => TemplateCreateDialog(
+                              channelId: _waChannelId!,
+                              tenantId: widget.tenantId,
+                            ),
+                          ).then((_) {
+                            if (_waChannelId != null) {
+                              _loadTemplates(_waChannelId!);
+                            }
+                          });
+                          return;
+                        }
+                        if (v == null) {
+                          setState(() => _mappingRows = {});
+                          widget.onProactiveTriggerChanged({});
+                        } else {
+                          _updateProactiveTrigger(templateId: v);
+                          final t = _approvedTemplates
+                              .where((t) =>
+                                  (t['id'] as String? ?? t['name'] as String? ?? '') == v)
+                              .firstOrNull;
+                          if (t != null) _initMappingFromTemplate(t);
+                        }
                       },
                     ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Text('Mapeo de variables',
-                            style: AppTextStyles.body
-                                .copyWith(fontWeight: FontWeight.w600)),
-                        const Spacer(),
-                        if (widget.canManage)
-                          AppButton(
-                            label: '+ Agregar',
-                            variant: AppButtonVariant.ghost,
-                            size: AppButtonSize.sm,
-                            onPressed: () {
-                              setState(() {
-                                _mappingRows = [
-                                  ..._mappingRows,
-                                  (TextEditingController(), TextEditingController()),
-                                ];
-                              });
-                            },
+                    // ── Template preview ──
+                    Builder(builder: (_) {
+                      final tid = widget.proactiveTrigger['template_id'] as String?;
+                      final sel = tid == null
+                          ? null
+                          : _approvedTemplates
+                              .where((t) => (t['id'] as String? ?? t['name'] as String? ?? '') == tid)
+                              .firstOrNull;
+                      if (sel == null) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.ctSurface,
+                            border: Border.all(color: AppColors.ctBorder),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                      ],
-                    ),
-                    if (_mappingRows.isEmpty)
-                      Text(
-                        'Sin variables mapeadas. La plantilla se enviará sin reemplazos.',
-                        style: AppTextStyles.bodySmall.copyWith(
-                            fontSize: 12, color: AppColors.ctText3),
-                      )
-                    else
-                      ...List.generate(_mappingRows.length, (i) {
-                        final row = _mappingRows[i];
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if ((sel['header_text'] as String?) != null) ...[
+                                Text(
+                                  sel['header_text'] as String,
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.ctText2,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                              ],
+                              _buildTemplateBodyPreview(
+                                sel['body_text'] as String? ?? '',
+                              ),
+                              if ((sel['footer_text'] as String?) != null) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  sel['footer_text'] as String,
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.ctText3,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                    // ── Mapeo de variables (auto-generado desde template) ──
+                    if (_mappingRows.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text('Mapeo de variables',
+                          style: AppTextStyles.body
+                              .copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 12),
+                      ..._mappingRows.entries.map((entry) {
+                        final key = entry.key;
+                        final source = entry.value;
+                        // Find slot from template variables
+                        final tid = widget.proactiveTrigger['template_id'] as String?;
+                        final tpl = tid == null
+                            ? null
+                            : _approvedTemplates
+                                .where((t) =>
+                                    (t['id'] as String? ?? t['name'] as String? ?? '') == tid)
+                                .firstOrNull;
+                        final vars = (tpl?['variables'] as List<dynamic>?) ?? [];
+                        final vDef = vars
+                            .where((v) => (v as Map)['key'] == key)
+                            .firstOrNull as Map?;
+                        final slot = vDef?['slot'] as int? ?? 0;
                         return Padding(
-                          padding: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.only(bottom: 8),
                           child: Row(
                             children: [
                               Expanded(
-                                child: AppTextField(
-                                  controller: row.$1,
-                                  hint: 'nombre_cliente',
-                                  label: i == 0 ? 'Variable' : null,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.ctSurface,
+                                    border: Border.all(color: AppColors.ctBorder),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    key.startsWith('variable_')
+                                        ? '{{$slot}}'
+                                        : '$key  {{$slot}}',
+                                    style: AppTextStyles.body,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: AppDropdown<String>(
-                                  label: i == 0 ? 'Campo fuente' : null,
-                                  value: row.$2.text.isEmpty ? null : row.$2.text,
+                                  value: source.isEmpty ? null : source,
                                   hint: 'Campo fuente',
                                   enabled: widget.canManage,
-                                  items: [
-                                    const AppDropdownItem(value: '', label: '— Sin campo —'),
-                                    ...widget.flowFields.map((f) {
-                                      final key = f['key'] as String? ?? '';
-                                      final lbl = f['label'] as String? ?? key;
-                                      return AppDropdownItem(
-                                          value: 'fields.$key', label: lbl);
-                                    }),
+                                  items: const [
+                                    AppDropdownItem<String>(
+                                        value: '', label: '— Sin campo —'),
+                                    AppDropdownItem<String>(
+                                      value: 'system:operator.name',
+                                      label: 'Nombre del operador',
+                                    ),
+                                    AppDropdownItem<String>(
+                                      value: 'system:operator.phone',
+                                      label: 'Teléfono del operador',
+                                    ),
+                                    AppDropdownItem<String>(
+                                      value: 'system:tenant.name',
+                                      label: 'Nombre de la empresa',
+                                    ),
+                                    AppDropdownItem<String>(
+                                      value: 'system:flow.name',
+                                      label: 'Nombre del flujo',
+                                    ),
+                                    AppDropdownItem<String>(
+                                      value: 'system:flow.fields_summary',
+                                      label: 'Campos del flujo (lista)',
+                                    ),
                                   ],
                                   onChanged: (v) {
-                                    setState(() => row.$2.text = v ?? '');
+                                    if (!widget.canManage) return;
+                                    setState(() => _mappingRows[key] = v ?? '');
                                     _updateProactiveTrigger();
                                   },
                                 ),
                               ),
-                              if (widget.canManage)
-                                IconButton(
-                                  icon: const Icon(Icons.close,
-                                      size: 16, color: AppColors.ctText3),
-                                  onPressed: () {
-                                    row.$1.dispose();
-                                    row.$2.dispose();
-                                    setState(() => _mappingRows.removeAt(i));
-                                    _updateProactiveTrigger(rows: _mappingRows);
-                                  },
-                                ),
                             ],
                           ),
                         );
                       }),
-                    if (_mappingRows.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      AppButton(
-                        label: 'Guardar mapeo',
-                        variant: AppButtonVariant.primary,
-                        size: AppButtonSize.sm,
-                        onPressed: () {
-                          if (!widget.canManage) return;
-                          _updateProactiveTrigger();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Mapeo guardado'),
-                              backgroundColor: AppColors.ctOk,
-                              duration: Duration(seconds: 2),
+                      if (_mappingRows.isNotEmpty &&
+                          _mappingRows.values.every((v) => v.isNotEmpty)) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            AppButton(
+                              label: 'Guardar mapeo',
+                              variant: AppButtonVariant.primary,
+                              size: AppButtonSize.sm,
+                              onPressed: () {
+                                if (!widget.canManage) return;
+                                _updateProactiveTrigger();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Mapeo guardado'),
+                                    backgroundColor: AppColors.ctOk,
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
+                          ],
+                        ),
+                      ],
                     ],
                   ],
                 ],
@@ -3154,17 +3315,16 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                   'Roles con acceso',
                   style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 Text(
                   'Solo los operadores con estos roles podrán iniciar este flujo. Si no se selecciona ninguno, todos los roles tienen acceso.',
-                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
+                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                 ),
                 const SizedBox(height: 12),
                 if (widget.availableRoles.isEmpty)
                   Text(
                     'No hay roles definidos. Crea roles en Operadores → Roles.',
-                    style: AppTextStyles.bodySmall.copyWith(
-                        fontSize: 12, color: AppColors.ctText3),
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                   )
                 else
                   Wrap(
@@ -5503,177 +5663,747 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
 
   @override
   Widget build(BuildContext context) {
+    final declared = _rules.where((r) => r['source'] != 'chaining').toList();
+    final inherited = _rules.where((r) => r['source'] == 'chaining').toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── [A] Header ──
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Reglas de inicio',
-                style: AppTextStyles.pageTitle,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Precondiciones',
+                      style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 17,
+                          color: const Color(0xFF1E2722)),
+                    ),
+                    const SizedBox(height: 6),
+                    RichText(
+                      text: TextSpan(
+                        style: AppTextStyles.bodySmall.copyWith(
+                            fontSize: 13,
+                            color: const Color(0xFF4C5D73),
+                            height: 1.55),
+                        children: const [
+                          TextSpan(
+                              text: 'Reglas que el sistema evalúa antes de permitir que el operador inicie este flow. Se evalúan en orden — un bloqueo '),
+                          TextSpan(
+                              text: 'duro',
+                              style: TextStyle(fontStyle: FontStyle.italic)),
+                          TextSpan(
+                              text: ' detiene la cadena, un bloqueo '),
+                          TextSpan(
+                              text: 'suave',
+                              style: TextStyle(fontStyle: FontStyle.italic)),
+                          TextSpan(
+                              text: ' registra el fallo y continúa.'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
-              if (widget.canManage)
+              if (widget.canManage) ...[
+                const SizedBox(width: 16),
                 AppButton(
-                  label: '+ Agregar regla',
-                  variant: AppButtonVariant.ghost,
+                  label: '+ Nueva precondición',
+                  variant: AppButtonVariant.primary,
                   size: AppButtonSize.sm,
                   onPressed: () => _openRuleDialog(null),
                 ),
+              ],
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Se verifican antes de iniciar el flujo. Si alguna falla, el flow no se ejecuta.',
-            style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctText2),
-          ),
-          const SizedBox(height: 16),
-          if (_rules.isEmpty)
-            const SizedBox(
-              height: 200,
-              child: _EmptyState(
-                icon: Icons.rule_outlined,
-                message:
-                    'Este flow no tiene reglas de inicio configuradas.',
-              ),
-            )
-          else
+
+          // ── [B] EvaluationChainPreview ──
+          if (declared.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _EvaluationChainPreview(rules: declared),
+          ],
+
+          // ── [C] Inherited by chaining ──
+          if (inherited.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _precondSectionLabel(
+              '🔗 HEREDADAS POR ENCADENAMIENTO — ${inherited.length}',
+              const Color(0xFF8B5CF6),
+            ),
+            const SizedBox(height: 10),
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: _rules.length,
-              separatorBuilder: (context2, i2) => const SizedBox(height: 8),
+              itemCount: inherited.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (_, i) => _RuleCard(
-                rule: _rules[i],
-                typeLabel: _typeLabel(_rules[i]['type'] as String? ?? ''),
-                canManage: widget.canManage,
-                onEdit: () => _openRuleDialog(_rules[i]),
-                onDelete: () => _deleteRule(_rules[i]),
+                rule: inherited[i],
+                index: i,
+                typeLabel: _typeLabel(inherited[i]['type'] as String? ?? ''),
+                canManage: false,
+                onEdit: () {},
+                onDelete: () {},
               ),
             ),
+          ],
+
+          // ── [D] Declared in this flow ──
+          if (declared.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _precondSectionLabel(
+              'DECLARADAS EN ESTE FLOW — ${declared.length}',
+              const Color(0xFF6B7280),
+            ),
+            const SizedBox(height: 10),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: declared.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (_, i) => _RuleCard(
+                rule: declared[i],
+                index: i,
+                typeLabel: _typeLabel(declared[i]['type'] as String? ?? ''),
+                canManage: widget.canManage,
+                onEdit: () => _openRuleDialog(declared[i]),
+                onDelete: () => _deleteRule(declared[i]),
+              ),
+            ),
+          ],
+
+          // ── Empty state ──
+          if (declared.isEmpty && inherited.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 16),
+              child: SizedBox(
+                height: 200,
+                child: _EmptyState(
+                  icon: Icons.rule_outlined,
+                  message: 'Este flow no tiene reglas de inicio configuradas.',
+                ),
+              ),
+            ),
+
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  static Widget _precondSectionLabel(String label, Color color) => Row(
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                  letterSpacing: 0.5)),
+          const SizedBox(width: 10),
+          Expanded(child: Divider(color: color.withValues(alpha: 0.2), height: 1)),
+        ],
+      );
+}
+
+// ── _EvaluationChainPreview ──────────────────────────────────────────────────
+
+class _EvaluationChainPreview extends StatelessWidget {
+  const _EvaluationChainPreview({required this.rules});
+  final List<Map<String, dynamic>> rules;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFF1F1F1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '▶  ORDEN DE EVALUACIÓN AL INICIAR EL FLOW',
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.08,
+              color: const Color(0xFF6B7280),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (var i = 0; i < rules.length; i++) ...[
+                _chainChip(rules[i], i),
+                if (i < rules.length - 1)
+                  Text(' → ',
+                      style: TextStyle(
+                          fontSize: 11, color: const Color(0xFFD1D5DB))),
+              ],
+              // Final chip: ✓ Iniciar flow
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: const Color(0xFF15803D).withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  '✓ Iniciar flow',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF15803D),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chainChip(Map<String, dynamic> rule, int index) {
+    final type = rule['type'] as String? ?? '';
+    final catColor = _precondCatColor(type);
+    final shortLabel = _kPrecondShortLabels[type] ?? type;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: catColor.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: catColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              color: catColor,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            shortLabel,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: catColor,
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _RuleCard extends StatelessWidget {
+// ── Category color for precondition types ────────────────────────────────────
+
+Color _precondCatColor(String type) =>
+    _kPrecondCatColors[type] ?? AppColors.ctTeal;
+
+const _kPrecondShortLabels = {
+  'no_active_execution': 'Sin instancia abierta',
+  'requires_active_execution': 'Otro flow en curso',
+  'no_concurrent_execution': 'Sin duplicado',
+  'no_execution_in_window': 'Una vez en ventana',
+  'requires_completed_sibling': 'Hermano completado',
+  'no_active_sibling': 'Sin hermano activo',
+  'all_children_completed': 'Hijos completados',
+  'requires_parent': 'Solo como hijo',
+  'operator_role_in': 'Rol requerido',
+  'requires_active_assignment': 'Asignación vigente',
+  'field_unique_in_window': 'Campo único',
+  'time_window': 'En horario',
+};
+
+const _kPrecondCatColors = {
+  'no_active_execution': Color(0xFF3B82F6),
+  'requires_active_execution': Color(0xFF3B82F6),
+  'no_concurrent_execution': Color(0xFF3B82F6),
+  'no_execution_in_window': Color(0xFF3B82F6),
+  'requires_completed_sibling': Color(0xFF8B5CF6),
+  'no_active_sibling': Color(0xFF8B5CF6),
+  'all_children_completed': Color(0xFF8B5CF6),
+  'requires_parent': Color(0xFF8B5CF6),
+  'operator_role_in': Color(0xFFF59E0B),
+  'requires_active_assignment': Color(0xFFF59E0B),
+  'field_unique_in_window': Color(0xFF10B981),
+  'time_window': Color(0xFF10B981),
+};
+
+const _kPrecondTypeMeta = <String, ({String label, String example, String cat})>{
+  'no_active_execution': (label: 'Sin ejecución activa', example: 'No puede iniciar "Inicio de Ruta" si ya tiene uno en curso.', cat: 'state'),
+  'requires_active_execution': (label: 'Requiere ejecución activa', example: 'No puede iniciar "Cierre de Entrega" sin un "Inicio de Ruta" activo.', cat: 'state'),
+  'no_concurrent_execution': (label: 'Sin ejecución concurrente', example: 'No puede abrir "Captura de Incidencia" dos veces.', cat: 'state'),
+  'no_execution_in_window': (label: 'Máximo una vez en la ventana', example: 'El operador no puede iniciar "Check-in de Turno" más de una vez por día.', cat: 'state'),
+  'requires_completed_sibling': (label: 'Flow hermano completado', example: 'No puede iniciar "Segunda Ruta" sin completar "Primera Ruta" hoy.', cat: 'relation'),
+  'no_active_sibling': (label: 'Sin flow hermano activo', example: 'No puede iniciar "Entrega Especial" si tiene "Entrega Normal" activa.', cat: 'relation'),
+  'all_children_completed': (label: 'Todos los hijos completados', example: 'No puede iniciar "Cierre de Turno" sin completar todas las entregas registradas.', cat: 'relation'),
+  'requires_parent': (label: 'Solo como flow hijo', example: 'Este flow nunca debe iniciarse manualmente — solo el sistema lo abre.', cat: 'relation'),
+  'operator_role_in': (label: 'Rol del operador requerido', example: 'Solo "Supervisor" puede iniciar "Auditoría de Inventario".', cat: 'operator'),
+  'requires_active_assignment': (label: 'Asignación activa requerida', example: 'No puede iniciar "Inicio de Ruta" sin una ruta asignada hoy.', cat: 'operator'),
+  'field_unique_in_window': (label: 'Campo único en ventana', example: 'El número de guía no puede repetirse en las últimas 24h.', cat: 'data'),
+  'time_window': (label: 'Solo en horario permitido', example: 'Solo entre 6:00 y 9:00 AM.', cat: 'data'),
+};
+
+const _kPrecondCategories = [
+  ('state', 'Estado del flow', '⚡', Color(0xFF3B82F6)),
+  ('relation', 'Relación con otros flows', '🔗', Color(0xFF8B5CF6)),
+  ('operator', 'Contexto del operador', '👤', Color(0xFFF59E0B)),
+  ('data', 'Datos y tiempo', '🕐', Color(0xFF10B981)),
+];
+
+const _kPrecondCatLabels = {
+  'no_active_execution': 'Estado',
+  'requires_active_execution': 'Estado',
+  'no_concurrent_execution': 'Estado',
+  'no_execution_in_window': 'Estado',
+  'requires_completed_sibling': 'Relación',
+  'no_active_sibling': 'Relación',
+  'all_children_completed': 'Relación',
+  'requires_parent': 'Relación',
+  'operator_role_in': 'Operador',
+  'requires_active_assignment': 'Operador',
+  'field_unique_in_window': 'Datos',
+  'time_window': 'Datos',
+};
+
+class _RuleCard extends StatefulWidget {
   const _RuleCard({
     required this.rule,
+    required this.index,
     required this.typeLabel,
     required this.canManage,
     required this.onEdit,
     required this.onDelete,
   });
   final Map<String, dynamic> rule;
+  final int index;
   final String typeLabel;
   final bool canManage;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context) {
-    final ruleType = rule['type'] as String? ?? '';
-    final message = rule['message'] as String? ?? '';
-    final config = ((rule['params'] ?? rule['config']) as Map?)?.cast<String, dynamic>() ?? {};
-    final isSibling = ruleType == 'requires_completed_sibling';
-    final action = rule['action'] as String? ?? 'block';
-    final escalate = rule['escalate'] as bool? ?? false;
-    final siblingSlug = config['sibling_slug'] as String? ?? '';
-    final windowType = config['window_type'] as String? ?? 'calendar_day';
-    final bodyText = isSibling
-        ? (siblingSlug.isNotEmpty
-            ? 'Requiere completar: $siblingSlug'
-            : '(sin configurar)')
-        : (message.isEmpty ? '—' : message);
-    final windowLabel = windowType == 'calendar_day' ? 'Ventana: día calendario' : 'Ventana: móvil';
+  State<_RuleCard> createState() => _RuleCardState();
+}
 
-    return InkWell(
-      onTap: canManage ? onEdit : null,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppColors.ctSurface,
-          border: Border.all(color: AppColors.ctBorder),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppColors.ctInfoBg,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                typeLabel,
-                style: AppTextStyles.badge.copyWith(color: AppColors.ctInfoText),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: action == 'allow' ? AppColors.ctOkBg : AppColors.ctRedBg,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                action == 'allow' ? 'allow' : 'block',
-                style: AppTextStyles.badge.copyWith(
-                    color: action == 'allow' ? AppColors.ctOkText : AppColors.ctRedText),
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (escalate) ...[
-              const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.ctWarn),
-              const SizedBox(width: 8),
-            ],
-            if (isSibling) ...[
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.ctBorder,
-                  borderRadius: BorderRadius.circular(10),
+class _RuleCardState extends State<_RuleCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final ruleType = widget.rule['type'] as String? ?? '';
+    final message = widget.rule['message'] as String? ?? '';
+    final action = widget.rule['action'] as String? ?? 'block';
+    final escalate = widget.rule['escalate'] as bool? ?? false;
+    final catColor = _precondCatColor(ruleType);
+    final catLabel = _kPrecondCatLabels[ruleType] ?? '';
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: InkWell(
+        onTap: widget.canManage ? widget.onEdit : null,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: AppColors.ctSurface,
+            border: Border.all(color: AppColors.ctBorder),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // [1] Strip izquierdo
+                Container(
+                  width: 38,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        catColor.withValues(alpha: 0.07),
+                        catColor.withValues(alpha: 0.04),
+                      ],
+                    ),
+                    border: Border(
+                      right: BorderSide(color: catColor.withValues(alpha: 0.12)),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color: catColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${widget.index + 1}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  ),
                 ),
-                child: Text(
-                  windowLabel,
-                  style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w500),
+
+                // [2] Mini diagrama
+                Container(
+                  width: 120,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFAFAFA),
+                    border: Border(
+                      right: BorderSide(color: Color(0xFFF1F1F1)),
+                    ),
+                  ),
+                  child: Center(
+                    child: PrecondMiniDiagram(type: ruleType, catColor: catColor),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Expanded(
-              child: Text(
-                bodyText,
-                style: AppTextStyles.bodySmall.copyWith(
-                    fontSize: 12,
-                    color: (isSibling && siblingSlug.isEmpty)
-                        ? AppColors.ctDanger
-                        : AppColors.ctText2),
-                overflow: TextOverflow.ellipsis,
-              ),
+
+                // [3] Body
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Badges row
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            // Category badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: catColor.withValues(alpha: 0.07),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: catColor.withValues(alpha: 0.15)),
+                              ),
+                              child: Text(
+                                catLabel,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: catColor,
+                                ),
+                              ),
+                            ),
+                            // Block mode badge
+                            _BlockModeBadge(action: action, escalate: escalate),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        // Title
+                        Text(
+                          widget.typeLabel,
+                          style: AppTextStyles.body.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF1E2722),
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        // Description
+                        _RuleSummary(rule: widget.rule),
+                        // Message
+                        if (message.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFAFAFA),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border(
+                                left: BorderSide(color: catColor, width: 3),
+                              ),
+                            ),
+                            child: RichText(
+                              text: TextSpan(
+                                style: AppTextStyles.bodySmall.copyWith(
+                                    color: const Color(0xFF4C5D73)),
+                                children: [
+                                  TextSpan(
+                                    text: 'Mensaje: ',
+                                    style: TextStyle(fontWeight: FontWeight.w600),
+                                  ),
+                                  TextSpan(text: message),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+
+                // [4] Actions
+                if (widget.canManage)
+                  AnimatedOpacity(
+                    opacity: _hovered ? 1.0 : 0.5,
+                    duration: const Duration(milliseconds: 150),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          left: BorderSide(color: Color(0xFFF1F1F1)),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 15),
+                            color: const Color(0xFF4C5D73),
+                            onPressed: widget.onEdit,
+                            tooltip: 'Editar',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          ),
+                          const SizedBox(height: 4),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 15),
+                            color: AppColors.ctDanger,
+                            onPressed: widget.onDelete,
+                            tooltip: 'Eliminar',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            if (canManage) ...[
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded,
-                    size: 16, color: AppColors.ctDanger),
-                onPressed: onDelete,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                tooltip: 'Eliminar regla',
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
+  }
+}
+
+// ── _BlockModeBadge ──────────────────────────────────────────────────────────
+
+class _BlockModeBadge extends StatelessWidget {
+  const _BlockModeBadge({required this.action, required this.escalate});
+  final String action;
+  final bool escalate;
+
+  @override
+  Widget build(BuildContext context) {
+    final isHard = action != 'allow';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: isHard ? const Color(0xFFFEE2E2) : const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isHard ? const Color(0xFFFECACA) : const Color(0xFFFDE68A),
+        ),
+      ),
+      child: Text(
+        isHard
+            ? '■ Bloqueo duro'
+            : '~ Bloqueo suave${escalate ? ' · ↑ escala' : ''}',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: isHard ? const Color(0xFF7F1D1D) : const Color(0xFF92400E),
+        ),
+      ),
+    );
+  }
+}
+
+// ── _RuleSummary ─────────────────────────────────────────────────────────────
+
+class _RuleSummary extends StatelessWidget {
+  const _RuleSummary({required this.rule});
+  final Map<String, dynamic> rule;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = rule['type'] as String? ?? '';
+    final config = ((rule['params'] ?? rule['config']) as Map?)
+            ?.cast<String, dynamic>() ??
+        {};
+    const base = TextStyle(fontSize: 12, color: Color(0xFF4C5D73));
+    const bold = TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF1E2722));
+
+    final spans = _buildSpans(type, config, base, bold);
+    return RichText(text: TextSpan(style: base, children: spans));
+  }
+
+  String _scopeLabel(String? scope) => switch (scope) {
+        'operator' => 'el operador',
+        'operator+day' => 'el operador hoy',
+        'tenant+day' => 'cualquier operador hoy',
+        _ => scope ?? 'el operador',
+      };
+
+  String _windowLabel(String? windowType, String? duration, String? tz) {
+    return switch (windowType) {
+      'calendar_day' => 'el día de hoy${tz != null ? ' ($tz)' : ''}',
+      'shift' => 'su turno activo',
+      'rolling' => 'las últimas ${duration ?? '24h'}',
+      _ => windowType ?? 'el día',
+    };
+  }
+
+  List<TextSpan> _buildSpans(
+      String type, Map<String, dynamic> c, TextStyle base, TextStyle bold) {
+    return switch (type) {
+      'no_active_execution' => [
+          TextSpan(text: 'Bloquear si '),
+          TextSpan(text: _scopeLabel(c['scope'] as String?), style: bold),
+          TextSpan(text: ' ya tiene una instancia activa.'),
+        ],
+      'requires_active_execution' => [
+          TextSpan(text: 'Solo permitir si '),
+          TextSpan(text: _scopeLabel(c['scope'] as String?), style: bold),
+          TextSpan(text: ' tiene una instancia activa.'),
+        ],
+      'no_concurrent_execution' => [
+          TextSpan(text: 'El operador no puede tener '),
+          TextSpan(text: 'dos instancias', style: bold),
+          TextSpan(text: ' de este flow corriendo al mismo tiempo.'),
+        ],
+      'no_execution_in_window' => [
+          TextSpan(text: 'El operador solo puede ejecutar '),
+          TextSpan(text: _scopeLabel(c['scope'] as String?), style: bold),
+          TextSpan(text: ' '),
+          TextSpan(
+              text: switch (c['window_type'] as String?) {
+                'rolling' => 'una vez cada ${c['window'] as String? ?? '24h'}',
+                'shift' => 'una vez por turno',
+                _ => 'una vez por día',
+              },
+              style: bold),
+          TextSpan(text: '.'),
+        ],
+      'requires_completed_sibling' => [
+          TextSpan(text: 'Debe haber completado '),
+          TextSpan(
+              text: c['sibling_slug'] as String? ?? '(sin configurar)',
+              style: bold),
+          TextSpan(text: ' en '),
+          TextSpan(
+              text: _windowLabel(
+                  c['window_type'] as String?,
+                  c['window'] as String?,
+                  c['timezone'] as String?),
+              style: bold),
+          if (c['also_no_active'] == true)
+            TextSpan(text: ' y no tener uno activo'),
+          TextSpan(text: '.'),
+        ],
+      'no_active_sibling' => [
+          TextSpan(text: 'Bloquear si el operador ya tiene activo '),
+          TextSpan(
+              text: c['sibling_slug'] as String? ?? '(sin configurar)',
+              style: bold),
+          TextSpan(text: '.'),
+        ],
+      'all_children_completed' => [
+          TextSpan(text: 'Bloquear si no se han completado los '),
+          TextSpan(
+              text: c['count_field_key'] as String? ?? 'N', style: bold),
+          TextSpan(text: ' flujos hijos de '),
+          TextSpan(
+              text: c['child_flow_slug'] as String? ?? '(sin configurar)',
+              style: bold),
+          TextSpan(text: '.'),
+        ],
+      'requires_parent' => [
+          TextSpan(text: 'Este flow '),
+          TextSpan(text: 'no puede iniciarse manualmente', style: bold),
+          TextSpan(text: ' — solo como hijo de otro flow.'),
+        ],
+      'operator_role_in' => [
+          TextSpan(text: 'El operador debe tener el rol de '),
+          TextSpan(
+              text: (c['roles'] as List?)?.join(', ') ?? '(sin configurar)',
+              style: bold),
+          TextSpan(text: '.'),
+        ],
+      'requires_active_assignment' => [
+          TextSpan(text: 'El operador debe tener una asignación activa de '),
+          TextSpan(
+              text: c['catalog_slug'] as String? ?? '(sin configurar)',
+              style: bold),
+          TextSpan(text: '.'),
+        ],
+      'field_unique_in_window' => [
+          TextSpan(text: 'El campo '),
+          TextSpan(
+              text: c['field_key'] as String? ?? '(sin campo)', style: bold),
+          TextSpan(text: ' no debe repetirse en '),
+          TextSpan(
+              text: _windowLabel(
+                  c['window_type'] as String?,
+                  c['window'] as String?,
+                  c['timezone'] as String?),
+              style: bold),
+          TextSpan(text: '.'),
+        ],
+      'time_window' => [
+          TextSpan(text: 'Solo entre las '),
+          TextSpan(
+              text: c['start_time'] as String? ?? '??:??', style: bold),
+          TextSpan(text: ' y las '),
+          TextSpan(text: c['end_time'] as String? ?? '??:??', style: bold),
+          if (c['timezone'] != null) ...[
+            TextSpan(text: ' ('),
+            TextSpan(text: c['timezone'] as String, style: bold),
+            TextSpan(text: ')'),
+          ],
+          TextSpan(text: '.'),
+        ],
+      _ => [TextSpan(text: type)],
+    };
   }
 }
 
@@ -5700,6 +6430,7 @@ class _AddRuleDialog extends StatefulWidget {
 }
 
 class _AddRuleDialogState extends State<_AddRuleDialog> {
+  late bool _showTypeCatalog;
   String? _type;
   final _messageCtrl = TextEditingController();
   String _action = 'block';
@@ -5710,6 +6441,9 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
   final Map<String, TextEditingController> _textCtrls = {};
   final Map<String, String?> _selectVals = {};
   final Map<String, bool> _boolVals = {};
+  final Map<String, List<String>> _multiSelectVals = {};
+  final Map<String, int> _durationValues = {};
+  final Map<String, String> _durationUnits = {};
   final Map<String, String> _semanticWarnings = {};
 
   List<Map<String, dynamic>> _availableCatalogs = [];
@@ -5805,6 +6539,9 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     _textCtrls.clear();
     _selectVals.clear();
     _boolVals.clear();
+    _multiSelectVals.clear();
+    _durationValues.clear();
+    _durationUnits.clear();
     for (final field in _fieldsForType(type)) {
       final key = field['key'] as String? ?? '';
       if (key.isEmpty) continue;
@@ -5812,12 +6549,34 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
       final existing = params[key];
       switch (fieldType) {
         case 'text':
+          // Parse duration fields like "24h", "30m", "3d"
+          if (key == 'window' && existing is String && existing.isNotEmpty) {
+            final match = RegExp(r'^(\d+)([mhd])$').firstMatch(existing);
+            if (match != null) {
+              _durationValues[key] = int.tryParse(match.group(1)!) ?? 24;
+              _durationUnits[key] = match.group(2)!;
+            } else {
+              _durationValues[key] = 24;
+              _durationUnits[key] = 'h';
+            }
+          } else if (key == 'window') {
+            _durationValues[key] = 24;
+            _durationUnits[key] = 'h';
+          }
           _textCtrls[key] = TextEditingController(text: existing?.toString() ?? '');
         case 'select':
           _selectVals[key] = existing?.toString()
               ?? (field['default'] as String?);
         case 'bool':
           _boolVals[key] = (existing as bool?) ?? false;
+        case 'role_multi_select':
+          if (existing is List) {
+            _multiSelectVals[key] = List<String>.from(existing.map((e) => e.toString()));
+          } else if (existing is String && existing.isNotEmpty) {
+            _multiSelectVals[key] = existing.split(',').map((s) => s.trim()).toList();
+          } else {
+            _multiSelectVals[key] = [];
+          }
       }
     }
   }
@@ -5825,6 +6584,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
   @override
   void initState() {
     super.initState();
+    _showTypeCatalog = widget.rule == null;
     final rule = widget.rule;
     if (rule != null) {
       _type = rule['type'] as String?;
@@ -5862,11 +6622,38 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
   Map<String, dynamic> _buildConfig() {
     final config = <String, dynamic>{};
     for (final e in _textCtrls.entries) {
+      // Duration fields: override with structured value
+      if (_durationValues.containsKey(e.key)) {
+        final n = _durationValues[e.key] ?? 24;
+        final u = _durationUnits[e.key] ?? 'h';
+        config[e.key] = '$n$u';
+        continue;
+      }
       if (e.value.text.trim().isNotEmpty) config[e.key] = e.value.text.trim();
     }
     for (final e in _selectVals.entries) { config[e.key] = e.value; }
     for (final e in _boolVals.entries) { config[e.key] = e.value; }
+    for (final e in _multiSelectVals.entries) {
+      if (e.value.isNotEmpty) config[e.key] = e.value;
+    }
     return config;
+  }
+
+  Map<String, dynamic> _buildConfigSnapshot() {
+    final map = <String, dynamic>{};
+    _textCtrls.forEach((k, v) {
+      if (_durationValues.containsKey(k)) {
+        final n = _durationValues[k] ?? 24;
+        final u = _durationUnits[k] ?? 'h';
+        map[k] = '$n$u';
+        return;
+      }
+      if (v.text.isNotEmpty) map[k] = v.text;
+    });
+    _selectVals.forEach((k, v) { if (v != null) map[k] = v; });
+    _boolVals.forEach((k, v) { map[k] = v; });
+    _multiSelectVals.forEach((k, v) { if (v.isNotEmpty) map[k] = v; });
+    return map;
   }
 
   void _submit() {
@@ -6024,34 +6811,18 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     final currentVal = ctrl.text;
     final selectedVal = _kTimezones.any((t) => t.$1 == currentVal)
         ? currentVal
-        : '';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
-        const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          value: selectedVal,
-          decoration: InputDecoration(
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.ctBorder)),
-            enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.ctBorder)),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
-          items: _kTimezones.map((tz) {
-            return DropdownMenuItem<String>(
-              value: tz.$1,
-              child: Text(tz.$2, style: AppTextStyles.body),
-            );
-          }).toList(),
-          onChanged: (v) => setState(() => ctrl.text = v ?? ''),
-        ),
-      ],
+        : null;
+    return AppDropdown<String?>(
+      label: label,
+      value: selectedVal,
+      hint: 'Default del tenant',
+      items: _kTimezones.map((tz) {
+        return AppDropdownItem<String?>(
+          value: tz.$1.isEmpty ? null : tz.$1,
+          label: tz.$2,
+        );
+      }).toList(),
+      onChanged: (v) => setState(() => ctrl.text = v ?? ''),
     );
   }
 
@@ -6080,10 +6851,11 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
       final label = field['label'] as String? ?? key;
       final fieldType = field['type'] as String? ?? 'text';
       final rawOptions = field['options'] as List? ?? [];
-      final options = rawOptions
-          .whereType<Map>()
-          .map((o) => Map<String, dynamic>.from(o))
-          .toList();
+      final safeOptions = rawOptions.map((o) {
+        if (o is Map) return Map<String, dynamic>.from(o);
+        final s = o.toString();
+        return <String, dynamic>{'value': s, 'label': s};
+      }).toList();
       widgets.add(const SizedBox(height: 16));
       switch (fieldType) {
         case 'text':
@@ -6093,6 +6865,47 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
             widgets.add(_buildCatalogSlugSelector(key, label));
           } else if (key == 'timezone') {
             widgets.add(_buildTimezoneSelector(key, label));
+          } else if (key == 'window') {
+            final durVal = _durationValues[key] ?? 24;
+            final durUnit = _durationUnits[key] ?? 'h';
+            final numCtrl = TextEditingController(text: durVal.toString());
+            widgets
+              ..add(Text(label,
+                  style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)))
+              ..add(const SizedBox(height: 6))
+              ..add(Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: numCtrl,
+                      style: AppTextStyles.body,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: _inputDecoration.copyWith(hintText: '24'),
+                      onChanged: (v) {
+                        final n = int.tryParse(v) ?? 1;
+                        setState(() => _durationValues[key] = n.clamp(1, 999));
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 140,
+                    child: AppDropdown<String>(
+                      value: durUnit,
+                      hint: 'Unidad',
+                      items: const [
+                        AppDropdownItem(value: 'm', label: 'Minutos'),
+                        AppDropdownItem(value: 'h', label: 'Horas'),
+                        AppDropdownItem(value: 'd', label: 'Días'),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _durationUnits[key] = v);
+                      },
+                    ),
+                  ),
+                ],
+              ));
           } else {
             widgets
               ..add(Text(label,
@@ -6105,24 +6918,18 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
               ));
           }
         case 'select':
-          widgets
-            ..add(Text(label,
-                style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)))
-            ..add(const SizedBox(height: 6))
-            ..add(DropdownButtonFormField<String>(
-              value: _selectVals[key],
-              decoration: _inputDecoration,
-              hint: Text('Seleccionar',
-                  style: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
-              items: options
-                  .map((o) => DropdownMenuItem(
-                        value: o['value'] as String? ?? '',
-                        child: Text(o['label'] as String? ?? '',
-                            style: AppTextStyles.body),
-                      ))
-                  .toList(),
-              onChanged: (val) => setState(() => _selectVals[key] = val),
-            ));
+          widgets.add(AppDropdown<String>(
+            label: label,
+            value: _selectVals[key],
+            hint: 'Seleccionar',
+            items: safeOptions
+                .map((o) => AppDropdownItem<String>(
+                      value: o['value'] as String? ?? '',
+                      label: o['label'] as String? ?? '',
+                    ))
+                .toList(),
+            onChanged: (val) => setState(() => _selectVals[key] = val),
+          ));
         case 'bool':
           widgets.add(SwitchListTile(
             contentPadding: EdgeInsets.zero,
@@ -6131,127 +6938,482 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
             activeThumbColor: AppColors.ctTeal,
             onChanged: (val) => setState(() => _boolVals[key] = val),
           ));
+        case 'role_multi_select':
+          final selected = _multiSelectVals[key] ?? [];
+          final catColor = _type != null ? _precondCatColor(_type!) : AppColors.ctTeal;
+          widgets
+            ..add(Text(label,
+                style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)))
+            ..add(const SizedBox(height: 6));
+          if (widget.availableRoles.isEmpty) {
+            widgets.add(Text('No hay roles disponibles',
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)));
+          } else {
+            widgets.add(Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: widget.availableRoles.map((role) {
+                final id = role['id'] as String? ?? '';
+                final name = role['label'] as String? ?? role['name'] as String? ?? id;
+                final isSelected = selected.contains(id);
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      final list = List<String>.from(selected);
+                      if (isSelected) { list.remove(id); } else { list.add(id); }
+                      _multiSelectVals[key] = list;
+                    });
+                  },
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isSelected ? catColor.withValues(alpha: 0.12) : const Color(0xFFFAFAFA),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isSelected ? catColor : const Color(0xFFE5E7EB),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isSelected) ...[
+                            Icon(Icons.check_rounded, size: 14, color: catColor),
+                            const SizedBox(width: 4),
+                          ],
+                          Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                              color: isSelected ? catColor : const Color(0xFF4C5D73),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ));
+          }
+        case 'timezone':
+          widgets.add(_buildTimezoneSelector(key, label));
       }
     }
     return widgets;
   }
 
+  Widget _buildBlockModeSelector() {
+    Widget option(String value, String label, Color bg, Color border, Color text) {
+      final selected = _action == value;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _action = value),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: selected ? bg : const Color(0xFFFAFAFA),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: selected ? border : const Color(0xFFE5E7EB),
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? text : const Color(0xFF6B7280),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Modo de bloqueo',
+            style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
+        const SizedBox(height: 4),
+        Text(
+          'El bloqueo duro detiene la evaluación. El suave registra el fallo y continúa con las siguientes reglas.',
+          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            option('block', '■ Bloqueo duro',
+                const Color(0xFFFEE2E2), const Color(0xFFEF4444), const Color(0xFF7F1D1D)),
+            const SizedBox(width: 8),
+            option('allow', '~ Bloqueo suave',
+                const Color(0xFFFEF3C7), const Color(0xFFF59E0B), const Color(0xFF92400E)),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final catColor = _type != null ? _precondCatColor(_type!) : AppColors.ctTeal;
+    final typeMeta = _type != null ? _kPrecondTypeMeta[_type!] : null;
+
     return Dialog(
       backgroundColor: AppColors.ctSurface,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+        constraints: BoxConstraints(
+          maxWidth: 680,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: _showTypeCatalog
+            ? _buildTypeCatalog()
+            : _buildForm(catColor, typeMeta),
+      ),
+    );
+  }
+
+  Widget _buildTypeCatalog() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
+          child: Row(
             children: [
-              Text(
-                _isEdit ? 'Editar regla' : 'Agregar regla de inicio',
-                style: AppFonts.onest(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ctText),
-              ),
-              const SizedBox(height: 20),
-
-              // Tipo
-              Text('Tipo de regla',
-                  style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
-              const SizedBox(height: 6),
-              widget.types.isEmpty
-                  ? Text(
-                      'Cargando tipos...',
-                      style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                    )
-                  : DropdownButtonFormField<String>(
-                      value: _type,
-                      decoration: _inputDecoration,
-                      hint: Text('Seleccionar tipo',
-                          style: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
-                      items: widget.types
-                          .map((t) => DropdownMenuItem(
-                                value: t['type'] as String? ?? '',
-                                child: Text(t['label'] as String? ?? '',
-                                    style: AppTextStyles.body),
-                              ))
-                          .toList(),
-                      onChanged: (val) {
-                        if (val == null) return;
-                        setState(() {
-                          _type = val;
-                          _initFields(val, {});
-                        });
-                      },
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Nueva precondición',
+                        style: AppTextStyles.body.copyWith(
+                            fontWeight: FontWeight.w700, fontSize: 17)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Elige qué condición debe evaluarse antes de iniciar el flow',
+                      style: AppTextStyles.bodySmall.copyWith(
+                          color: const Color(0xFF4C5D73)),
                     ),
-
-              // Campos dinámicos del tipo seleccionado
-              ..._renderDynamicFields(),
-
-              const SizedBox(height: 16),
-              Text('Mensaje al operador si falla',
-                  style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _messageCtrl,
-                style: AppTextStyles.body,
-                maxLines: 2,
-                decoration: _inputDecoration.copyWith(
-                    hintText:
-                        'Ej: Ya iniciaste turno hoy. Espera mañana para iniciar de nuevo.',
-                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
+                  ],
+                ),
               ),
-
-              const SizedBox(height: 16),
-              Text('Acción si falla',
-                  style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
-              const SizedBox(height: 6),
-              DropdownButtonFormField<String>(
-                value: _action,
-                decoration: _inputDecoration,
-                items: [
-                  DropdownMenuItem(value: 'block', child: Text('Bloquear', style: AppTextStyles.body)),
-                  DropdownMenuItem(value: 'allow', child: Text('Permitir', style: AppTextStyles.body)),
+              IconButton(
+                icon: const Icon(Icons.close, size: 18, color: AppColors.ctText2),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Divider(height: 1, color: AppColors.ctBorder),
+        // Body
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final cat in _kPrecondCategories) ...[
+                  if (_hasTypesInCategory(cat.$1)) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Text(cat.$3, style: const TextStyle(fontSize: 14)),
+                        const SizedBox(width: 6),
+                        Text(cat.$2,
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: cat.$4)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _buildTypeGrid(cat.$1, cat.$4),
+                  ],
                 ],
-                onChanged: (val) => setState(() => _action = val ?? _action),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  bool _hasTypesInCategory(String category) {
+    final availableTypeIds = widget.types.map((t) => t['type'] as String).toSet();
+    return _kPrecondTypeMeta.entries
+        .any((e) => e.value.cat == category && availableTypeIds.contains(e.key));
+  }
+
+  Widget _buildTypeGrid(String category, Color catColor) {
+    final availableTypeIds = widget.types.map((t) => t['type'] as String).toSet();
+    final types = _kPrecondTypeMeta.entries
+        .where((e) => e.value.cat == category && availableTypeIds.contains(e.key))
+        .toList();
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: types.map((e) {
+        final type = e.key;
+        final meta = e.value;
+        return SizedBox(
+          width: 200,
+          child: _PrecondTypeCard(
+            type: type,
+            label: meta.label,
+            example: meta.example,
+            catColor: catColor,
+            onTap: () => setState(() {
+              _type = type;
+              _showTypeCatalog = false;
+              _initFields(type, {});
+            }),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildForm(Color catColor, ({String label, String example, String cat})? typeMeta) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
+          child: Row(
+            children: [
+              if (!_isEdit) ...[
+                GestureDetector(
+                  onTap: () => setState(() {
+                    _showTypeCatalog = true;
+                    _type = null;
+                  }),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Text('← Tipo',
+                        style: AppTextStyles.bodySmall.copyWith(
+                            color: const Color(0xFF6B7280))),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      typeMeta?.label ?? _type ?? '',
+                      style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.w700, fontSize: 17),
+                    ),
+                    if (typeMeta != null) ...[
+                      const SizedBox(height: 2),
+                      Text(typeMeta.example,
+                          style: AppTextStyles.bodySmall.copyWith(
+                              color: const Color(0xFF4C5D73))),
+                    ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('Escalar si falla', style: AppTextStyles.body),
-                value: _escalate,
-                activeThumbColor: AppColors.ctTeal,
-                onChanged: (val) => setState(() => _escalate = val),
+              IconButton(
+                icon: const Icon(Icons.close, size: 18, color: AppColors.ctText2),
+                onPressed: () => Navigator.pop(context),
               ),
-              if (_escalate) ...[
-                const SizedBox(height: 8),
-                Text('Motivo de escalación',
-                    style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Divider(height: 1, color: AppColors.ctBorder),
+        // Body
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Hero diagram
+                _PrecondHeroDiagram(
+                  type: _type ?? '',
+                  config: _buildConfigSnapshot(),
+                  catColor: catColor,
+                  currentFlowName: widget.currentFlowSlug,
+                  flows: widget.workerFlows,
+                  roles: widget.availableRoles,
+                ),
+                const SizedBox(height: 16),
+                const Divider(height: 1, color: AppColors.ctBorder),
+
+                // Dynamic fields
+                ..._renderDynamicFields(),
+
+                const SizedBox(height: 16),
+                Text('Mensaje al operador si falla',
+                    style: AppTextStyles.formLabel.copyWith(
+                        color: AppColors.ctText2)),
                 const SizedBox(height: 6),
                 TextField(
-                  controller: _escalationReasonCtrl,
+                  controller: _messageCtrl,
                   style: AppTextStyles.body,
+                  maxLines: 2,
                   decoration: _inputDecoration.copyWith(
-                      hintText: 'Opcional',
-                      hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
+                      hintText:
+                          'Ej: Ya iniciaste turno hoy. Espera mañana para iniciar de nuevo.',
+                      hintStyle: AppTextStyles.body.copyWith(
+                          color: AppColors.ctText3)),
                 ),
-              ],
 
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _GhostButton(
-                      label: 'Cancelar',
-                      onTap: () => Navigator.of(context).pop()),
-                  const SizedBox(width: 8),
-                  _PrimaryButton(
-                      label: 'Guardar regla', onTap: _submit),
+                const SizedBox(height: 16),
+                _buildBlockModeSelector(),
+
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Escalar si falla', style: AppTextStyles.body),
+                  value: _escalate,
+                  activeThumbColor: AppColors.ctTeal,
+                  onChanged: (val) => setState(() => _escalate = val),
+                ),
+                if (_escalate) ...[
+                  const SizedBox(height: 8),
+                  Text('Motivo de escalación',
+                      style: AppTextStyles.formLabel.copyWith(
+                          color: AppColors.ctText2)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _escalationReasonCtrl,
+                    style: AppTextStyles.body,
+                    decoration: _inputDecoration.copyWith(
+                        hintText: 'Opcional',
+                        hintStyle: AppTextStyles.body.copyWith(
+                            color: AppColors.ctText3)),
+                  ),
                 ],
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+        // Footer
+        Container(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: AppColors.ctBorder)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              AppButton(
+                label: 'Cancelar',
+                variant: AppButtonVariant.ghost,
+                size: AppButtonSize.sm,
+                onPressed: () => Navigator.pop(context),
+              ),
+              const SizedBox(width: 8),
+              AppButton(
+                label: _isEdit ? 'Guardar cambios' : 'Crear precondición',
+                variant: AppButtonVariant.primary,
+                size: AppButtonSize.sm,
+                onPressed: _submit,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── _PrecondTypeCard ─────────────────────────────────────────────────────────
+
+class _PrecondTypeCard extends StatefulWidget {
+  const _PrecondTypeCard({
+    required this.type,
+    required this.label,
+    required this.example,
+    required this.catColor,
+    required this.onTap,
+  });
+  final String type;
+  final String label;
+  final String example;
+  final Color catColor;
+  final VoidCallback onTap;
+
+  @override
+  State<_PrecondTypeCard> createState() => _PrecondTypeCardState();
+}
+
+class _PrecondTypeCardState extends State<_PrecondTypeCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.ctSurface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: _hovered
+                  ? widget.catColor.withValues(alpha: 0.4)
+                  : const Color(0xFFE5E7EB),
+            ),
+            boxShadow: _hovered
+                ? [
+                    BoxShadow(
+                      color: widget.catColor.withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFAFAFA),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: PrecondMiniDiagram(
+                      type: widget.type, catColor: widget.catColor),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(widget.label,
+                  style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w700, fontSize: 13)),
+              const SizedBox(height: 2),
+              Text(
+                widget.example,
+                style: AppTextStyles.bodySmall.copyWith(
+                    fontSize: 11, color: const Color(0xFF6B7280)),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -6259,6 +7421,611 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
       ),
     );
   }
+}
+
+// ── _PrecondHeroDiagram ──────────────────────────────────────────────────────
+
+class _PrecondHeroDiagram extends StatelessWidget {
+  const _PrecondHeroDiagram({
+    required this.type,
+    required this.config,
+    required this.catColor,
+    required this.currentFlowName,
+    required this.flows,
+    required this.roles,
+  });
+  final String type;
+  final Map<String, dynamic> config;
+  final Color catColor;
+  final String currentFlowName;
+  final List<Map<String, dynamic>> flows;
+  final List<Map<String, dynamic>> roles;
+
+  String _flowName(String? slug) {
+    if (slug == null || slug.isEmpty) return '—';
+    final f = flows.where((f) => f['slug'] == slug).firstOrNull;
+    return f?['name'] as String? ?? slug;
+  }
+
+  String _scopeLabel(String? scope) => switch (scope) {
+        'operator' => 'Solo este operador',
+        'operator+day' => 'Operador + día',
+        'tenant+day' => 'Todo el tenant hoy',
+        _ => scope ?? 'operador',
+      };
+
+  String _windowLabel(Map<String, dynamic> c) {
+    final wt = c['window_type'] as String?;
+    final dur = c['window'] as String? ?? c['duration'] as String? ?? '24h';
+    final tz = c['timezone'] as String?;
+    return switch (wt) {
+      'calendar_day' => 'día de hoy${tz != null ? ' ($tz)' : ''}',
+      'shift' => 'turno activo',
+      'rolling' => 'últimas $dur',
+      _ => 'día de hoy',
+    };
+  }
+
+  Widget _flowBox(String label, String sublabel, Color borderColor, Color bgColor,
+      {bool dashed = false}) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 60, maxWidth: 130),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: borderColor.withValues(alpha: dashed ? 0.4 : 1.0),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(label,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: borderColor),
+              maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+          const SizedBox(height: 2),
+          Text(sublabel,
+              style: TextStyle(fontSize: 10, color: const Color(0xFF9CA3AF)),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+
+  Widget _operatorCircle() => Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: catColor.withValues(alpha: 0.15),
+          border: Border.all(color: catColor),
+        ),
+        child: const Center(child: Text('👤', style: TextStyle(fontSize: 20))),
+      );
+
+  Widget _arrowH() => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 24, height: 2, color: catColor.withValues(alpha: 0.4)),
+          Icon(Icons.arrow_right_rounded, size: 16, color: catColor),
+        ],
+      );
+
+  Widget _xMark(String label) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.close, color: Color(0xFFEF4444), size: 28),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFEF4444))),
+        ],
+      );
+
+  Widget _pill(String label, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Text(label,
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+      );
+
+  Widget _miniBox(String label, Color color, {Widget? icon}) => Container(
+        width: 50,
+        height: 40,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Center(
+            child: icon ??
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w700, color: color))),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 160,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFF1F1F1)),
+      ),
+      child: Center(child: _buildDiagram()),
+    );
+  }
+
+  Widget _buildDiagram() => switch (type) {
+        'no_active_execution' => _noActiveExecution(),
+        'requires_active_execution' => _requiresActiveExecution(),
+        'no_concurrent_execution' => _noConcurrentExecution(),
+        'no_execution_in_window' => _noExecutionInWindow(),
+        'requires_completed_sibling' => _requiresCompletedSibling(),
+        'no_active_sibling' => _noActiveSibling(),
+        'all_children_completed' => _allChildrenCompleted(),
+        'requires_parent' => _requiresParent(),
+        'operator_role_in' => _operatorRoleIn(),
+        'requires_active_assignment' => _requiresActiveAssignment(),
+        'field_unique_in_window' => _fieldUniqueInWindow(),
+        'time_window' => _timeWindow(),
+        _ => Icon(Icons.help_outline, size: 32, color: catColor.withValues(alpha: 0.3)),
+      };
+
+  Widget _noActiveExecution() {
+    final slug = config['slug'] as String? ?? config['flow_slug'] as String?;
+    final hasSlug = slug != null && slug.isNotEmpty;
+    final targetName = hasSlug ? _flowName(slug) : 'este flow';
+    final targetColor = hasSlug ? const Color(0xFFEF4444) : const Color(0xFF9CA3AF);
+    final targetBg = hasSlug ? const Color(0xFFFEE2E2) : const Color(0xFFF5F5F5);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('YA EN CURSO', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+              const SizedBox(height: 4),
+              _flowBox(targetName, 'activo', targetColor, targetBg),
+            ]),
+            const SizedBox(width: 12),
+            _xMark('no permitido'),
+            const SizedBox(width: 12),
+            Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('INTENTO DE INICIO', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+              const SizedBox(height: 4),
+              _flowBox(currentFlowName, 'bloqueado', catColor, catColor.withValues(alpha: 0.08)),
+            ]),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _pill('SCOPE: ${_scopeLabel(config['scope'] as String?)}', catColor),
+      ],
+    );
+  }
+
+  Widget _requiresActiveExecution() {
+    final slug = config['slug'] as String? ?? config['flow_slug'] as String?;
+    final hasSlug = slug != null && slug.isNotEmpty;
+    final requiredName = hasSlug ? _flowName(slug) : 'otro flow';
+    final requiredColor = hasSlug ? const Color(0xFF15803D) : const Color(0xFF9CA3AF);
+    final requiredBg = hasSlug ? const Color(0xFFDCFCE7) : const Color(0xFFF5F5F5);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('DEBE ESTAR ACTIVO', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+          const SizedBox(height: 4),
+          _flowBox(requiredName, 'en curso', requiredColor, requiredBg),
+        ]),
+        const SizedBox(width: 12),
+        _arrowH(),
+        const SizedBox(width: 12),
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('ESTE FLOW', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+          const SizedBox(height: 4),
+          _flowBox(currentFlowName, 'puede iniciar', catColor, catColor.withValues(alpha: 0.08)),
+        ]),
+      ],
+    );
+  }
+
+  Widget _noConcurrentExecution() => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 160,
+            height: 85,
+            child: Stack(
+              children: [
+                Positioned(left: 0, top: 0,
+                    child: _flowBox(currentFlowName, 'instancia 1', catColor, catColor.withValues(alpha: 0.08))),
+                Positioned(left: 20, top: 15,
+                    child: _flowBox(currentFlowName, 'instancia 2', catColor, catColor.withValues(alpha: 0.08))),
+                Positioned.fill(
+                  child: CustomPaint(painter: _DiagLinePainter(const Color(0xFFEF4444))),
+                ),
+              ],
+            ),
+          ),
+          Text('no permitido',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFEF4444))),
+        ],
+      );
+
+  Widget _noExecutionInWindow() {
+    final wt = config['window_type'] as String? ?? 'day';
+    final window = config['window'] as String? ?? '24h';
+    final scope = config['scope'] as String?;
+    final catSlug = config['catalog_slug'] as String?;
+    final windowLabel = switch (wt) {
+      'rolling' => 'Últimas $window',
+      'shift' => 'Turno activo',
+      _ => 'Día calendario',
+    };
+    final scopeLabel = scope == 'tenant' ? 'Todo el tenant' : 'Solo este operador';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 280,
+          height: 48,
+          child: CustomPaint(
+            painter: _WindowTimelinePainter(
+              catColor: catColor,
+              windowMode: wt,
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          alignment: WrapAlignment.center,
+          children: [
+            _pill(windowLabel, catColor),
+            _pill(scopeLabel, catColor),
+            if (wt == 'shift' && catSlug != null)
+              _pill(catSlug, catColor),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _requiresCompletedSibling() {
+    final slug = config['sibling_slug'] as String? ?? config['slug'] as String?;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('PREVIO', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+          const SizedBox(height: 4),
+          _flowBox(_flowName(slug), _windowLabel(config), const Color(0xFF15803D), const Color(0xFFDCFCE7)),
+        ]),
+        const SizedBox(width: 12),
+        _arrowH(),
+        const SizedBox(width: 12),
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('AHORA', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+          const SizedBox(height: 4),
+          _flowBox(currentFlowName, 'puede iniciar', catColor, catColor.withValues(alpha: 0.08)),
+        ]),
+      ],
+    );
+  }
+
+  Widget _noActiveSibling() {
+    final slug = config['flow_slug'] as String? ?? config['sibling_slug'] as String? ?? config['slug'] as String?;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('NO DEBE ESTAR ACTIVO', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+          const SizedBox(height: 4),
+          _flowBox(_flowName(slug), 'bloquearía', const Color(0xFFEF4444), const Color(0xFFFEE2E2)),
+        ]),
+        const SizedBox(width: 12),
+        _xMark('conflicto'),
+        const SizedBox(width: 12),
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('ESTE FLOW', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+          const SizedBox(height: 4),
+          _flowBox(currentFlowName, 'no puede iniciar', catColor, catColor.withValues(alpha: 0.08)),
+        ]),
+      ],
+    );
+  }
+
+  Widget _allChildrenCompleted() {
+    final parentSlug = config['parent_flow_slug'] as String?;
+    final countKey = config['count_field_key'] as String?;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _flowBox(_flowName(parentSlug), countKey != null ? '$countKey esperados' : 'flow padre',
+            catColor, catColor.withValues(alpha: 0.08)),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _miniBox('✓', const Color(0xFF15803D),
+                icon: Icon(Icons.check, size: 14, color: Color(0xFF15803D))),
+            const SizedBox(width: 4),
+            _miniBox('✓', const Color(0xFF15803D),
+                icon: Icon(Icons.check, size: 14, color: Color(0xFF15803D))),
+            const SizedBox(width: 4),
+            _miniBox('⧗', const Color(0xFF9CA3AF)),
+            const SizedBox(width: 4),
+            _miniBox('⧗', const Color(0xFF9CA3AF)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _requiresParent() => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _flowBox('flow padre', 'abre este flow', catColor, catColor.withValues(alpha: 0.08), dashed: true),
+          Icon(Icons.arrow_downward, color: catColor, size: 20),
+          _flowBox(currentFlowName, 'solo como hijo', catColor, catColor.withValues(alpha: 0.04), dashed: true),
+        ],
+      );
+
+  Widget _operatorRoleIn() {
+    final rawIds = config['role_ids'];
+    final List<String> roleIds;
+    if (rawIds is List) {
+      roleIds = List<String>.from(rawIds);
+    } else if (rawIds is String && rawIds.isNotEmpty) {
+      roleIds = [rawIds];
+    } else {
+      roleIds = [];
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _operatorCircle(),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          alignment: WrapAlignment.center,
+          children: roleIds.isEmpty
+              ? [_pill('rol A', catColor), _pill('rol B', catColor)]
+              : roleIds.map((id) {
+                  final r = roles.where((r) => r['id'] == id).firstOrNull;
+                  return _pill(r?['label'] as String? ?? id, catColor);
+                }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _requiresActiveAssignment() {
+    final catSlug = config['catalog_id'] as String? ?? config['catalog_slug'] as String?;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _operatorCircle(),
+        const SizedBox(width: 12),
+        _arrowH(),
+        const SizedBox(width: 12),
+        Container(
+          width: 70,
+          height: 70,
+          decoration: BoxDecoration(
+            color: catColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: catColor),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('📋', style: TextStyle(fontSize: 24)),
+              Text(catSlug ?? 'catálogo',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: catColor),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _fieldUniqueInWindow() {
+    final fieldKey = config['field_key'] as String? ?? 'campo';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _miniBox('A', catColor),
+            const SizedBox(width: 4),
+            _miniBox('B', const Color(0xFF9CA3AF)),
+            const SizedBox(width: 4),
+            _miniBox('A', const Color(0xFFEF4444)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text('duplicado: $fieldKey',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFEF4444))),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _pill(_windowLabel(config), catColor),
+            const SizedBox(width: 6),
+            _pill(_scopeLabel(config['scope'] as String?), catColor),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _timeWindow() {
+    final start = config['start'] as String? ?? config['start_time'] as String? ?? '00:00';
+    final end = config['end'] as String? ?? config['end_time'] as String? ?? '23:59';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('🕐', style: TextStyle(fontSize: 24)),
+        const SizedBox(height: 6),
+        SizedBox(
+          width: 240,
+          height: 20,
+          child: CustomPaint(
+            painter: _TimeWindowPainter(
+              startFraction: _timeFraction(start),
+              endFraction: _timeFraction(end),
+              color: catColor,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 240,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('00:00', style: TextStyle(fontSize: 9, color: Color(0xFF9CA3AF))),
+              Text('23:59', style: TextStyle(fontSize: 9, color: Color(0xFF9CA3AF))),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _pill(start, catColor),
+            const SizedBox(width: 6),
+            Text('→', style: TextStyle(color: Color(0xFF9CA3AF))),
+            const SizedBox(width: 6),
+            _pill(end, catColor),
+          ],
+        ),
+      ],
+    );
+  }
+
+  double _timeFraction(String time) {
+    final parts = time.split(':');
+    if (parts.length < 2) return 0;
+    final h = int.tryParse(parts[0]) ?? 0;
+    final m = int.tryParse(parts[1]) ?? 0;
+    return (h * 60 + m) / 1440;
+  }
+}
+
+class _DiagLinePainter extends CustomPainter {
+  _DiagLinePainter(this.color);
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawLine(
+      Offset(0, size.height),
+      Offset(size.width, 0),
+      Paint()..color = color..strokeWidth = 2,
+    );
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _TimeWindowPainter extends CustomPainter {
+  _TimeWindowPainter({required this.startFraction, required this.endFraction, required this.color});
+  final double startFraction;
+  final double endFraction;
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Background line
+    canvas.drawLine(
+      Offset(0, size.height / 2),
+      Offset(size.width, size.height / 2),
+      Paint()..color = const Color(0xFFE5E7EB)..strokeWidth = 3,
+    );
+    // Ticks
+    canvas.drawLine(Offset(0, 2), Offset(0, size.height - 2),
+        Paint()..color = const Color(0xFFD1D5DB)..strokeWidth = 1);
+    canvas.drawLine(Offset(size.width, 2), Offset(size.width, size.height - 2),
+        Paint()..color = const Color(0xFFD1D5DB)..strokeWidth = 1);
+    // Allowed zone
+    final left = size.width * startFraction;
+    final right = size.width * endFraction;
+    final rect = Rect.fromLTRB(left, 0, right, size.height);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+      Paint()..color = color.withValues(alpha: 0.3),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+      Paint()..color = color..strokeWidth = 1..style = PaintingStyle.stroke,
+    );
+  }
+  @override
+  bool shouldRepaint(_TimeWindowPainter old) =>
+      old.startFraction != startFraction || old.endFraction != endFraction || old.color != color;
+}
+
+class _WindowTimelinePainter extends CustomPainter {
+  _WindowTimelinePainter({required this.catColor, this.windowMode = 'day'});
+  final Color catColor;
+  final String windowMode;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final midY = size.height / 2;
+    // Background line
+    canvas.drawLine(Offset(0, midY), Offset(size.width, midY),
+        Paint()..color = const Color(0xFFE5E7EB)..strokeWidth = 2);
+    // Ticks
+    canvas.drawLine(Offset(0, midY - 4), Offset(0, midY + 4),
+        Paint()..color = const Color(0xFFD1D5DB)..strokeWidth = 1);
+    canvas.drawLine(Offset(size.width, midY - 4), Offset(size.width, midY + 4),
+        Paint()..color = const Color(0xFFD1D5DB)..strokeWidth = 1);
+    // Window rect — wider for shift
+    final wLeft = windowMode == 'shift' ? size.width * 0.10 : size.width * 0.15;
+    final wRight = windowMode == 'shift' ? size.width * 0.80 : size.width * 0.75;
+    final wRect = Rect.fromLTRB(wLeft, midY - 10, wRight, midY + 10);
+    canvas.drawRRect(RRect.fromRectAndRadius(wRect, const Radius.circular(3)),
+        Paint()..color = catColor.withValues(alpha: 0.2));
+    canvas.drawRRect(RRect.fromRectAndRadius(wRect, const Radius.circular(3)),
+        Paint()..color = catColor..strokeWidth = 1.5..style = PaintingStyle.stroke);
+    // Execution point ✓ at 45%
+    final exX = size.width * 0.45;
+    canvas.drawCircle(Offset(exX, midY), 7, Paint()..color = catColor);
+    final tp = TextPainter(
+      text: const TextSpan(text: '✓', style: TextStyle(fontSize: 9, color: Colors.white)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(exX - tp.width / 2, midY - tp.height / 2));
+    // X blocked at 85%
+    final bx = size.width * 0.85;
+    canvas.drawCircle(Offset(bx, midY), 7, Paint()..color = const Color(0xFFFEE2E2));
+    canvas.drawCircle(Offset(bx, midY), 7,
+        Paint()..color = const Color(0xFFEF4444)..strokeWidth = 1..style = PaintingStyle.stroke);
+    final xp = TextPainter(
+      text: const TextSpan(text: '✕',
+          style: TextStyle(fontSize: 8, color: Color(0xFFEF4444), fontWeight: FontWeight.w700)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    xp.paint(canvas, Offset(bx - xp.width / 2, midY - xp.height / 2));
+  }
+
+  @override
+  bool shouldRepaint(_WindowTimelinePainter old) =>
+      old.catColor != catColor || old.windowMode != windowMode;
 }
 
 // ── _SemanticWarning ──────────────────────────────────────────────────────────
