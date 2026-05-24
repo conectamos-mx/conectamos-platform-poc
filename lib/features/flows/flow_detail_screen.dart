@@ -6579,6 +6579,14 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     return config;
   }
 
+  Map<String, dynamic> _buildConfigSnapshot() {
+    final map = <String, dynamic>{};
+    _textCtrls.forEach((k, v) { if (v.text.isNotEmpty) map[k] = v.text; });
+    _selectVals.forEach((k, v) { if (v != null) map[k] = v; });
+    _boolVals.forEach((k, v) { map[k] = v; });
+    return map;
+  }
+
   void _submit() {
     if (_type == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -7076,18 +7084,13 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Hero diagram
-                Container(
-                  width: double.infinity,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFAFAFA),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFF1F1F1)),
-                  ),
-                  child: Center(
-                    child: PrecondMiniDiagram(
-                        type: _type ?? '', catColor: catColor),
-                  ),
+                _PrecondHeroDiagram(
+                  type: _type ?? '',
+                  config: _buildConfigSnapshot(),
+                  catColor: catColor,
+                  currentFlowName: widget.currentFlowSlug,
+                  flows: widget.workerFlows,
+                  roles: widget.availableRoles,
                 ),
                 const SizedBox(height: 16),
                 const Divider(height: 1, color: AppColors.ctBorder),
@@ -7257,6 +7260,504 @@ class _PrecondTypeCardState extends State<_PrecondTypeCard> {
       ),
     );
   }
+}
+
+// ── _PrecondHeroDiagram ──────────────────────────────────────────────────────
+
+class _PrecondHeroDiagram extends StatelessWidget {
+  const _PrecondHeroDiagram({
+    required this.type,
+    required this.config,
+    required this.catColor,
+    required this.currentFlowName,
+    required this.flows,
+    required this.roles,
+  });
+  final String type;
+  final Map<String, dynamic> config;
+  final Color catColor;
+  final String currentFlowName;
+  final List<Map<String, dynamic>> flows;
+  final List<Map<String, dynamic>> roles;
+
+  String _flowName(String? slug) {
+    if (slug == null || slug.isEmpty) return '—';
+    final f = flows.where((f) => f['slug'] == slug).firstOrNull;
+    return f?['name'] as String? ?? slug;
+  }
+
+  String _scopeLabel(String? scope) => switch (scope) {
+        'operator' => 'Solo este operador',
+        'operator+day' => 'Operador + día',
+        'tenant+day' => 'Todo el tenant hoy',
+        _ => scope ?? 'operador',
+      };
+
+  String _windowLabel(Map<String, dynamic> c) {
+    final wt = c['window_type'] as String?;
+    final dur = c['window'] as String? ?? c['duration'] as String? ?? '24h';
+    final tz = c['timezone'] as String?;
+    return switch (wt) {
+      'calendar_day' => 'día de hoy${tz != null ? ' ($tz)' : ''}',
+      'shift' => 'turno activo',
+      'rolling' => 'últimas $dur',
+      _ => 'día de hoy',
+    };
+  }
+
+  Widget _flowBox(String label, String sublabel, Color borderColor, Color bgColor,
+      {bool dashed = false}) {
+    return Container(
+      width: 130,
+      height: 70,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: borderColor.withValues(alpha: dashed ? 0.4 : 1.0),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(label,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: borderColor),
+              maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+          const SizedBox(height: 2),
+          Text(sublabel,
+              style: TextStyle(fontSize: 10, color: const Color(0xFF9CA3AF))),
+        ],
+      ),
+    );
+  }
+
+  Widget _operatorCircle() => Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: catColor.withValues(alpha: 0.15),
+          border: Border.all(color: catColor),
+        ),
+        child: const Center(child: Text('👤', style: TextStyle(fontSize: 20))),
+      );
+
+  Widget _arrowH() => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 24, height: 2, color: catColor.withValues(alpha: 0.4)),
+          Icon(Icons.arrow_right_rounded, size: 16, color: catColor),
+        ],
+      );
+
+  Widget _xMark(String label) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.close, color: Color(0xFFEF4444), size: 28),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFEF4444))),
+        ],
+      );
+
+  Widget _pill(String label, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Text(label,
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+      );
+
+  Widget _miniBox(String label, Color color, {Widget? icon}) => Container(
+        width: 50,
+        height: 40,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Center(
+            child: icon ??
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w700, color: color))),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 160,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFF1F1F1)),
+      ),
+      child: Center(child: _buildDiagram()),
+    );
+  }
+
+  Widget _buildDiagram() => switch (type) {
+        'no_active_execution' => _noActiveExecution(),
+        'requires_active_execution' => _requiresActiveExecution(),
+        'no_concurrent_execution' => _noConcurrentExecution(),
+        'requires_completed_sibling' => _requiresCompletedSibling(),
+        'no_active_sibling' => _noActiveSibling(),
+        'all_children_completed' => _allChildrenCompleted(),
+        'requires_parent' => _requiresParent(),
+        'operator_role_in' => _operatorRoleIn(),
+        'requires_active_assignment' => _requiresActiveAssignment(),
+        'field_unique_in_window' => _fieldUniqueInWindow(),
+        'time_window' => _timeWindow(),
+        _ => Icon(Icons.help_outline, size: 32, color: catColor.withValues(alpha: 0.3)),
+      };
+
+  Widget _noActiveExecution() {
+    final slug = config['slug'] as String? ?? config['flow_slug'] as String?;
+    final name = _flowName(slug);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('YA EN CURSO', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+              const SizedBox(height: 4),
+              _flowBox(name, 'activo', const Color(0xFFEF4444), const Color(0xFFFEE2E2)),
+            ]),
+            const SizedBox(width: 12),
+            _xMark('no permitido'),
+            const SizedBox(width: 12),
+            Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('INTENTO DE INICIO', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+              const SizedBox(height: 4),
+              _flowBox(name, 'bloqueado', catColor, catColor.withValues(alpha: 0.08)),
+            ]),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _pill('SCOPE: ${_scopeLabel(config['scope'] as String?)}', catColor),
+      ],
+    );
+  }
+
+  Widget _requiresActiveExecution() {
+    final slug = config['slug'] as String? ?? config['flow_slug'] as String?;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('DEBE ESTAR ACTIVO', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+          const SizedBox(height: 4),
+          _flowBox(_flowName(slug), 'en curso', const Color(0xFF15803D), const Color(0xFFDCFCE7)),
+        ]),
+        const SizedBox(width: 12),
+        _arrowH(),
+        const SizedBox(width: 12),
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('ESTE FLOW', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+          const SizedBox(height: 4),
+          _flowBox(currentFlowName, 'puede iniciar', catColor, catColor.withValues(alpha: 0.08)),
+        ]),
+      ],
+    );
+  }
+
+  Widget _noConcurrentExecution() => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 160,
+            height: 85,
+            child: Stack(
+              children: [
+                Positioned(left: 0, top: 0,
+                    child: _flowBox(currentFlowName, 'instancia 1', catColor, catColor.withValues(alpha: 0.08))),
+                Positioned(left: 20, top: 15,
+                    child: _flowBox(currentFlowName, 'instancia 2', catColor, catColor.withValues(alpha: 0.08))),
+                Positioned.fill(
+                  child: CustomPaint(painter: _DiagLinePainter(const Color(0xFFEF4444))),
+                ),
+              ],
+            ),
+          ),
+          Text('no permitido',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFEF4444))),
+        ],
+      );
+
+  Widget _requiresCompletedSibling() {
+    final slug = config['sibling_slug'] as String? ?? config['slug'] as String?;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('PREVIO', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+          const SizedBox(height: 4),
+          _flowBox(_flowName(slug), _windowLabel(config), const Color(0xFF15803D), const Color(0xFFDCFCE7)),
+        ]),
+        const SizedBox(width: 12),
+        _arrowH(),
+        const SizedBox(width: 12),
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('AHORA', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+          const SizedBox(height: 4),
+          _flowBox(currentFlowName, 'puede iniciar', catColor, catColor.withValues(alpha: 0.08)),
+        ]),
+      ],
+    );
+  }
+
+  Widget _noActiveSibling() {
+    final slug = config['flow_slug'] as String? ?? config['sibling_slug'] as String? ?? config['slug'] as String?;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('NO DEBE ESTAR ACTIVO', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+          const SizedBox(height: 4),
+          _flowBox(_flowName(slug), 'bloquearía', const Color(0xFFEF4444), const Color(0xFFFEE2E2)),
+        ]),
+        const SizedBox(width: 12),
+        _xMark('conflicto'),
+        const SizedBox(width: 12),
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('ESTE FLOW', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
+          const SizedBox(height: 4),
+          _flowBox(currentFlowName, 'no puede iniciar', catColor, catColor.withValues(alpha: 0.08)),
+        ]),
+      ],
+    );
+  }
+
+  Widget _allChildrenCompleted() {
+    final parentSlug = config['parent_flow_slug'] as String?;
+    final countKey = config['count_field_key'] as String?;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _flowBox(_flowName(parentSlug), countKey != null ? '$countKey esperados' : 'flow padre',
+            catColor, catColor.withValues(alpha: 0.08)),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _miniBox('✓', const Color(0xFF15803D),
+                icon: Icon(Icons.check, size: 14, color: Color(0xFF15803D))),
+            const SizedBox(width: 4),
+            _miniBox('✓', const Color(0xFF15803D),
+                icon: Icon(Icons.check, size: 14, color: Color(0xFF15803D))),
+            const SizedBox(width: 4),
+            _miniBox('⧗', const Color(0xFF9CA3AF)),
+            const SizedBox(width: 4),
+            _miniBox('⧗', const Color(0xFF9CA3AF)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _requiresParent() => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _flowBox('flow padre', 'abre este flow', catColor, catColor.withValues(alpha: 0.08), dashed: true),
+          Icon(Icons.arrow_downward, color: catColor, size: 20),
+          _flowBox(currentFlowName, 'solo como hijo', catColor, catColor.withValues(alpha: 0.04), dashed: true),
+        ],
+      );
+
+  Widget _operatorRoleIn() {
+    final roleIds = (config['role_ids'] as List?)?.cast<String>() ?? [];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _operatorCircle(),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          alignment: WrapAlignment.center,
+          children: roleIds.isEmpty
+              ? [_pill('rol A', catColor), _pill('rol B', catColor)]
+              : roleIds.map((id) {
+                  final r = roles.where((r) => r['id'] == id).firstOrNull;
+                  return _pill(r?['label'] as String? ?? id, catColor);
+                }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _requiresActiveAssignment() {
+    final catSlug = config['catalog_id'] as String? ?? config['catalog_slug'] as String?;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _operatorCircle(),
+        const SizedBox(width: 12),
+        _arrowH(),
+        const SizedBox(width: 12),
+        Container(
+          width: 70,
+          height: 70,
+          decoration: BoxDecoration(
+            color: catColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: catColor),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('📋', style: TextStyle(fontSize: 24)),
+              Text(catSlug ?? 'catálogo',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: catColor),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _fieldUniqueInWindow() {
+    final fieldKey = config['field_key'] as String? ?? 'campo';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _miniBox('A', catColor),
+            const SizedBox(width: 4),
+            _miniBox('B', const Color(0xFF9CA3AF)),
+            const SizedBox(width: 4),
+            _miniBox('A', const Color(0xFFEF4444)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text('duplicado: $fieldKey',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFEF4444))),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _pill(_windowLabel(config), catColor),
+            const SizedBox(width: 6),
+            _pill(_scopeLabel(config['scope'] as String?), catColor),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _timeWindow() {
+    final start = config['start'] as String? ?? config['start_time'] as String? ?? '00:00';
+    final end = config['end'] as String? ?? config['end_time'] as String? ?? '23:59';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('🕐', style: TextStyle(fontSize: 24)),
+        const SizedBox(height: 6),
+        SizedBox(
+          width: 240,
+          height: 20,
+          child: CustomPaint(
+            painter: _TimeWindowPainter(
+              startFraction: _timeFraction(start),
+              endFraction: _timeFraction(end),
+              color: catColor,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 240,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('00:00', style: TextStyle(fontSize: 9, color: Color(0xFF9CA3AF))),
+              Text('23:59', style: TextStyle(fontSize: 9, color: Color(0xFF9CA3AF))),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _pill(start, catColor),
+            const SizedBox(width: 6),
+            Text('→', style: TextStyle(color: Color(0xFF9CA3AF))),
+            const SizedBox(width: 6),
+            _pill(end, catColor),
+          ],
+        ),
+      ],
+    );
+  }
+
+  double _timeFraction(String time) {
+    final parts = time.split(':');
+    if (parts.length < 2) return 0;
+    final h = int.tryParse(parts[0]) ?? 0;
+    final m = int.tryParse(parts[1]) ?? 0;
+    return (h * 60 + m) / 1440;
+  }
+}
+
+class _DiagLinePainter extends CustomPainter {
+  _DiagLinePainter(this.color);
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawLine(
+      Offset(0, size.height),
+      Offset(size.width, 0),
+      Paint()..color = color..strokeWidth = 2,
+    );
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _TimeWindowPainter extends CustomPainter {
+  _TimeWindowPainter({required this.startFraction, required this.endFraction, required this.color});
+  final double startFraction;
+  final double endFraction;
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Background line
+    canvas.drawLine(
+      Offset(0, size.height / 2),
+      Offset(size.width, size.height / 2),
+      Paint()..color = const Color(0xFFE5E7EB)..strokeWidth = 3,
+    );
+    // Ticks
+    canvas.drawLine(Offset(0, 2), Offset(0, size.height - 2),
+        Paint()..color = const Color(0xFFD1D5DB)..strokeWidth = 1);
+    canvas.drawLine(Offset(size.width, 2), Offset(size.width, size.height - 2),
+        Paint()..color = const Color(0xFFD1D5DB)..strokeWidth = 1);
+    // Allowed zone
+    final left = size.width * startFraction;
+    final right = size.width * endFraction;
+    final rect = Rect.fromLTRB(left, 0, right, size.height);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+      Paint()..color = color.withValues(alpha: 0.3),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+      Paint()..color = color..strokeWidth = 1..style = PaintingStyle.stroke,
+    );
+  }
+  @override
+  bool shouldRepaint(_TimeWindowPainter old) =>
+      old.startFraction != startFraction || old.endFraction != endFraction || old.color != color;
 }
 
 // ── _SemanticWarning ──────────────────────────────────────────────────────────
