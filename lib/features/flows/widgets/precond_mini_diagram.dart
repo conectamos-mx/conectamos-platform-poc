@@ -26,6 +26,7 @@ class PrecondMiniDiagram extends StatelessWidget {
         'requires_parent' => _requiresParent(),
         'operator_role_in' => _operatorRoleIn(),
         'requires_active_assignment' => _requiresActiveAssignment(),
+        'no_execution_in_window' => _noExecutionInWindow(),
         'field_unique_in_window' => _fieldUniqueInWindow(),
         'time_window' => _timeWindow(),
         _ => Center(
@@ -301,6 +302,56 @@ class PrecondMiniDiagram extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text('permitido', style: TextStyle(fontSize: 6, color: catColor.withValues(alpha: 0.6))),
+        ],
+      );
+
+  Widget _noExecutionInWindow() => Stack(
+        children: [
+          // Timeline line
+          Positioned(
+            left: 6, right: 6, top: 37,
+            child: Container(height: 2, color: const Color(0xFFD1D5DB)),
+          ),
+          // Window rect
+          Positioned(
+            left: 18, top: 30, width: 44, height: 14,
+            child: Container(
+              decoration: BoxDecoration(
+                color: catColor.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(2),
+                border: Border.all(color: catColor, width: 1.5),
+              ),
+            ),
+          ),
+          // Execution point ✓
+          Positioned(
+            left: 35, top: 32,
+            child: Container(
+              width: 10, height: 10,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: catColor),
+              child: Center(child: Text('✓', style: TextStyle(fontSize: 7, color: Colors.white))),
+            ),
+          ),
+          // X blocked
+          Positioned(
+            right: 2, top: 29,
+            child: Container(
+              width: 16, height: 16,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFFEE2E2),
+              ),
+              child: Center(child: Text('✕', style: TextStyle(fontSize: 8, color: Color(0xFFEF4444), fontWeight: FontWeight.w700))),
+            ),
+          ),
+          // "duplicado" label
+          Positioned(
+            left: 20, top: 20,
+            child: Text('duplicado', style: TextStyle(fontSize: 7, fontWeight: FontWeight.w700, color: Color(0xFFEF4444))),
+          ),
+          // Tick labels
+          Positioned(left: 4, top: 48, child: Text('00:00', style: TextStyle(fontSize: 7, color: Color(0xFF9CA3AF)))),
+          Positioned(right: 2, top: 48, child: Text('hoy', style: TextStyle(fontSize: 7, color: Color(0xFF9CA3AF)))),
         ],
       );
 }

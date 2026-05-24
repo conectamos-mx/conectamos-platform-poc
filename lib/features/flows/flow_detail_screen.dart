@@ -5933,6 +5933,7 @@ const _kPrecondShortLabels = {
   'no_active_execution': 'Sin instancia abierta',
   'requires_active_execution': 'Otro flow en curso',
   'no_concurrent_execution': 'Sin duplicado',
+  'no_execution_in_window': 'Una vez en ventana',
   'requires_completed_sibling': 'Hermano completado',
   'no_active_sibling': 'Sin hermano activo',
   'all_children_completed': 'Hijos completados',
@@ -5947,6 +5948,7 @@ const _kPrecondCatColors = {
   'no_active_execution': Color(0xFF3B82F6),
   'requires_active_execution': Color(0xFF3B82F6),
   'no_concurrent_execution': Color(0xFF3B82F6),
+  'no_execution_in_window': Color(0xFF3B82F6),
   'requires_completed_sibling': Color(0xFF8B5CF6),
   'no_active_sibling': Color(0xFF8B5CF6),
   'all_children_completed': Color(0xFF8B5CF6),
@@ -5961,6 +5963,7 @@ const _kPrecondTypeMeta = <String, ({String label, String example, String cat})>
   'no_active_execution': (label: 'Sin ejecución activa', example: 'No puede iniciar "Inicio de Ruta" si ya tiene uno en curso.', cat: 'state'),
   'requires_active_execution': (label: 'Requiere ejecución activa', example: 'No puede iniciar "Cierre de Entrega" sin un "Inicio de Ruta" activo.', cat: 'state'),
   'no_concurrent_execution': (label: 'Sin ejecución concurrente', example: 'No puede abrir "Captura de Incidencia" dos veces.', cat: 'state'),
+  'no_execution_in_window': (label: 'Máximo una vez en la ventana', example: 'El operador no puede iniciar "Check-in de Turno" más de una vez por día.', cat: 'state'),
   'requires_completed_sibling': (label: 'Flow hermano completado', example: 'No puede iniciar "Segunda Ruta" sin completar "Primera Ruta" hoy.', cat: 'relation'),
   'no_active_sibling': (label: 'Sin flow hermano activo', example: 'No puede iniciar "Entrega Especial" si tiene "Entrega Normal" activa.', cat: 'relation'),
   'all_children_completed': (label: 'Todos los hijos completados', example: 'No puede iniciar "Cierre de Turno" sin completar todas las entregas registradas.', cat: 'relation'),
@@ -5982,6 +5985,7 @@ const _kPrecondCatLabels = {
   'no_active_execution': 'Estado',
   'requires_active_execution': 'Estado',
   'no_concurrent_execution': 'Estado',
+  'no_execution_in_window': 'Estado',
   'requires_completed_sibling': 'Relación',
   'no_active_sibling': 'Relación',
   'all_children_completed': 'Relación',
@@ -6302,6 +6306,17 @@ class _RuleSummary extends StatelessWidget {
           TextSpan(text: 'El operador no puede tener '),
           TextSpan(text: 'dos instancias', style: bold),
           TextSpan(text: ' de este flow corriendo al mismo tiempo.'),
+        ],
+      'no_execution_in_window' => [
+          TextSpan(text: 'El operador solo puede ejecutar '),
+          TextSpan(text: _scopeLabel(c['scope'] as String?), style: bold),
+          TextSpan(text: ' '),
+          TextSpan(
+              text: (c['window_type'] as String?) == 'rolling'
+                  ? 'una vez cada ${c['window'] as String? ?? '24h'}'
+                  : 'una vez por día',
+              style: bold),
+          TextSpan(text: '.'),
         ],
       'requires_completed_sibling' => [
           TextSpan(text: 'Debe haber completado '),
@@ -6838,24 +6853,18 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
               ));
           }
         case 'select':
-          widgets
-            ..add(Text(label,
-                style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)))
-            ..add(const SizedBox(height: 6))
-            ..add(DropdownButtonFormField<String>(
-              value: _selectVals[key],
-              decoration: _inputDecoration,
-              hint: Text('Seleccionar',
-                  style: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
-              items: options
-                  .map((o) => DropdownMenuItem(
-                        value: o['value'] as String? ?? '',
-                        child: Text(o['label'] as String? ?? '',
-                            style: AppTextStyles.body),
-                      ))
-                  .toList(),
-              onChanged: (val) => setState(() => _selectVals[key] = val),
-            ));
+          widgets.add(AppDropdown<String>(
+            label: label,
+            value: _selectVals[key],
+            hint: 'Seleccionar',
+            items: options
+                .map((o) => AppDropdownItem<String>(
+                      value: o['value'] as String? ?? '',
+                      label: o['label'] as String? ?? '',
+                    ))
+                .toList(),
+            onChanged: (val) => setState(() => _selectVals[key] = val),
+          ));
         case 'bool':
           widgets.add(SwitchListTile(
             contentPadding: EdgeInsets.zero,
@@ -7494,6 +7503,7 @@ class _PrecondHeroDiagram extends StatelessWidget {
         'no_active_execution' => _noActiveExecution(),
         'requires_active_execution' => _requiresActiveExecution(),
         'no_concurrent_execution' => _noConcurrentExecution(),
+        'no_execution_in_window' => _noExecutionInWindow(),
         'requires_completed_sibling' => _requiresCompletedSibling(),
         'no_active_sibling' => _noActiveSibling(),
         'all_children_completed' => _allChildrenCompleted(),
@@ -7579,6 +7589,35 @@ class _PrecondHeroDiagram extends StatelessWidget {
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFEF4444))),
         ],
       );
+
+  Widget _noExecutionInWindow() {
+    final wt = config['window_type'] as String? ?? 'day';
+    final window = config['window'] as String? ?? '24h';
+    final scope = config['scope'] as String?;
+    final windowLabel = wt == 'rolling' ? 'Últimas $window' : 'Día calendario';
+    final scopeLabel = scope == 'tenant' ? 'Todo el tenant' : 'Solo este operador';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 280,
+          height: 48,
+          child: CustomPaint(
+            painter: _WindowTimelinePainter(catColor: catColor),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _pill(windowLabel, catColor),
+            const SizedBox(width: 6),
+            _pill(scopeLabel, catColor),
+          ],
+        ),
+      ],
+    );
+  }
 
   Widget _requiresCompletedSibling() {
     final slug = config['sibling_slug'] as String? ?? config['slug'] as String?;
@@ -7854,6 +7893,54 @@ class _TimeWindowPainter extends CustomPainter {
   @override
   bool shouldRepaint(_TimeWindowPainter old) =>
       old.startFraction != startFraction || old.endFraction != endFraction || old.color != color;
+}
+
+class _WindowTimelinePainter extends CustomPainter {
+  _WindowTimelinePainter({required this.catColor});
+  final Color catColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final midY = size.height / 2;
+    // Background line
+    canvas.drawLine(Offset(0, midY), Offset(size.width, midY),
+        Paint()..color = const Color(0xFFE5E7EB)..strokeWidth = 2);
+    // Ticks
+    canvas.drawLine(Offset(0, midY - 4), Offset(0, midY + 4),
+        Paint()..color = const Color(0xFFD1D5DB)..strokeWidth = 1);
+    canvas.drawLine(Offset(size.width, midY - 4), Offset(size.width, midY + 4),
+        Paint()..color = const Color(0xFFD1D5DB)..strokeWidth = 1);
+    // Window rect (15%–75%)
+    final wLeft = size.width * 0.15;
+    final wRight = size.width * 0.75;
+    final wRect = Rect.fromLTRB(wLeft, midY - 10, wRight, midY + 10);
+    canvas.drawRRect(RRect.fromRectAndRadius(wRect, const Radius.circular(3)),
+        Paint()..color = catColor.withValues(alpha: 0.2));
+    canvas.drawRRect(RRect.fromRectAndRadius(wRect, const Radius.circular(3)),
+        Paint()..color = catColor..strokeWidth = 1.5..style = PaintingStyle.stroke);
+    // Execution point ✓ at 45%
+    final exX = size.width * 0.45;
+    canvas.drawCircle(Offset(exX, midY), 7, Paint()..color = catColor);
+    final tp = TextPainter(
+      text: const TextSpan(text: '✓', style: TextStyle(fontSize: 9, color: Colors.white)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(exX - tp.width / 2, midY - tp.height / 2));
+    // X blocked at 85%
+    final bx = size.width * 0.85;
+    canvas.drawCircle(Offset(bx, midY), 7, Paint()..color = const Color(0xFFFEE2E2));
+    canvas.drawCircle(Offset(bx, midY), 7,
+        Paint()..color = const Color(0xFFEF4444)..strokeWidth = 1..style = PaintingStyle.stroke);
+    final xp = TextPainter(
+      text: const TextSpan(text: '✕',
+          style: TextStyle(fontSize: 8, color: Color(0xFFEF4444), fontWeight: FontWeight.w700)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    xp.paint(canvas, Offset(bx - xp.width / 2, midY - xp.height / 2));
+  }
+
+  @override
+  bool shouldRepaint(_WindowTimelinePainter old) => old.catColor != catColor;
 }
 
 // ── _SemanticWarning ──────────────────────────────────────────────────────────
