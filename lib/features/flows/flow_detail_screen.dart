@@ -6096,9 +6096,10 @@ class _RuleCardState extends State<_RuleCard> {
                 // [3] Body
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         // Badges row
                         Wrap(
@@ -7394,9 +7395,8 @@ class _PrecondHeroDiagram extends StatelessWidget {
   Widget _flowBox(String label, String sublabel, Color borderColor, Color bgColor,
       {bool dashed = false}) {
     return Container(
-      width: 130,
-      height: 70,
-      padding: const EdgeInsets.all(10),
+      constraints: const BoxConstraints(minHeight: 60, maxWidth: 130),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(8),
@@ -7406,6 +7406,7 @@ class _PrecondHeroDiagram extends StatelessWidget {
         ),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(label,
@@ -7413,7 +7414,8 @@ class _PrecondHeroDiagram extends StatelessWidget {
               maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
           const SizedBox(height: 2),
           Text(sublabel,
-              style: TextStyle(fontSize: 10, color: const Color(0xFF9CA3AF))),
+              style: TextStyle(fontSize: 10, color: const Color(0xFF9CA3AF)),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
@@ -7659,7 +7661,15 @@ class _PrecondHeroDiagram extends StatelessWidget {
       );
 
   Widget _operatorRoleIn() {
-    final roleIds = (config['role_ids'] as List?)?.cast<String>() ?? [];
+    final rawIds = config['role_ids'];
+    final List<String> roleIds;
+    if (rawIds is List) {
+      roleIds = List<String>.from(rawIds);
+    } else if (rawIds is String && rawIds.isNotEmpty) {
+      roleIds = [rawIds];
+    } else {
+      roleIds = [];
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
