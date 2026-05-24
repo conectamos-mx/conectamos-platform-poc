@@ -6811,34 +6811,18 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     final currentVal = ctrl.text;
     final selectedVal = _kTimezones.any((t) => t.$1 == currentVal)
         ? currentVal
-        : '';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
-        const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          value: selectedVal,
-          decoration: InputDecoration(
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.ctBorder)),
-            enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.ctBorder)),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
-          items: _kTimezones.map((tz) {
-            return DropdownMenuItem<String>(
-              value: tz.$1,
-              child: Text(tz.$2, style: AppTextStyles.body),
-            );
-          }).toList(),
-          onChanged: (v) => setState(() => ctrl.text = v ?? ''),
-        ),
-      ],
+        : null;
+    return AppDropdown<String?>(
+      label: label,
+      value: selectedVal,
+      hint: 'Default del tenant',
+      items: _kTimezones.map((tz) {
+        return AppDropdownItem<String?>(
+          value: tz.$1.isEmpty ? null : tz.$1,
+          label: tz.$2,
+        );
+      }).toList(),
+      onChanged: (v) => setState(() => ctrl.text = v ?? ''),
     );
   }
 
@@ -6867,10 +6851,11 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
       final label = field['label'] as String? ?? key;
       final fieldType = field['type'] as String? ?? 'text';
       final rawOptions = field['options'] as List? ?? [];
-      final options = rawOptions
-          .whereType<Map>()
-          .map((o) => Map<String, dynamic>.from(o))
-          .toList();
+      final safeOptions = rawOptions.map((o) {
+        if (o is Map) return Map<String, dynamic>.from(o);
+        final s = o.toString();
+        return <String, dynamic>{'value': s, 'label': s};
+      }).toList();
       widgets.add(const SizedBox(height: 16));
       switch (fieldType) {
         case 'text':
@@ -6937,7 +6922,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
             label: label,
             value: _selectVals[key],
             hint: 'Seleccionar',
-            items: options
+            items: safeOptions
                 .map((o) => AppDropdownItem<String>(
                       value: o['value'] as String? ?? '',
                       label: o['label'] as String? ?? '',
@@ -7597,7 +7582,10 @@ class _PrecondHeroDiagram extends StatelessWidget {
 
   Widget _noActiveExecution() {
     final slug = config['slug'] as String? ?? config['flow_slug'] as String?;
-    final name = _flowName(slug);
+    final hasSlug = slug != null && slug.isNotEmpty;
+    final targetName = hasSlug ? _flowName(slug) : 'este flow';
+    final targetColor = hasSlug ? const Color(0xFFEF4444) : const Color(0xFF9CA3AF);
+    final targetBg = hasSlug ? const Color(0xFFFEE2E2) : const Color(0xFFF5F5F5);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -7607,7 +7595,7 @@ class _PrecondHeroDiagram extends StatelessWidget {
             Column(mainAxisSize: MainAxisSize.min, children: [
               Text('YA EN CURSO', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
               const SizedBox(height: 4),
-              _flowBox(name, 'activo', const Color(0xFFEF4444), const Color(0xFFFEE2E2)),
+              _flowBox(targetName, 'activo', targetColor, targetBg),
             ]),
             const SizedBox(width: 12),
             _xMark('no permitido'),
@@ -7615,7 +7603,7 @@ class _PrecondHeroDiagram extends StatelessWidget {
             Column(mainAxisSize: MainAxisSize.min, children: [
               Text('INTENTO DE INICIO', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
               const SizedBox(height: 4),
-              _flowBox(name, 'bloqueado', catColor, catColor.withValues(alpha: 0.08)),
+              _flowBox(currentFlowName, 'bloqueado', catColor, catColor.withValues(alpha: 0.08)),
             ]),
           ],
         ),
@@ -7627,13 +7615,17 @@ class _PrecondHeroDiagram extends StatelessWidget {
 
   Widget _requiresActiveExecution() {
     final slug = config['slug'] as String? ?? config['flow_slug'] as String?;
+    final hasSlug = slug != null && slug.isNotEmpty;
+    final requiredName = hasSlug ? _flowName(slug) : 'otro flow';
+    final requiredColor = hasSlug ? const Color(0xFF15803D) : const Color(0xFF9CA3AF);
+    final requiredBg = hasSlug ? const Color(0xFFDCFCE7) : const Color(0xFFF5F5F5);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Column(mainAxisSize: MainAxisSize.min, children: [
           Text('DEBE ESTAR ACTIVO', style: TextStyle(fontSize: 8, color: Color(0xFF9CA3AF))),
           const SizedBox(height: 4),
-          _flowBox(_flowName(slug), 'en curso', const Color(0xFF15803D), const Color(0xFFDCFCE7)),
+          _flowBox(requiredName, 'en curso', requiredColor, requiredBg),
         ]),
         const SizedBox(width: 12),
         _arrowH(),
