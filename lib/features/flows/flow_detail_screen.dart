@@ -16,6 +16,7 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
+import '../config/template_create_dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../shared/widgets/app_dropdown.dart';
 import '../../shared/widgets/app_multi_select.dart';
@@ -3098,8 +3099,27 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                             label: '$name ($lang)',
                           );
                         }),
+                        const AppDropdownItem<String?>(
+                          value: '__create__',
+                          label: '＋ Crear nueva plantilla',
+                        ),
                       ],
                       onChanged: (v) {
+                        if (v == '__create__') {
+                          if (_waChannelId == null) return;
+                          showDialog<void>(
+                            context: context,
+                            builder: (_) => TemplateCreateDialog(
+                              channelId: _waChannelId!,
+                              tenantId: widget.tenantId,
+                            ),
+                          ).then((_) {
+                            if (_waChannelId != null) {
+                              _loadTemplates(_waChannelId!);
+                            }
+                          });
+                          return;
+                        }
                         if (v == null) {
                           setState(() => _mappingRows = {});
                           widget.onProactiveTriggerChanged({});
