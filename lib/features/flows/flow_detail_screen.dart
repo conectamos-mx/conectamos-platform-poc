@@ -6316,9 +6316,11 @@ class _RuleSummary extends StatelessWidget {
           TextSpan(text: _scopeLabel(c['scope'] as String?), style: bold),
           TextSpan(text: ' '),
           TextSpan(
-              text: (c['window_type'] as String?) == 'rolling'
-                  ? 'una vez cada ${c['window'] as String? ?? '24h'}'
-                  : 'una vez por día',
+              text: switch (c['window_type'] as String?) {
+                'rolling' => 'una vez cada ${c['window'] as String? ?? '24h'}',
+                'shift' => 'una vez por turno',
+                _ => 'una vez por día',
+              },
               style: bold),
           TextSpan(text: '.'),
         ],
@@ -6440,6 +6442,8 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
   final Map<String, String?> _selectVals = {};
   final Map<String, bool> _boolVals = {};
   final Map<String, List<String>> _multiSelectVals = {};
+  final Map<String, int> _durationValues = {};
+  final Map<String, String> _durationUnits = {};
   final Map<String, String> _semanticWarnings = {};
 
   List<Map<String, dynamic>> _availableCatalogs = [];
@@ -6536,6 +6540,8 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     _selectVals.clear();
     _boolVals.clear();
     _multiSelectVals.clear();
+    _durationValues.clear();
+    _durationUnits.clear();
     for (final field in _fieldsForType(type)) {
       final key = field['key'] as String? ?? '';
       if (key.isEmpty) continue;
@@ -6543,6 +6549,20 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
       final existing = params[key];
       switch (fieldType) {
         case 'text':
+          // Parse duration fields like "24h", "30m", "3d"
+          if (key == 'window' && existing is String && existing.isNotEmpty) {
+            final match = RegExp(r'^(\d+)([mhd])$').firstMatch(existing);
+            if (match != null) {
+              _durationValues[key] = int.tryParse(match.group(1)!) ?? 24;
+              _durationUnits[key] = match.group(2)!;
+            } else {
+              _durationValues[key] = 24;
+              _durationUnits[key] = 'h';
+            }
+          } else if (key == 'window') {
+            _durationValues[key] = 24;
+            _durationUnits[key] = 'h';
+          }
           _textCtrls[key] = TextEditingController(text: existing?.toString() ?? '');
         case 'select':
           _selectVals[key] = existing?.toString()
@@ -6602,6 +6622,13 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
   Map<String, dynamic> _buildConfig() {
     final config = <String, dynamic>{};
     for (final e in _textCtrls.entries) {
+      // Duration fields: override with structured value
+      if (_durationValues.containsKey(e.key)) {
+        final n = _durationValues[e.key] ?? 24;
+        final u = _durationUnits[e.key] ?? 'h';
+        config[e.key] = '$n$u';
+        continue;
+      }
       if (e.value.text.trim().isNotEmpty) config[e.key] = e.value.text.trim();
     }
     for (final e in _selectVals.entries) { config[e.key] = e.value; }
@@ -6614,7 +6641,15 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
 
   Map<String, dynamic> _buildConfigSnapshot() {
     final map = <String, dynamic>{};
-    _textCtrls.forEach((k, v) { if (v.text.isNotEmpty) map[k] = v.text; });
+    _textCtrls.forEach((k, v) {
+      if (_durationValues.containsKey(k)) {
+        final n = _durationValues[k] ?? 24;
+        final u = _durationUnits[k] ?? 'h';
+        map[k] = '$n$u';
+        return;
+      }
+      if (v.text.isNotEmpty) map[k] = v.text;
+    });
     _selectVals.forEach((k, v) { if (v != null) map[k] = v; });
     _boolVals.forEach((k, v) { map[k] = v; });
     _multiSelectVals.forEach((k, v) { if (v.isNotEmpty) map[k] = v; });
@@ -6845,6 +6880,47 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
             widgets.add(_buildCatalogSlugSelector(key, label));
           } else if (key == 'timezone') {
             widgets.add(_buildTimezoneSelector(key, label));
+          } else if (key == 'window') {
+            final durVal = _durationValues[key] ?? 24;
+            final durUnit = _durationUnits[key] ?? 'h';
+            final numCtrl = TextEditingController(text: durVal.toString());
+            widgets
+              ..add(Text(label,
+                  style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)))
+              ..add(const SizedBox(height: 6))
+              ..add(Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: numCtrl,
+                      style: AppTextStyles.body,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: _inputDecoration.copyWith(hintText: '24'),
+                      onChanged: (v) {
+                        final n = int.tryParse(v) ?? 1;
+                        setState(() => _durationValues[key] = n.clamp(1, 999));
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 140,
+                    child: AppDropdown<String>(
+                      value: durUnit,
+                      hint: 'Unidad',
+                      items: const [
+                        AppDropdownItem(value: 'm', label: 'Minutos'),
+                        AppDropdownItem(value: 'h', label: 'Horas'),
+                        AppDropdownItem(value: 'd', label: 'Días'),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _durationUnits[key] = v);
+                      },
+                    ),
+                  ),
+                ],
+              ));
           } else {
             widgets
               ..add(Text(label,
@@ -7598,7 +7674,12 @@ class _PrecondHeroDiagram extends StatelessWidget {
     final wt = config['window_type'] as String? ?? 'day';
     final window = config['window'] as String? ?? '24h';
     final scope = config['scope'] as String?;
-    final windowLabel = wt == 'rolling' ? 'Últimas $window' : 'Día calendario';
+    final catSlug = config['catalog_slug'] as String?;
+    final windowLabel = switch (wt) {
+      'rolling' => 'Últimas $window',
+      'shift' => 'Turno activo',
+      _ => 'Día calendario',
+    };
     final scopeLabel = scope == 'tenant' ? 'Todo el tenant' : 'Solo este operador';
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -7607,16 +7688,22 @@ class _PrecondHeroDiagram extends StatelessWidget {
           width: 280,
           height: 48,
           child: CustomPaint(
-            painter: _WindowTimelinePainter(catColor: catColor),
+            painter: _WindowTimelinePainter(
+              catColor: catColor,
+              windowMode: wt,
+            ),
           ),
         ),
         const SizedBox(height: 10),
-        Row(
-          mainAxisSize: MainAxisSize.min,
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          alignment: WrapAlignment.center,
           children: [
             _pill(windowLabel, catColor),
-            const SizedBox(width: 6),
             _pill(scopeLabel, catColor),
+            if (wt == 'shift' && catSlug != null)
+              _pill(catSlug, catColor),
           ],
         ),
       ],
@@ -7900,8 +7987,9 @@ class _TimeWindowPainter extends CustomPainter {
 }
 
 class _WindowTimelinePainter extends CustomPainter {
-  _WindowTimelinePainter({required this.catColor});
+  _WindowTimelinePainter({required this.catColor, this.windowMode = 'day'});
   final Color catColor;
+  final String windowMode;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -7914,9 +8002,9 @@ class _WindowTimelinePainter extends CustomPainter {
         Paint()..color = const Color(0xFFD1D5DB)..strokeWidth = 1);
     canvas.drawLine(Offset(size.width, midY - 4), Offset(size.width, midY + 4),
         Paint()..color = const Color(0xFFD1D5DB)..strokeWidth = 1);
-    // Window rect (15%–75%)
-    final wLeft = size.width * 0.15;
-    final wRight = size.width * 0.75;
+    // Window rect — wider for shift
+    final wLeft = windowMode == 'shift' ? size.width * 0.10 : size.width * 0.15;
+    final wRight = windowMode == 'shift' ? size.width * 0.80 : size.width * 0.75;
     final wRect = Rect.fromLTRB(wLeft, midY - 10, wRight, midY + 10);
     canvas.drawRRect(RRect.fromRectAndRadius(wRect, const Radius.circular(3)),
         Paint()..color = catColor.withValues(alpha: 0.2));
@@ -7944,7 +8032,8 @@ class _WindowTimelinePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_WindowTimelinePainter old) => old.catColor != catColor;
+  bool shouldRepaint(_WindowTimelinePainter old) =>
+      old.catColor != catColor || old.windowMode != windowMode;
 }
 
 // ── _SemanticWarning ──────────────────────────────────────────────────────────
