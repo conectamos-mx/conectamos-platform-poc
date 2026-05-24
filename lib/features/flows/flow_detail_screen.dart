@@ -6419,6 +6419,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
   final Map<String, TextEditingController> _textCtrls = {};
   final Map<String, String?> _selectVals = {};
   final Map<String, bool> _boolVals = {};
+  final Map<String, List<String>> _multiSelectVals = {};
   final Map<String, String> _semanticWarnings = {};
 
   List<Map<String, dynamic>> _availableCatalogs = [];
@@ -6514,6 +6515,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     _textCtrls.clear();
     _selectVals.clear();
     _boolVals.clear();
+    _multiSelectVals.clear();
     for (final field in _fieldsForType(type)) {
       final key = field['key'] as String? ?? '';
       if (key.isEmpty) continue;
@@ -6527,6 +6529,14 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
               ?? (field['default'] as String?);
         case 'bool':
           _boolVals[key] = (existing as bool?) ?? false;
+        case 'role_multi_select':
+          if (existing is List) {
+            _multiSelectVals[key] = List<String>.from(existing.map((e) => e.toString()));
+          } else if (existing is String && existing.isNotEmpty) {
+            _multiSelectVals[key] = existing.split(',').map((s) => s.trim()).toList();
+          } else {
+            _multiSelectVals[key] = [];
+          }
       }
     }
   }
@@ -6576,6 +6586,9 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     }
     for (final e in _selectVals.entries) { config[e.key] = e.value; }
     for (final e in _boolVals.entries) { config[e.key] = e.value; }
+    for (final e in _multiSelectVals.entries) {
+      if (e.value.isNotEmpty) config[e.key] = e.value;
+    }
     return config;
   }
 
@@ -6584,6 +6597,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     _textCtrls.forEach((k, v) { if (v.text.isNotEmpty) map[k] = v.text; });
     _selectVals.forEach((k, v) { if (v != null) map[k] = v; });
     _boolVals.forEach((k, v) { map[k] = v; });
+    _multiSelectVals.forEach((k, v) { if (v.isNotEmpty) map[k] = v; });
     return map;
   }
 
@@ -6849,6 +6863,69 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
             activeThumbColor: AppColors.ctTeal,
             onChanged: (val) => setState(() => _boolVals[key] = val),
           ));
+        case 'role_multi_select':
+          final selected = _multiSelectVals[key] ?? [];
+          final catColor = _type != null ? _precondCatColor(_type!) : AppColors.ctTeal;
+          widgets
+            ..add(Text(label,
+                style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)))
+            ..add(const SizedBox(height: 6));
+          if (widget.availableRoles.isEmpty) {
+            widgets.add(Text('No hay roles disponibles',
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)));
+          } else {
+            widgets.add(Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: widget.availableRoles.map((role) {
+                final id = role['id'] as String? ?? '';
+                final name = role['label'] as String? ?? role['name'] as String? ?? id;
+                final isSelected = selected.contains(id);
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      final list = List<String>.from(selected);
+                      if (isSelected) { list.remove(id); } else { list.add(id); }
+                      _multiSelectVals[key] = list;
+                    });
+                  },
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isSelected ? catColor.withValues(alpha: 0.12) : const Color(0xFFFAFAFA),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isSelected ? catColor : const Color(0xFFE5E7EB),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isSelected) ...[
+                            Icon(Icons.check_rounded, size: 14, color: catColor),
+                            const SizedBox(width: 4),
+                          ],
+                          Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                              color: isSelected ? catColor : const Color(0xFF4C5D73),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ));
+          }
+        case 'timezone':
+          widgets.add(_buildTimezoneSelector(key, label));
       }
     }
     return widgets;
@@ -6974,20 +7051,22 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (final cat in _kPrecondCategories) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Text(cat.$3, style: const TextStyle(fontSize: 14)),
-                      const SizedBox(width: 6),
-                      Text(cat.$2,
-                          style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: cat.$4)),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _buildTypeGrid(cat.$1, cat.$4),
+                  if (_hasTypesInCategory(cat.$1)) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Text(cat.$3, style: const TextStyle(fontSize: 14)),
+                        const SizedBox(width: 6),
+                        Text(cat.$2,
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: cat.$4)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _buildTypeGrid(cat.$1, cat.$4),
+                  ],
                 ],
               ],
             ),
@@ -6997,9 +7076,16 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     );
   }
 
+  bool _hasTypesInCategory(String category) {
+    final availableTypeIds = widget.types.map((t) => t['type'] as String).toSet();
+    return _kPrecondTypeMeta.entries
+        .any((e) => e.value.cat == category && availableTypeIds.contains(e.key));
+  }
+
   Widget _buildTypeGrid(String category, Color catColor) {
+    final availableTypeIds = widget.types.map((t) => t['type'] as String).toSet();
     final types = _kPrecondTypeMeta.entries
-        .where((e) => e.value.cat == category)
+        .where((e) => e.value.cat == category && availableTypeIds.contains(e.key))
         .toList();
     return Wrap(
       spacing: 10,
