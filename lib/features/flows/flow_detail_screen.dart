@@ -5796,8 +5796,7 @@ class _RuleCardState extends State<_RuleCard> {
             border: Border.all(color: AppColors.ctBorder),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: IntrinsicHeight(
-            child: Row(
+          child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // [1] Strip izquierdo
@@ -5968,7 +5967,6 @@ class _RuleCardState extends State<_RuleCard> {
                   ),
               ],
             ),
-          ),
         ),
       ),
     );
