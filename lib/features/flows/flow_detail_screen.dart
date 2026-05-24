@@ -17,6 +17,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
 import '../config/template_create_dialog.dart';
+import 'widgets/precond_mini_diagram.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../shared/widgets/app_dropdown.dart';
 import '../../shared/widgets/app_multi_select.dart';
@@ -5706,6 +5707,7 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
               separatorBuilder: (context2, i2) => const SizedBox(height: 8),
               itemBuilder: (_, i) => _RuleCard(
                 rule: _rules[i],
+                index: i,
                 typeLabel: _typeLabel(_rules[i]['type'] as String? ?? ''),
                 canManage: widget.canManage,
                 onEdit: () => _openRuleDialog(_rules[i]),
@@ -5719,120 +5721,426 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
   }
 }
 
-class _RuleCard extends StatelessWidget {
+// ── Category color for precondition types ────────────────────────────────────
+
+const _kPrecondCatColors = {
+  'no_active_execution': Color(0xFF3B82F6),
+  'requires_active_execution': Color(0xFF3B82F6),
+  'no_concurrent_execution': Color(0xFF3B82F6),
+  'requires_completed_sibling': Color(0xFF8B5CF6),
+  'no_active_sibling': Color(0xFF8B5CF6),
+  'all_children_completed': Color(0xFF8B5CF6),
+  'requires_parent': Color(0xFF8B5CF6),
+  'operator_role_in': Color(0xFFF59E0B),
+  'requires_active_assignment': Color(0xFFF59E0B),
+  'field_unique_in_window': Color(0xFF10B981),
+  'time_window': Color(0xFF10B981),
+};
+
+const _kPrecondCatLabels = {
+  'no_active_execution': 'Estado',
+  'requires_active_execution': 'Estado',
+  'no_concurrent_execution': 'Estado',
+  'requires_completed_sibling': 'Relación',
+  'no_active_sibling': 'Relación',
+  'all_children_completed': 'Relación',
+  'requires_parent': 'Relación',
+  'operator_role_in': 'Operador',
+  'requires_active_assignment': 'Operador',
+  'field_unique_in_window': 'Datos',
+  'time_window': 'Datos',
+};
+
+class _RuleCard extends StatefulWidget {
   const _RuleCard({
     required this.rule,
+    required this.index,
     required this.typeLabel,
     required this.canManage,
     required this.onEdit,
     required this.onDelete,
   });
   final Map<String, dynamic> rule;
+  final int index;
   final String typeLabel;
   final bool canManage;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context) {
-    final ruleType = rule['type'] as String? ?? '';
-    final message = rule['message'] as String? ?? '';
-    final config = ((rule['params'] ?? rule['config']) as Map?)?.cast<String, dynamic>() ?? {};
-    final isSibling = ruleType == 'requires_completed_sibling';
-    final action = rule['action'] as String? ?? 'block';
-    final escalate = rule['escalate'] as bool? ?? false;
-    final siblingSlug = config['sibling_slug'] as String? ?? '';
-    final windowType = config['window_type'] as String? ?? 'calendar_day';
-    final bodyText = isSibling
-        ? (siblingSlug.isNotEmpty
-            ? 'Requiere completar: $siblingSlug'
-            : '(sin configurar)')
-        : (message.isEmpty ? '—' : message);
-    final windowLabel = windowType == 'calendar_day' ? 'Ventana: día calendario' : 'Ventana: móvil';
+  State<_RuleCard> createState() => _RuleCardState();
+}
 
-    return InkWell(
-      onTap: canManage ? onEdit : null,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppColors.ctSurface,
-          border: Border.all(color: AppColors.ctBorder),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppColors.ctInfoBg,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                typeLabel,
-                style: AppTextStyles.badge.copyWith(color: AppColors.ctInfoText),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: action == 'allow' ? AppColors.ctOkBg : AppColors.ctRedBg,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                action == 'allow' ? 'allow' : 'block',
-                style: AppTextStyles.badge.copyWith(
-                    color: action == 'allow' ? AppColors.ctOkText : AppColors.ctRedText),
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (escalate) ...[
-              const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.ctWarn),
-              const SizedBox(width: 8),
-            ],
-            if (isSibling) ...[
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.ctBorder,
-                  borderRadius: BorderRadius.circular(10),
+class _RuleCardState extends State<_RuleCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final ruleType = widget.rule['type'] as String? ?? '';
+    final message = widget.rule['message'] as String? ?? '';
+    final action = widget.rule['action'] as String? ?? 'block';
+    final escalate = widget.rule['escalate'] as bool? ?? false;
+    final catColor = _kPrecondCatColors[ruleType] ?? AppColors.ctTeal;
+    final catLabel = _kPrecondCatLabels[ruleType] ?? '';
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: InkWell(
+        onTap: widget.canManage ? widget.onEdit : null,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: AppColors.ctSurface,
+            border: Border.all(color: AppColors.ctBorder),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // [1] Strip izquierdo
+                Container(
+                  width: 38,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        catColor.withValues(alpha: 0.07),
+                        catColor.withValues(alpha: 0.04),
+                      ],
+                    ),
+                    border: Border(
+                      right: BorderSide(color: catColor.withValues(alpha: 0.12)),
+                    ),
+                  ),
+                  child: Center(
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: catColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${widget.index + 1}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-                child: Text(
-                  windowLabel,
-                  style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w500),
+
+                // [2] Mini diagrama
+                Container(
+                  width: 120,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFAFAFA),
+                    border: Border(
+                      right: BorderSide(color: Color(0xFFF1F1F1)),
+                    ),
+                  ),
+                  child: Center(
+                    child: PrecondMiniDiagram(type: ruleType, catColor: catColor),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Expanded(
-              child: Text(
-                bodyText,
-                style: AppTextStyles.bodySmall.copyWith(
-                    fontSize: 12,
-                    color: (isSibling && siblingSlug.isEmpty)
-                        ? AppColors.ctDanger
-                        : AppColors.ctText2),
-                overflow: TextOverflow.ellipsis,
-              ),
+
+                // [3] Body
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Badges row
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            // Category badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: catColor.withValues(alpha: 0.07),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: catColor.withValues(alpha: 0.15)),
+                              ),
+                              child: Text(
+                                catLabel,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: catColor,
+                                ),
+                              ),
+                            ),
+                            // Block mode badge
+                            _BlockModeBadge(action: action, escalate: escalate),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        // Title
+                        Text(
+                          widget.typeLabel,
+                          style: AppTextStyles.body.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF1E2722),
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        // Description
+                        _RuleSummary(rule: widget.rule),
+                        // Message
+                        if (message.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFAFAFA),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border(
+                                left: BorderSide(color: catColor, width: 3),
+                              ),
+                            ),
+                            child: RichText(
+                              text: TextSpan(
+                                style: AppTextStyles.bodySmall.copyWith(
+                                    color: const Color(0xFF4C5D73)),
+                                children: [
+                                  TextSpan(
+                                    text: 'Mensaje: ',
+                                    style: TextStyle(fontWeight: FontWeight.w600),
+                                  ),
+                                  TextSpan(text: message),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+
+                // [4] Actions
+                if (widget.canManage)
+                  AnimatedOpacity(
+                    opacity: _hovered ? 1.0 : 0.5,
+                    duration: const Duration(milliseconds: 150),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          left: BorderSide(color: Color(0xFFF1F1F1)),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 15),
+                            color: const Color(0xFF4C5D73),
+                            onPressed: widget.onEdit,
+                            tooltip: 'Editar',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          ),
+                          const SizedBox(height: 4),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 15),
+                            color: AppColors.ctDanger,
+                            onPressed: widget.onDelete,
+                            tooltip: 'Eliminar',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            if (canManage) ...[
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded,
-                    size: 16, color: AppColors.ctDanger),
-                onPressed: onDelete,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                tooltip: 'Eliminar regla',
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
+  }
+}
+
+// ── _BlockModeBadge ──────────────────────────────────────────────────────────
+
+class _BlockModeBadge extends StatelessWidget {
+  const _BlockModeBadge({required this.action, required this.escalate});
+  final String action;
+  final bool escalate;
+
+  @override
+  Widget build(BuildContext context) {
+    final isHard = action != 'allow';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: isHard ? const Color(0xFFFEE2E2) : const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isHard ? const Color(0xFFFECACA) : const Color(0xFFFDE68A),
+        ),
+      ),
+      child: Text(
+        isHard
+            ? '■ Bloqueo duro'
+            : '~ Bloqueo suave${escalate ? ' · ↑ escala' : ''}',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: isHard ? const Color(0xFF7F1D1D) : const Color(0xFF92400E),
+        ),
+      ),
+    );
+  }
+}
+
+// ── _RuleSummary ─────────────────────────────────────────────────────────────
+
+class _RuleSummary extends StatelessWidget {
+  const _RuleSummary({required this.rule});
+  final Map<String, dynamic> rule;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = rule['type'] as String? ?? '';
+    final config = ((rule['params'] ?? rule['config']) as Map?)
+            ?.cast<String, dynamic>() ??
+        {};
+    const base = TextStyle(fontSize: 12, color: Color(0xFF4C5D73));
+    const bold = TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF1E2722));
+
+    final spans = _buildSpans(type, config, base, bold);
+    return RichText(text: TextSpan(style: base, children: spans));
+  }
+
+  String _scopeLabel(String? scope) => switch (scope) {
+        'operator' => 'el operador',
+        'operator+day' => 'el operador hoy',
+        'tenant+day' => 'cualquier operador hoy',
+        _ => scope ?? 'el operador',
+      };
+
+  String _windowLabel(String? windowType, String? duration, String? tz) {
+    return switch (windowType) {
+      'calendar_day' => 'el día de hoy${tz != null ? ' ($tz)' : ''}',
+      'shift' => 'su turno activo',
+      'rolling' => 'las últimas ${duration ?? '24h'}',
+      _ => windowType ?? 'el día',
+    };
+  }
+
+  List<TextSpan> _buildSpans(
+      String type, Map<String, dynamic> c, TextStyle base, TextStyle bold) {
+    return switch (type) {
+      'no_active_execution' => [
+          TextSpan(text: 'Bloquear si '),
+          TextSpan(text: _scopeLabel(c['scope'] as String?), style: bold),
+          TextSpan(text: ' ya tiene una instancia activa.'),
+        ],
+      'requires_active_execution' => [
+          TextSpan(text: 'Solo permitir si '),
+          TextSpan(text: _scopeLabel(c['scope'] as String?), style: bold),
+          TextSpan(text: ' tiene una instancia activa.'),
+        ],
+      'no_concurrent_execution' => [
+          TextSpan(text: 'El operador no puede tener '),
+          TextSpan(text: 'dos instancias', style: bold),
+          TextSpan(text: ' de este flow corriendo al mismo tiempo.'),
+        ],
+      'requires_completed_sibling' => [
+          TextSpan(text: 'Debe haber completado '),
+          TextSpan(
+              text: c['sibling_slug'] as String? ?? '(sin configurar)',
+              style: bold),
+          TextSpan(text: ' en '),
+          TextSpan(
+              text: _windowLabel(
+                  c['window_type'] as String?,
+                  c['window'] as String?,
+                  c['timezone'] as String?),
+              style: bold),
+          if (c['also_no_active'] == true)
+            TextSpan(text: ' y no tener uno activo'),
+          TextSpan(text: '.'),
+        ],
+      'no_active_sibling' => [
+          TextSpan(text: 'Bloquear si el operador ya tiene activo '),
+          TextSpan(
+              text: c['sibling_slug'] as String? ?? '(sin configurar)',
+              style: bold),
+          TextSpan(text: '.'),
+        ],
+      'all_children_completed' => [
+          TextSpan(text: 'Bloquear si no se han completado los '),
+          TextSpan(
+              text: c['count_field_key'] as String? ?? 'N', style: bold),
+          TextSpan(text: ' flujos hijos de '),
+          TextSpan(
+              text: c['child_flow_slug'] as String? ?? '(sin configurar)',
+              style: bold),
+          TextSpan(text: '.'),
+        ],
+      'requires_parent' => [
+          TextSpan(text: 'Este flow '),
+          TextSpan(text: 'no puede iniciarse manualmente', style: bold),
+          TextSpan(text: ' — solo como hijo de otro flow.'),
+        ],
+      'operator_role_in' => [
+          TextSpan(text: 'El operador debe tener el rol de '),
+          TextSpan(
+              text: (c['roles'] as List?)?.join(', ') ?? '(sin configurar)',
+              style: bold),
+          TextSpan(text: '.'),
+        ],
+      'requires_active_assignment' => [
+          TextSpan(text: 'El operador debe tener una asignación activa de '),
+          TextSpan(
+              text: c['catalog_slug'] as String? ?? '(sin configurar)',
+              style: bold),
+          TextSpan(text: '.'),
+        ],
+      'field_unique_in_window' => [
+          TextSpan(text: 'El campo '),
+          TextSpan(
+              text: c['field_key'] as String? ?? '(sin campo)', style: bold),
+          TextSpan(text: ' no debe repetirse en '),
+          TextSpan(
+              text: _windowLabel(
+                  c['window_type'] as String?,
+                  c['window'] as String?,
+                  c['timezone'] as String?),
+              style: bold),
+          TextSpan(text: '.'),
+        ],
+      'time_window' => [
+          TextSpan(text: 'Solo entre las '),
+          TextSpan(
+              text: c['start_time'] as String? ?? '??:??', style: bold),
+          TextSpan(text: ' y las '),
+          TextSpan(text: c['end_time'] as String? ?? '??:??', style: bold),
+          if (c['timezone'] != null) ...[
+            TextSpan(text: ' ('),
+            TextSpan(text: c['timezone'] as String, style: bold),
+            TextSpan(text: ')'),
+          ],
+          TextSpan(text: '.'),
+        ],
+      _ => [TextSpan(text: type)],
+    };
   }
 }
 
