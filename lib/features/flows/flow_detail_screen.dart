@@ -2710,7 +2710,7 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
   String? _waChannelId;
   List<Map<String, dynamic>> _approvedTemplates = [];
   bool _loadingTemplates = false;
-  List<(TextEditingController, TextEditingController)> _mappingRows = [];
+  Map<String, String> _mappingRows = {};
 
   @override
   void initState() {
@@ -2728,10 +2728,6 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
 
   @override
   void dispose() {
-    for (final row in _mappingRows) {
-      row.$1.dispose();
-      row.$2.dispose();
-    }
     super.dispose();
   }
 
@@ -2778,47 +2774,61 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
             all.where((t) => (t['status'] as String?) == 'APPROVED').toList();
         _loadingTemplates = false;
       });
+      // Auto-init mapping rows from selected template
+      final tid = widget.proactiveTrigger['template_id'] as String?;
+      if (tid != null) {
+        final t = _approvedTemplates
+            .where((t) => (t['id'] as String? ?? t['name'] as String? ?? '') == tid)
+            .firstOrNull;
+        if (t != null) _initMappingFromTemplate(t);
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => _loadingTemplates = false);
     }
   }
 
+  void _initMappingFromTemplate(Map<String, dynamic> template) {
+    final variables = (template['variables'] as List<dynamic>?) ?? [];
+    final existing = Map<String, String>.fromEntries(
+      ((widget.proactiveTrigger['variable_mapping'] as List<dynamic>?) ?? [])
+          .map((e) => MapEntry(
+                (e as Map)['variable'] as String? ?? '',
+                e['source'] as String? ?? '',
+              ))
+          .where((e) => e.key.isNotEmpty),
+    );
+    setState(() {
+      _mappingRows = {
+        for (final v in variables)
+          (v['key'] as String? ?? ''): existing[v['key'] as String? ?? ''] ?? '',
+      };
+    });
+  }
+
   void _initMappingRows() {
-    for (final row in _mappingRows) {
-      row.$1.dispose();
-      row.$2.dispose();
-    }
+    // Legacy fallback: load from existing variable_mapping without template
     final existing = (widget.proactiveTrigger['variable_mapping'] as List? ?? [])
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
     setState(() {
-      _mappingRows = existing
-          .map((e) => (
-                TextEditingController(text: e['variable'] as String? ?? ''),
-                TextEditingController(text: e['source'] as String? ?? ''),
-              ))
-          .toList();
+      _mappingRows = {
+        for (final e in existing)
+          (e['variable'] as String? ?? ''): (e['source'] as String? ?? ''),
+      };
     });
   }
 
-  void _updateProactiveTrigger({
-    String? templateId,
-    List<(TextEditingController, TextEditingController)>? rows,
-  }) {
+  void _updateProactiveTrigger({String? templateId}) {
     final effectiveTemplateId =
         templateId ?? widget.proactiveTrigger['template_id'] as String?;
-    final effectiveRows = rows ?? _mappingRows;
-    final mapping = effectiveRows
-        .where((r) => r.$1.text.trim().isNotEmpty)
-        .map((r) => {
-              'variable': r.$1.text.trim(),
-              'source': r.$2.text.trim(),
-            })
+    final mapping = _mappingRows.entries
+        .where((e) => e.key.isNotEmpty && e.value.isNotEmpty)
+        .map((e) => {'variable': e.key, 'source': e.value})
         .toList();
     final updated = <String, dynamic>{
-      'template_id': ?effectiveTemplateId,
+      if (effectiveTemplateId != null) 'template_id': effectiveTemplateId,
       if (mapping.isNotEmpty) 'variable_mapping': mapping,
     };
     widget.onProactiveTriggerChanged(updated);
@@ -3063,9 +3073,15 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                       ],
                       onChanged: (v) {
                         if (v == null) {
+                          setState(() => _mappingRows = {});
                           widget.onProactiveTriggerChanged({});
                         } else {
                           _updateProactiveTrigger(templateId: v);
+                          final t = _approvedTemplates
+                              .where((t) =>
+                                  (t['id'] as String? ?? t['name'] as String? ?? '') == v)
+                              .firstOrNull;
+                          if (t != null) _initMappingFromTemplate(t);
                         }
                       },
                     ),
@@ -3118,57 +3134,57 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                         ),
                       );
                     }),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Text('Mapeo de variables',
-                            style: AppTextStyles.body
-                                .copyWith(fontWeight: FontWeight.w600)),
-                        const Spacer(),
-                        if (widget.canManage)
-                          AppButton(
-                            label: '+ Agregar',
-                            variant: AppButtonVariant.ghost,
-                            size: AppButtonSize.sm,
-                            onPressed: () {
-                              setState(() {
-                                _mappingRows = [
-                                  ..._mappingRows,
-                                  (TextEditingController(), TextEditingController()),
-                                ];
-                              });
-                            },
-                          ),
-                      ],
-                    ),
-                    if (_mappingRows.isEmpty)
-                      Text(
-                        'Sin variables mapeadas. La plantilla se enviará sin reemplazos.',
-                        style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
-                      )
-                    else
-                      ...List.generate(_mappingRows.length, (i) {
-                        final row = _mappingRows[i];
+                    // ── Mapeo de variables (auto-generado desde template) ──
+                    if (_mappingRows.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text('Mapeo de variables',
+                          style: AppTextStyles.body
+                              .copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 12),
+                      ..._mappingRows.entries.map((entry) {
+                        final key = entry.key;
+                        final source = entry.value;
+                        // Find slot from template variables
+                        final tid = widget.proactiveTrigger['template_id'] as String?;
+                        final tpl = tid == null
+                            ? null
+                            : _approvedTemplates
+                                .where((t) =>
+                                    (t['id'] as String? ?? t['name'] as String? ?? '') == tid)
+                                .firstOrNull;
+                        final vars = (tpl?['variables'] as List<dynamic>?) ?? [];
+                        final vDef = vars
+                            .where((v) => (v as Map)['key'] == key)
+                            .firstOrNull as Map?;
+                        final slot = vDef?['slot'] as int? ?? 0;
                         return Padding(
-                          padding: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.only(bottom: 8),
                           child: Row(
                             children: [
                               Expanded(
-                                child: AppTextField(
-                                  controller: row.$1,
-                                  hint: 'nombre_cliente',
-                                  label: i == 0 ? 'Variable' : null,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.ctSurface,
+                                    border: Border.all(color: AppColors.ctBorder),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    '$key  {{$slot}}',
+                                    style: AppTextStyles.body,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: AppDropdown<String>(
-                                  label: i == 0 ? 'Campo fuente' : null,
-                                  value: row.$2.text.isEmpty ? null : row.$2.text,
+                                  value: source.isEmpty ? null : source,
                                   hint: 'Campo fuente',
                                   enabled: widget.canManage,
                                   items: const [
-                                    AppDropdownItem<String>(value: '', label: '— Sin campo —'),
+                                    AppDropdownItem<String>(
+                                        value: '', label: '— Sin campo —'),
                                     AppDropdownItem<String>(
                                       value: 'system:operator.name',
                                       label: 'Nombre del operador',
@@ -3181,51 +3197,50 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                                       value: 'system:tenant.name',
                                       label: 'Nombre de la empresa',
                                     ),
+                                    AppDropdownItem<String>(
+                                      value: 'system:flow.name',
+                                      label: 'Nombre del flujo',
+                                    ),
+                                    AppDropdownItem<String>(
+                                      value: 'system:flow.fields_summary',
+                                      label: 'Campos del flujo (lista)',
+                                    ),
                                   ],
                                   onChanged: (v) {
-                                    setState(() => row.$2.text = v ?? '');
+                                    if (!widget.canManage) return;
+                                    setState(() => _mappingRows[key] = v ?? '');
                                     _updateProactiveTrigger();
                                   },
                                 ),
                               ),
-                              if (widget.canManage)
-                                IconButton(
-                                  icon: const Icon(Icons.close,
-                                      size: 16, color: AppColors.ctText3),
-                                  onPressed: () {
-                                    row.$1.dispose();
-                                    row.$2.dispose();
-                                    setState(() => _mappingRows.removeAt(i));
-                                    _updateProactiveTrigger(rows: _mappingRows);
-                                  },
-                                ),
                             ],
                           ),
                         );
                       }),
-                    if (_mappingRows.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          AppButton(
-                            label: 'Guardar mapeo',
-                            variant: AppButtonVariant.primary,
-                            size: AppButtonSize.sm,
-                            onPressed: () {
-                              if (!widget.canManage) return;
-                              _updateProactiveTrigger();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Mapeo guardado'),
-                                  backgroundColor: AppColors.ctOk,
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
+                      if (_mappingRows.values.any((v) => v.isNotEmpty)) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            AppButton(
+                              label: 'Guardar mapeo',
+                              variant: AppButtonVariant.primary,
+                              size: AppButtonSize.sm,
+                              onPressed: () {
+                                if (!widget.canManage) return;
+                                _updateProactiveTrigger();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Mapeo guardado'),
+                                    backgroundColor: AppColors.ctOk,
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ],
                 ],
