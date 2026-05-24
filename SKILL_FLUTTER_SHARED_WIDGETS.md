@@ -4,7 +4,8 @@
 > Antes de escribir cualquier widget de presentación en una pantalla nueva o modificación,
 > lee este archivo completo. Las reglas aquí superan cualquier patrón anterior que hayas visto
 > en el repo.
-> **Fuente:** Auditoría 2026-05-17 + primitivos creados en sprint de refactor.
+> **Fuente:** Auditoría 2026-05-17 + primitivos creados en sprints de refactor.
+> **Última actualización:** 2026-05-24 — agregados AppDropdown, AppMultiSelect, AppActionButton, AppDetailHeader, AppSectionHeader, AppStackedMetricCard.
 > **Mantenimiento:** Actualizar al agregar primitivos nuevos a lib/shared/widgets/.
 
 ---
@@ -479,7 +480,184 @@ AppSearchBar(
 
 ---
 
-## 3. Tokens de diseño — reglas de uso
+### 2.10 AppDropdown · `lib/shared/widgets/app_dropdown.dart`
+
+Widget canónico para todos los selectores de una opción. Usa OverlayPortal + CompositedTransformFollower (no DropdownButton nativo). Soporta búsqueda, iconos, subtítulos y se auto-ajusta al viewport.
+
+```dart
+import '../../shared/widgets/app_dropdown.dart';
+
+// Básico
+AppDropdown<String>(
+  label: 'Tipo',
+  value: _selectedType,
+  hint: 'Selecciona un tipo',
+  items: [
+    AppDropdownItem(value: 'text', label: 'Texto'),
+    AppDropdownItem(value: 'number', label: 'Número'),
+  ],
+  onChanged: (v) => setState(() => _selectedType = v),
+)
+
+// Con iconos
+AppDropdown<String>(
+  value: _type,
+  items: kFieldTypes.map((e) => AppDropdownItem<String>(
+    value: e.$1,
+    label: e.$2,
+    icon: _fieldIcon(e.$1),
+  )).toList(),
+  onChanged: (v) => setState(() => _type = v),
+)
+
+// Con subtítulos
+AppDropdown<String?>(
+  label: '¿Cómo se captura?',
+  value: _fillStrategy,
+  items: const [
+    AppDropdownItem(value: null, label: 'Conversacional',
+        subtitle: 'El Worker lo solicita durante la conversación'),
+    AppDropdownItem(value: 'defer_dashboard', label: 'Dashboard',
+        subtitle: 'Un supervisor lo llena manualmente'),
+  ],
+  onChanged: (v) => setState(() => _fillStrategy = v),
+)
+
+// Con búsqueda
+AppDropdown<String>(
+  value: _selectedFlow,
+  searchable: true,
+  searchHint: 'Buscar flow...',
+  items: flows.map((f) => AppDropdownItem(value: f['slug'], label: f['name'])).toList(),
+  onChanged: (v) => setState(() => _selectedFlow = v),
+)
+
+// Con error
+AppDropdown<String>(
+  value: _selected,
+  errorText: _selected == null ? 'Campo requerido' : null,
+  items: [...],
+  onChanged: (v) => setState(() => _selected = v),
+)
+```
+
+**Comportamiento:**
+- Overlay se posiciona automáticamente debajo del trigger
+- Ancho del overlay iguala el ancho del trigger vía RenderBox
+- Altura se auto-ajusta al espacio disponible del viewport (clamp 120–280dp)
+- TapRegion con groupId compartido entre trigger y overlay
+- Chevron animado (rotación 180°) al abrir/cerrar
+
+**PROHIBIDO usar en su lugar:**
+- `DropdownButton` — reemplazar siempre por `AppDropdown`
+- `DropdownButtonFormField` — reemplazar siempre por `AppDropdown`
+- `PopupMenuButton` para selecciones — usar `AppDropdown`
+
+---
+
+### 2.11 AppMultiSelect · `lib/shared/widgets/app_multi_select.dart`
+
+Widget canónico para selección múltiple con chips. Usa OverlayPortal con checkboxes.
+
+```dart
+import '../../shared/widgets/app_multi_select.dart';
+
+// Básico
+AppMultiSelect<String>(
+  items: options.map((o) => AppMultiSelectItem(value: o, label: o)).toList(),
+  selectedValues: _selectedValues,
+  placeholder: 'Selecciona valores...',
+  onChanged: (vals) => setState(() => _selectedValues = vals),
+)
+
+// Con búsqueda
+AppMultiSelect<String>(
+  items: allRoles.map((r) => AppMultiSelectItem(value: r.id, label: r.name)).toList(),
+  selectedValues: _selectedRoleIds,
+  searchable: true,
+  onChanged: (vals) => setState(() => _selectedRoleIds = vals),
+)
+```
+
+**Comportamiento:**
+- Trigger muestra chips con X para deseleccionar individualmente
+- Overlay con checkboxes — toggle al hacer click
+- Mismo patrón de TapRegion groupId que AppDropdown
+- Si no hay selección, muestra placeholder
+
+**PROHIBIDO usar en su lugar:**
+- Múltiples `Checkbox` + `ListView` inline — usar `AppMultiSelect`
+
+---
+
+### 2.12 AppActionButton · `lib/shared/widgets/app_action_button.dart`
+
+Botón de acción contextual con semántica visual por tipo de operación.
+
+```dart
+import '../../shared/widgets/app_action_button.dart';
+
+AppActionButton(variant: AppActionVariant.edit, onPressed: _edit)
+AppActionButton(variant: AppActionVariant.delete, onPressed: _delete)
+AppActionButton(variant: AppActionVariant.suspend, onPressed: _suspend)
+AppActionButton(variant: AppActionVariant.reactivate, onPressed: _activate)
+
+// Con loading
+AppActionButton(
+  variant: AppActionVariant.delete,
+  onPressed: _delete,
+  isLoading: _deleting,
+)
+```
+
+**Variantes:** `edit`, `suspend`, `reactivate`, `delete`
+
+---
+
+### 2.13 AppDetailHeader · `lib/shared/widgets/app_detail_header.dart`
+
+Header de pantalla de detalle con pill de estado, botones de acción, y layout pre-definido.
+Implementa `PreferredSizeWidget` — se usa como `appBar` o como widget standalone.
+
+---
+
+### 2.14 AppSectionHeader · `lib/shared/widgets/app_section_header.dart`
+
+Header de sección dentro de una pantalla — título, descripción opcional, acciones a la derecha.
+
+```dart
+import '../../shared/widgets/app_section_header.dart';
+
+AppSectionHeader(
+  title: 'Operadores',
+  description: 'Lista de operadores del tenant',
+  actions: [
+    AppButton(label: '+ Agregar', variant: AppButtonVariant.ghost, size: AppButtonSize.sm, onPressed: _add),
+  ],
+)
+```
+
+---
+
+### 2.15 AppStackedMetricCard · `lib/shared/widgets/app_stacked_metric_card.dart`
+
+Tarjeta de métricas apiladas con línea de acento superior y layout para 2-3 KPIs verticales.
+
+---
+
+## 3. Feature-level widgets — Capa 3
+
+Widgets con lógica de negocio que viven en `lib/features/[módulo]/widgets/`.
+No son primitivos — usan primitivos de Capa 2.
+
+| Widget | Archivo | Uso |
+|---|---|---|
+| `PrecondMiniDiagram` | `lib/features/flows/widgets/precond_mini_diagram.dart` | Diagrama 86×60dp por tipo de precondición (11 tipos) |
+| `FieldCard` | `lib/features/flows/widgets/field_card.dart` | Card de campo de flow con tipo, valor, acciones |
+
+---
+
+## 5. Tokens de diseño — reglas de uso
 
 ### Colores
 
@@ -551,7 +729,7 @@ Tokens disponibles:
 
 ---
 
-## 4. Cuándo crear un widget privado `_*` vs usar un primitivo
+## 6. Cuándo crear un widget privado `_*` vs usar un primitivo
 
 **Usar primitivo siempre que:**
 - El elemento es un botón de cualquier tipo → `AppButton`
@@ -559,6 +737,10 @@ Tokens disponibles:
 - El elemento es un chip de filtro o selección → `AppChip`
 - El elemento es una fila label + valor → `AppDetailRow`
 - El elemento es una tarjeta de métrica numérica → `AppKpiCard`
+- El elemento es un selector de una opción (dropdown) → `AppDropdown`
+- El elemento es un selector de múltiples opciones → `AppMultiSelect`
+- El elemento es un campo de texto → `AppTextField`
+- El elemento es una barra de búsqueda → `AppSearchBar`
 
 **Crear widget privado `_*` solo cuando:**
 - El widget tiene lógica de negocio específica del módulo que no pertenece a shared
@@ -573,17 +755,25 @@ _StatusBadge, _ChannelBadge, _SourceBadge, _SyncBadge, _SmallBadge
 _FilterChip, _TopbarChip, _OpChip
 _DetailRow, _ConfigRow, _SummaryRow, _KpiRow, _GroupRow
 _KpiCard, _MetricCard, _SessionKpiCard
+_StyledDropdown, _CustomSelect, _DropdownField → AppDropdown
+_MultiCheckbox, _MultiSelectList → AppMultiSelect
+_StyledTextField, _FormField, _DialogField → AppTextField
+DropdownButton, DropdownButtonFormField → AppDropdown (SIEMPRE)
 ```
 
 ---
 
-## 5. Patrón de screen limpia — checklist antes de hacer commit
+## 7. Patrón de screen limpia — checklist antes de hacer commit
 
 Antes de entregar código de una screen nueva o modificada, verifica:
 
 ```bash
 # Cero botones Flutter base
 grep -c "ElevatedButton\|TextButton\|OutlinedButton\|FilledButton" lib/features/[modulo]/[archivo].dart
+# → debe retornar 0
+
+# Cero dropdowns Flutter base
+grep -c "DropdownButton\|DropdownButtonFormField" lib/features/[modulo]/[archivo].dart
 # → debe retornar 0
 
 # Cero colores hex inline
@@ -603,7 +793,7 @@ Si alguno retorna > 0, no hacer commit — aplicar los primitivos correspondient
 
 ---
 
-## 6. Imports canónicos
+## 8. Imports canónicos
 
 Rutas relativas desde `lib/features/[módulo]/`:
 
@@ -613,7 +803,12 @@ import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_chip.dart';
 import '../../shared/widgets/app_detail_row.dart';
+import '../../shared/widgets/app_dropdown.dart';
+import '../../shared/widgets/app_multi_select.dart';
 import '../../shared/widgets/app_kpi_card.dart';
+import '../../shared/widgets/app_text_field.dart';
+import '../../shared/widgets/app_action_button.dart';
+import '../../shared/widgets/app_section_header.dart';
 
 // Tokens
 import '../../core/theme/colors.dart';
@@ -628,7 +823,7 @@ import 'app_button.dart';
 
 ---
 
-## 7. Deuda técnica conocida — no replicar estos patrones
+## 9. Deuda técnica conocida — no replicar estos patrones
 
 Los siguientes problemas existen en el repo pero están pendientes de migración.
 No los repliques en código nuevo:
@@ -639,7 +834,7 @@ No los repliques en código nuevo:
 | `lib/shared/widgets/app_chip.dart` | `TextStyle` local Geist 500 12px (token faltante en AppTextStyles) | Pendiente agregar token |
 | `AppTextStyles.btnPrimary` | Color `ctNavy` fijo — debería ser sin color | Pendiente corrección DS |
 | `lib/features/conversations/conversations_screen.dart` | 113 TextStyle inline, 14 botones ad-hoc | Pendiente migración |
-| `lib/features/flows/flow_detail_screen.dart` | 150 TextStyle inline, 18 botones ad-hoc | Pendiente migración |
+| `lib/features/flows/flow_detail_screen.dart` | ~50 TextStyle inline restantes, 3 DropdownButtonFormField en _buildFlowSlugSelector/_buildCatalogSlugSelector (legacy) | Parcialmente migrado — _FieldDialog, _ComportamientoTab, _AddRuleDialog ya usan AppDropdown/AppTextField/AppButton |
 | `lib/features/` (generalizado) | 97 `CircularProgressIndicator` sueltos — pendiente migrar a `AppLoadingState` | Pendiente migración |
 | `lib/features/` (generalizado) | 64 `showDialog` ad-hoc — pendiente migrar a `AppConfirmDialog` | Pendiente migración |
 | `lib/features/` (generalizado) | 101 `TextField`/`TextFormField` sueltos — pendiente migrar a `AppTextField` | Pendiente migración |
@@ -647,10 +842,11 @@ No los repliques en código nuevo:
 
 Pantallas con baja deuda ya migradas o limpias:
 - `lib/features/config/worker_detail_screen.dart` ✅ — referencia de patrón correcto
+- `lib/features/flows/flow_detail_screen.dart` — _FieldDialog, _ComportamientoTab, _CamposTab, _PrecondicionesTab mayormente migrados a DS
 
 ---
 
-## 8. Convención de AppBar con TabBar
+## 10. Convención de AppBar con TabBar
 
 El patrón del repo usa `TextStyle` inline en `TabBar.labelStyle`. Reemplazar por tokens:
 
