@@ -2789,7 +2789,34 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
   }
 
   void _initMappingFromTemplate(Map<String, dynamic> template) {
-    final variables = (template['variables'] as List<dynamic>?) ?? [];
+    // 1. Variables declaradas en el template
+    final declared = ((template['variables'] as List<dynamic>?) ?? [])
+        .map((v) => {
+              'slot': (v as Map)['slot'] as int? ?? 0,
+              'key': v['key'] as String? ?? '',
+            })
+        .toList();
+
+    // 2. Slots presentes en body_text via {{N}}
+    final body = template['body_text'] as String? ?? '';
+    final bodySlots = RegExp(r'\{\{(\d+)\}\}')
+        .allMatches(body)
+        .map((m) => int.tryParse(m.group(1) ?? '') ?? 0)
+        .where((s) => s > 0)
+        .toSet();
+
+    // 3. Agregar entradas sintéticas para slots en body pero no en variables
+    final declaredSlots = declared.map((v) => v['slot'] as int).toSet();
+    final missing = bodySlots.difference(declaredSlots);
+    for (final slot in missing.toList()..sort()) {
+      declared.add({'slot': slot, 'key': 'variable_$slot'});
+    }
+
+    // 4. Ordenar por slot
+    declared.sort((a, b) =>
+        (a['slot'] as int).compareTo(b['slot'] as int));
+
+    // 5. Existing mapping para preservar selecciones previas
     final existing = Map<String, String>.fromEntries(
       ((widget.proactiveTrigger['variable_mapping'] as List<dynamic>?) ?? [])
           .map((e) => MapEntry(
@@ -2798,10 +2825,11 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
               ))
           .where((e) => e.key.isNotEmpty),
     );
+
     setState(() {
       _mappingRows = {
-        for (final v in variables)
-          (v['key'] as String? ?? ''): existing[v['key'] as String? ?? ''] ?? '',
+        for (final v in declared)
+          (v['key'] as String): existing[v['key'] as String] ?? '',
       };
     });
   }
@@ -3171,7 +3199,9 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    '$key  {{$slot}}',
+                                    key.startsWith('variable_')
+                                        ? '{{$slot}}'
+                                        : '$key  {{$slot}}',
                                     style: AppTextStyles.body,
                                   ),
                                 ),
@@ -3217,7 +3247,8 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                           ),
                         );
                       }),
-                      if (_mappingRows.values.any((v) => v.isNotEmpty)) ...[
+                      if (_mappingRows.isNotEmpty &&
+                          _mappingRows.values.every((v) => v.isNotEmpty)) ...[
                         const SizedBox(height: 8),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
