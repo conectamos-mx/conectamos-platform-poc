@@ -6041,8 +6041,7 @@ class _RuleCardState extends State<_RuleCard> {
             border: Border.all(color: AppColors.ctBorder),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: IntrinsicHeight(
-            child: Row(
+          child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // [1] Strip izquierdo
@@ -6061,12 +6060,15 @@ class _RuleCardState extends State<_RuleCard> {
                       right: BorderSide(color: catColor.withValues(alpha: 0.12)),
                     ),
                   ),
-                  child: Center(
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: catColor,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color: catColor,
                         shape: BoxShape.circle,
                       ),
                       child: Center(
@@ -6080,6 +6082,7 @@ class _RuleCardState extends State<_RuleCard> {
                         ),
                       ),
                     ),
+                  ),
                   ),
                 ),
 
@@ -6214,7 +6217,6 @@ class _RuleCardState extends State<_RuleCard> {
                   ),
               ],
             ),
-          ),
         ),
       ),
     );
