@@ -5957,6 +5957,27 @@ const _kPrecondCatColors = {
   'time_window': Color(0xFF10B981),
 };
 
+const _kPrecondTypeMeta = <String, ({String label, String example, String cat})>{
+  'no_active_execution': (label: 'Sin ejecución activa', example: 'No puede iniciar "Inicio de Ruta" si ya tiene uno en curso.', cat: 'state'),
+  'requires_active_execution': (label: 'Requiere ejecución activa', example: 'No puede iniciar "Cierre de Entrega" sin un "Inicio de Ruta" activo.', cat: 'state'),
+  'no_concurrent_execution': (label: 'Sin ejecución concurrente', example: 'No puede abrir "Captura de Incidencia" dos veces.', cat: 'state'),
+  'requires_completed_sibling': (label: 'Flow hermano completado', example: 'No puede iniciar "Segunda Ruta" sin completar "Primera Ruta" hoy.', cat: 'relation'),
+  'no_active_sibling': (label: 'Sin flow hermano activo', example: 'No puede iniciar "Entrega Especial" si tiene "Entrega Normal" activa.', cat: 'relation'),
+  'all_children_completed': (label: 'Todos los hijos completados', example: 'No puede iniciar "Cierre de Turno" sin completar todas las entregas registradas.', cat: 'relation'),
+  'requires_parent': (label: 'Solo como flow hijo', example: 'Este flow nunca debe iniciarse manualmente — solo el sistema lo abre.', cat: 'relation'),
+  'operator_role_in': (label: 'Rol del operador requerido', example: 'Solo "Supervisor" puede iniciar "Auditoría de Inventario".', cat: 'operator'),
+  'requires_active_assignment': (label: 'Asignación activa requerida', example: 'No puede iniciar "Inicio de Ruta" sin una ruta asignada hoy.', cat: 'operator'),
+  'field_unique_in_window': (label: 'Campo único en ventana', example: 'El número de guía no puede repetirse en las últimas 24h.', cat: 'data'),
+  'time_window': (label: 'Solo en horario permitido', example: 'Solo entre 6:00 y 9:00 AM.', cat: 'data'),
+};
+
+const _kPrecondCategories = [
+  ('state', 'Estado del flow', '⚡', Color(0xFF3B82F6)),
+  ('relation', 'Relación con otros flows', '🔗', Color(0xFF8B5CF6)),
+  ('operator', 'Contexto del operador', '👤', Color(0xFFF59E0B)),
+  ('data', 'Datos y tiempo', '🕐', Color(0xFF10B981)),
+];
+
 const _kPrecondCatLabels = {
   'no_active_execution': 'Estado',
   'requires_active_execution': 'Estado',
@@ -6387,6 +6408,7 @@ class _AddRuleDialog extends StatefulWidget {
 }
 
 class _AddRuleDialogState extends State<_AddRuleDialog> {
+  late bool _showTypeCatalog;
   String? _type;
   final _messageCtrl = TextEditingController();
   String _action = 'block';
@@ -6512,6 +6534,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
   @override
   void initState() {
     super.initState();
+    _showTypeCatalog = widget.rule == null;
     final rule = widget.rule;
     if (rule != null) {
       _type = rule['type'] as String?;
@@ -6823,122 +6846,410 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     return widgets;
   }
 
+  Widget _buildBlockModeSelector() {
+    Widget option(String value, String label, Color bg, Color border, Color text) {
+      final selected = _action == value;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _action = value),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: selected ? bg : const Color(0xFFFAFAFA),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: selected ? border : const Color(0xFFE5E7EB),
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? text : const Color(0xFF6B7280),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Modo de bloqueo',
+            style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
+        const SizedBox(height: 4),
+        Text(
+          'El bloqueo duro detiene la evaluación. El suave registra el fallo y continúa con las siguientes reglas.',
+          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            option('block', '■ Bloqueo duro',
+                const Color(0xFFFEE2E2), const Color(0xFFEF4444), const Color(0xFF7F1D1D)),
+            const SizedBox(width: 8),
+            option('allow', '~ Bloqueo suave',
+                const Color(0xFFFEF3C7), const Color(0xFFF59E0B), const Color(0xFF92400E)),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final catColor = _type != null ? _precondCatColor(_type!) : AppColors.ctTeal;
+    final typeMeta = _type != null ? _kPrecondTypeMeta[_type!] : null;
+
     return Dialog(
       backgroundColor: AppColors.ctSurface,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+        constraints: BoxConstraints(
+          maxWidth: 680,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: _showTypeCatalog
+            ? _buildTypeCatalog()
+            : _buildForm(catColor, typeMeta),
+      ),
+    );
+  }
+
+  Widget _buildTypeCatalog() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
+          child: Row(
             children: [
-              Text(
-                _isEdit ? 'Editar regla' : 'Agregar regla de inicio',
-                style: AppFonts.onest(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ctText),
-              ),
-              const SizedBox(height: 20),
-
-              // Tipo
-              Text('Tipo de regla',
-                  style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
-              const SizedBox(height: 6),
-              widget.types.isEmpty
-                  ? Text(
-                      'Cargando tipos...',
-                      style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                    )
-                  : DropdownButtonFormField<String>(
-                      value: _type,
-                      decoration: _inputDecoration,
-                      hint: Text('Seleccionar tipo',
-                          style: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
-                      items: widget.types
-                          .map((t) => DropdownMenuItem(
-                                value: t['type'] as String? ?? '',
-                                child: Text(t['label'] as String? ?? '',
-                                    style: AppTextStyles.body),
-                              ))
-                          .toList(),
-                      onChanged: (val) {
-                        if (val == null) return;
-                        setState(() {
-                          _type = val;
-                          _initFields(val, {});
-                        });
-                      },
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Nueva precondición',
+                        style: AppTextStyles.body.copyWith(
+                            fontWeight: FontWeight.w700, fontSize: 17)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Elige qué condición debe evaluarse antes de iniciar el flow',
+                      style: AppTextStyles.bodySmall.copyWith(
+                          color: const Color(0xFF4C5D73)),
                     ),
-
-              // Campos dinámicos del tipo seleccionado
-              ..._renderDynamicFields(),
-
-              const SizedBox(height: 16),
-              Text('Mensaje al operador si falla',
-                  style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _messageCtrl,
-                style: AppTextStyles.body,
-                maxLines: 2,
-                decoration: _inputDecoration.copyWith(
-                    hintText:
-                        'Ej: Ya iniciaste turno hoy. Espera mañana para iniciar de nuevo.',
-                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
+                  ],
+                ),
               ),
-
-              const SizedBox(height: 16),
-              Text('Acción si falla',
-                  style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
-              const SizedBox(height: 6),
-              DropdownButtonFormField<String>(
-                value: _action,
-                decoration: _inputDecoration,
-                items: [
-                  DropdownMenuItem(value: 'block', child: Text('Bloquear', style: AppTextStyles.body)),
-                  DropdownMenuItem(value: 'allow', child: Text('Permitir', style: AppTextStyles.body)),
+              IconButton(
+                icon: const Icon(Icons.close, size: 18, color: AppColors.ctText2),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Divider(height: 1, color: AppColors.ctBorder),
+        // Body
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final cat in _kPrecondCategories) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Text(cat.$3, style: const TextStyle(fontSize: 14)),
+                      const SizedBox(width: 6),
+                      Text(cat.$2,
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: cat.$4)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _buildTypeGrid(cat.$1, cat.$4),
                 ],
-                onChanged: (val) => setState(() => _action = val ?? _action),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTypeGrid(String category, Color catColor) {
+    final types = _kPrecondTypeMeta.entries
+        .where((e) => e.value.cat == category)
+        .toList();
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: types.map((e) {
+        final type = e.key;
+        final meta = e.value;
+        return SizedBox(
+          width: 200,
+          child: _PrecondTypeCard(
+            type: type,
+            label: meta.label,
+            example: meta.example,
+            catColor: catColor,
+            onTap: () => setState(() {
+              _type = type;
+              _showTypeCatalog = false;
+              _initFields(type, {});
+            }),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildForm(Color catColor, ({String label, String example, String cat})? typeMeta) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
+          child: Row(
+            children: [
+              if (!_isEdit) ...[
+                GestureDetector(
+                  onTap: () => setState(() {
+                    _showTypeCatalog = true;
+                    _type = null;
+                  }),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Text('← Tipo',
+                        style: AppTextStyles.bodySmall.copyWith(
+                            color: const Color(0xFF6B7280))),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      typeMeta?.label ?? _type ?? '',
+                      style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.w700, fontSize: 17),
+                    ),
+                    if (typeMeta != null) ...[
+                      const SizedBox(height: 2),
+                      Text(typeMeta.example,
+                          style: AppTextStyles.bodySmall.copyWith(
+                              color: const Color(0xFF4C5D73))),
+                    ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('Escalar si falla', style: AppTextStyles.body),
-                value: _escalate,
-                activeThumbColor: AppColors.ctTeal,
-                onChanged: (val) => setState(() => _escalate = val),
+              IconButton(
+                icon: const Icon(Icons.close, size: 18, color: AppColors.ctText2),
+                onPressed: () => Navigator.pop(context),
               ),
-              if (_escalate) ...[
-                const SizedBox(height: 8),
-                Text('Motivo de escalación',
-                    style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Divider(height: 1, color: AppColors.ctBorder),
+        // Body
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Hero diagram
+                Container(
+                  width: double.infinity,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFAFAFA),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFF1F1F1)),
+                  ),
+                  child: Center(
+                    child: PrecondMiniDiagram(
+                        type: _type ?? '', catColor: catColor),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Divider(height: 1, color: AppColors.ctBorder),
+
+                // Dynamic fields
+                ..._renderDynamicFields(),
+
+                const SizedBox(height: 16),
+                Text('Mensaje al operador si falla',
+                    style: AppTextStyles.formLabel.copyWith(
+                        color: AppColors.ctText2)),
                 const SizedBox(height: 6),
                 TextField(
-                  controller: _escalationReasonCtrl,
+                  controller: _messageCtrl,
                   style: AppTextStyles.body,
+                  maxLines: 2,
                   decoration: _inputDecoration.copyWith(
-                      hintText: 'Opcional',
-                      hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
+                      hintText:
+                          'Ej: Ya iniciaste turno hoy. Espera mañana para iniciar de nuevo.',
+                      hintStyle: AppTextStyles.body.copyWith(
+                          color: AppColors.ctText3)),
                 ),
-              ],
 
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _GhostButton(
-                      label: 'Cancelar',
-                      onTap: () => Navigator.of(context).pop()),
-                  const SizedBox(width: 8),
-                  _PrimaryButton(
-                      label: 'Guardar regla', onTap: _submit),
+                const SizedBox(height: 16),
+                _buildBlockModeSelector(),
+
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Escalar si falla', style: AppTextStyles.body),
+                  value: _escalate,
+                  activeThumbColor: AppColors.ctTeal,
+                  onChanged: (val) => setState(() => _escalate = val),
+                ),
+                if (_escalate) ...[
+                  const SizedBox(height: 8),
+                  Text('Motivo de escalación',
+                      style: AppTextStyles.formLabel.copyWith(
+                          color: AppColors.ctText2)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _escalationReasonCtrl,
+                    style: AppTextStyles.body,
+                    decoration: _inputDecoration.copyWith(
+                        hintText: 'Opcional',
+                        hintStyle: AppTextStyles.body.copyWith(
+                            color: AppColors.ctText3)),
+                  ),
                 ],
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+        // Footer
+        Container(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: AppColors.ctBorder)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              AppButton(
+                label: 'Cancelar',
+                variant: AppButtonVariant.ghost,
+                size: AppButtonSize.sm,
+                onPressed: () => Navigator.pop(context),
+              ),
+              const SizedBox(width: 8),
+              AppButton(
+                label: _isEdit ? 'Guardar cambios' : 'Crear precondición',
+                variant: AppButtonVariant.primary,
+                size: AppButtonSize.sm,
+                onPressed: _submit,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── _PrecondTypeCard ─────────────────────────────────────────────────────────
+
+class _PrecondTypeCard extends StatefulWidget {
+  const _PrecondTypeCard({
+    required this.type,
+    required this.label,
+    required this.example,
+    required this.catColor,
+    required this.onTap,
+  });
+  final String type;
+  final String label;
+  final String example;
+  final Color catColor;
+  final VoidCallback onTap;
+
+  @override
+  State<_PrecondTypeCard> createState() => _PrecondTypeCardState();
+}
+
+class _PrecondTypeCardState extends State<_PrecondTypeCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.ctSurface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: _hovered
+                  ? widget.catColor.withValues(alpha: 0.4)
+                  : const Color(0xFFE5E7EB),
+            ),
+            boxShadow: _hovered
+                ? [
+                    BoxShadow(
+                      color: widget.catColor.withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFAFAFA),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: PrecondMiniDiagram(
+                      type: widget.type, catColor: widget.catColor),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(widget.label,
+                  style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w700, fontSize: 13)),
+              const SizedBox(height: 2),
+              Text(
+                widget.example,
+                style: AppTextStyles.bodySmall.copyWith(
+                    fontSize: 11, color: const Color(0xFF6B7280)),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
