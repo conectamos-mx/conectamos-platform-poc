@@ -314,7 +314,6 @@ class _ConfigTabState extends State<_ConfigTab> {
   bool _showFireModal = false;
   bool _firingWorker = false;
   final TextEditingController _confirmCtrl = TextEditingController();
-  String? _fireError;
 
   @override
   void initState() {
@@ -335,7 +334,7 @@ class _ConfigTabState extends State<_ConfigTab> {
 
   Future<void> _fireWorker() async {
     if (_confirmCtrl.text.trim() != _workerName) return;
-    setState(() { _firingWorker = true; _fireError = null; });
+    setState(() { _firingWorker = true; });
     try {
       await AiWorkersApi.fireWorker(widget.worker['id'] as String);
       if (!mounted) return;
@@ -343,7 +342,7 @@ class _ConfigTabState extends State<_ConfigTab> {
       context.go('/workers');
     } catch (e) {
       if (!mounted) return;
-      setState(() { _firingWorker = false; _fireError = e.toString(); });
+      setState(() { _firingWorker = false; });
     }
   }
 
@@ -375,7 +374,7 @@ class _ConfigTabState extends State<_ConfigTab> {
               const SizedBox(height: 16),
               _DangerZoneCard(onFire: () {
                 _confirmCtrl.clear();
-                setState(() { _showFireModal = true; _fireError = null; });
+                setState(() { _showFireModal = true; });
               }),
             ],
           ),
@@ -700,9 +699,9 @@ class _SectionCard extends StatelessWidget {
   const _SectionCard({
     required this.title,
     required this.child,
-    this.titleColor,
-    this.borderColor,
-    this.backgroundColor,
+    this.titleColor, // ignore: unused_element_parameter
+    this.borderColor, // ignore: unused_element_parameter
+    this.backgroundColor, // ignore: unused_element_parameter
   });
 
   final String title;

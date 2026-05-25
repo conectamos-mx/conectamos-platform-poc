@@ -44,7 +44,7 @@ class AppStackedMetricCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: accentColor,
               borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(15)),
+                  top: Radius.circular(10)),
             ),
           ),
           Padding(
