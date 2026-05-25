@@ -5962,10 +5962,8 @@ const _kPrecondCatColors = {
 const _kPrecondTypeMeta = <String, ({String label, String example, String cat})>{
   'no_active_execution': (label: 'Sin ejecución activa', example: 'No puede iniciar "Inicio de Ruta" si ya tiene uno en curso.', cat: 'state'),
   'requires_active_execution': (label: 'Requiere ejecución activa', example: 'No puede iniciar "Cierre de Entrega" sin un "Inicio de Ruta" activo.', cat: 'state'),
-  'no_concurrent_execution': (label: 'Sin ejecución concurrente', example: 'No puede abrir "Captura de Incidencia" dos veces.', cat: 'state'),
   'no_execution_in_window': (label: 'Máximo una vez en la ventana', example: 'El operador no puede iniciar "Check-in de Turno" más de una vez por día.', cat: 'state'),
   'requires_completed_sibling': (label: 'Flow hermano completado', example: 'No puede iniciar "Segunda Ruta" sin completar "Primera Ruta" hoy.', cat: 'relation'),
-  'no_active_sibling': (label: 'Sin flow hermano activo', example: 'No puede iniciar "Entrega Especial" si tiene "Entrega Normal" activa.', cat: 'relation'),
   'all_children_completed': (label: 'Todos los hijos completados', example: 'No puede iniciar "Cierre de Turno" sin completar todas las entregas registradas.', cat: 'relation'),
   'requires_parent': (label: 'Solo como flow hijo', example: 'Este flow nunca debe iniciarse manualmente — solo el sistema lo abre.', cat: 'relation'),
   'operator_role_in': (label: 'Rol del operador requerido', example: 'Solo "Supervisor" puede iniciar "Auditoría de Inventario".', cat: 'operator'),
@@ -6289,6 +6287,7 @@ class _RuleSummary extends StatelessWidget {
       'calendar_day' => 'el día de hoy${tz != null ? ' ($tz)' : ''}',
       'shift' => 'su turno activo',
       'rolling' => 'las últimas ${duration ?? '24h'}',
+      'ever' => 'algún momento',
       _ => windowType ?? 'el día',
     };
   }
@@ -6325,17 +6324,23 @@ class _RuleSummary extends StatelessWidget {
           TextSpan(text: '.'),
         ],
       'requires_completed_sibling' => [
-          TextSpan(text: 'Debe haber completado '),
+          TextSpan(text: (c['window_type'] as String?) == 'ever'
+              ? 'El operador debe haber completado '
+              : 'Debe haber completado '),
           TextSpan(
               text: c['sibling_slug'] as String? ?? '(sin configurar)',
               style: bold),
-          TextSpan(text: ' en '),
-          TextSpan(
-              text: _windowLabel(
-                  c['window_type'] as String?,
-                  c['window'] as String?,
-                  c['timezone'] as String?),
-              style: bold),
+          if ((c['window_type'] as String?) == 'ever')
+            TextSpan(text: ' al menos una vez')
+          else ...[
+            TextSpan(text: ' en '),
+            TextSpan(
+                text: _windowLabel(
+                    c['window_type'] as String?,
+                    c['window'] as String?,
+                    c['timezone'] as String?),
+                style: bold),
+          ],
           if (c['also_no_active'] == true)
             TextSpan(text: ' y no tener uno activo'),
           TextSpan(text: '.'),
@@ -7462,6 +7467,7 @@ class _PrecondHeroDiagram extends StatelessWidget {
       'calendar_day' => 'día de hoy${tz != null ? ' ($tz)' : ''}',
       'shift' => 'turno activo',
       'rolling' => 'últimas $dur',
+      'ever' => 'alguna vez',
       _ => 'día de hoy',
     };
   }
