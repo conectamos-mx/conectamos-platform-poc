@@ -304,3 +304,117 @@ solo archivo. Al introducir `FlowDetailScreen`:
 2. El dialog de creación (`_openForm(flow: null)`) se mantiene para flujo de alta rápida.
 3. El dialog de edición (`_openForm(flow: entry.value)`) se elimina — edición vive en la pantalla de detalle.
 4. `_FlowCard` pierde el parámetro `onEdit` cuando el detalle esté disponible.
+
+---
+
+## 11. TextField sin doble borde (ADR 2026-05-25)
+
+**PROHIBIDO:** `Container(border: Border.all()) + TextField(border: InputBorder.none)`
+Este patrón produce doble borde en Flutter Web cuando el campo se enfoca.
+
+**CORRECTO:** TextField con borders inline:
+```dart
+TextField(
+  controller: _ctrl,
+  style: AppTextStyles.body,
+  decoration: InputDecoration(
+    hintText: 'placeholder',
+    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+    filled: true,
+    fillColor: AppColors.ctSurface2,
+    isDense: true,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: AppColors.ctBorder2),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: AppColors.ctTeal, width: 1.5),
+    ),
+  ),
+)
+```
+
+**Preferencia:** usar `AppTextField` siempre que sea posible. El patrón inline
+solo aplica para widgets internos de Capa 3 que necesitan control fino
+(ej. `_ColMappingField`, condition value TextField).
+
+---
+
+## 12. Tipos de campo en formularios dinámicos (2026-05-25)
+
+El backend declara tipos de campo via endpoints como `/flows/precondition-types`
+y `/flows/action-types`. Flutter los lee y renderiza dinámicamente:
+
+| type               | Widget Flutter                        | Notas                                      |
+|--------------------|---------------------------------------|---------------------------------------------|
+| `text`             | TextField (con routing especial)      | flow slugs → AppDropdown; timezone → dropdown; window → DurationSelector |
+| `select`           | AppDropdown (si display_as != radio)  | options del backend                         |
+| `select` + radio   | `_AppRadioGroup`                      | cuando `field['display_as'] == 'radio'`     |
+| `bool`             | SwitchListTile                        |                                             |
+| `role_multi_select`| Wrap de chips toggle                  | fuente: `widget.availableRoles`             |
+| `catalog_multi_select` | Wrap de chips toggle              | fuente: `_availableCatalogs`                |
+| `flow_field_key`   | AppDropdown de field keys             | lazy-load vía `FlowsApi.getFlow()`          |
+| `time`             | TextField + `showTimePicker`          | `AbsorbPointer` + `GestureDetector`         |
+| `timezone`         | AppDropdown con `_kTimezones`         |                                             |
+
+### Props adicionales en `flow_field_key`:
+
+- `source_flow_field`: `'self'` → usa `widget.currentFlowFields`.
+  Otro key → busca slug en `_textCtrls[key]`, carga flow via `FlowsApi.getFlow()`.
+- `field_type_filter`: `List<String>` de tipos permitidos. Ej `['number']` filtra
+  solo campos numéricos. Si `filteredFields.isEmpty` → `_SemanticWarning`.
+
+---
+
+## 13. Lazy-load de recursos externos con caché en dialogs (2026-05-25)
+
+Para cargar recursos por demanda (ej. campos de un flow padre, preview de Google Sheet):
+
+```dart
+// Estado
+Map<String, List<Map<String, dynamic>>> _cache = {};
+Set<String> _loading = {};
+
+// Método (fire-and-forget desde build)
+void _loadResource(String key) {
+  if (_cache.containsKey(key) || _loading.contains(key)) return;
+  _loading.add(key);
+  Api.fetch(key).then((data) {
+    if (!mounted) return;
+    setState(() { _cache[key] = data; _loading.remove(key); });
+  }).catchError((_) {
+    if (!mounted) return;
+    setState(() { _cache[key] = []; _loading.remove(key); });
+  });
+}
+
+// En build:
+// Si _loading.contains(key): CircularProgressIndicator
+// Si _cache[key] tiene items: AppDropdown
+// Si _cache[key] vacío: Text explicativo o fallback TextField
+```
+
+Ejemplo real: `_fetchFlowFields(slug)` en `_AddRuleDialog` para
+precondiciones con `source_flow_field != 'self'`.
+
+---
+
+## 14. Estándar flutter analyze antes de commit (2026-05-25)
+
+`flutter analyze` en los archivos modificados debe retornar
+**0 infos, 0 warnings, 0 errors** antes de cualquier commit.
+No se acepta código nuevo que introduzca issues de analyzer.
+
+Verificación obligatoria:
+```bash
+flutter analyze lib/features/flows/flow_detail_screen.dart 2>&1 | tail -5
+# → "No issues found" o equivalente con 0 issues
+```
+
+Patrones frecuentes a evitar:
+- `print()` → usar `debugPrint()`
+- `activeColor` en SwitchListTile → usar `activeThumbColor`
+- `if (mounted)` en callbacks de widgets hijos → usar `if (!context.mounted) return;`
+- `(_, __)` en separatorBuilder → usar `(context, index)`
