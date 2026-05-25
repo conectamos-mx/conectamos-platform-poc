@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:dio/dio.dart';
@@ -5,7 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/api/catalogs_api.dart';
+import '../../core/api/connections_api.dart';
 import '../../core/api/channels_api.dart';
 import '../../core/api/flows_api.dart';
 import '../../shared/widgets/asset_item_selector.dart';
@@ -17,8 +20,9 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
 import '../config/template_create_dialog.dart';
+import 'widgets/action_mini_diagram.dart';
 import 'widgets/precond_mini_diagram.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import '../../shared/widgets/app_dropdown.dart';
 import '../../shared/widgets/app_multi_select.dart';
 import '../../shared/widgets/app_text_field.dart';
@@ -959,14 +963,13 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
                         try {
                           await _saveWithResult(triggerSources: updated);
                         } catch (e) {
-                          if (mounted) setState(() => _triggerSources = previous);
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content: Text(_parseTriggerError(e)),
-                              backgroundColor: AppColors.ctDanger,
-                              duration: const Duration(seconds: 4),
-                            ));
-                          }
+                          if (!context.mounted) return;
+                          setState(() => _triggerSources = previous);
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(_parseTriggerError(e)),
+                            backgroundColor: AppColors.ctDanger,
+                            duration: const Duration(seconds: 4),
+                          ));
                         }
                       },
                     ),
@@ -977,6 +980,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
                       tenantId: ref.read(activeTenantIdProvider),
                       tenantWorkerId: _flow!['tenant_worker_id'] as String? ?? '',
                       currentFlowSlug: _flow!['slug'] as String? ?? '',
+                      currentFlowFields: _fields,
                       onChanged: (updated) { setState(() => _precondiciones = updated); _save(silent: true); },
                     ),
                     _AlCerrarTab(
@@ -1502,7 +1506,7 @@ class _CamposTab extends StatelessWidget {
                     if (canManage)
                       AppButton(
                         label: '+ Agregar campo',
-                        variant: AppButtonVariant.ghost,
+                        variant: AppButtonVariant.primary,
                         size: AppButtonSize.sm,
                         onPressed: onAddField,
                       ),
@@ -2858,6 +2862,7 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
         .map((e) => {'variable': e.key, 'source': e.value})
         .toList();
     final updated = <String, dynamic>{
+      // ignore: use_null_aware_elements
       if (effectiveTemplateId != null) 'template_id': effectiveTemplateId,
       if (mapping.isNotEmpty) 'variable_mapping': mapping,
     };
@@ -3802,6 +3807,18 @@ class _AlCerrarTabState extends State<_AlCerrarTab> {
     );
   }
 
+  void _toggleAction(Map<String, dynamic> action) {
+    setState(() {
+      final idx = _actions.indexWhere((a) => a['id'] == action['id']);
+      if (idx < 0) return;
+      _actions[idx] = {
+        ..._actions[idx],
+        'enabled': !(_actions[idx]['enabled'] as bool? ?? true),
+      };
+    });
+    widget.onChanged(List.from(_actions));
+  }
+
   void _deleteAction(Map<String, dynamic> action) {
     showDialog(
       context: context,
@@ -3851,7 +3868,7 @@ class _AlCerrarTabState extends State<_AlCerrarTab> {
               if (widget.canManage)
                 AppButton(
                   label: '+ Agregar acción',
-                  variant: AppButtonVariant.ghost,
+                  variant: AppButtonVariant.primary,
                   size: AppButtonSize.sm,
                   onPressed: () => _openActionDialog(null),
                 ),
@@ -3889,6 +3906,10 @@ class _AlCerrarTabState extends State<_AlCerrarTab> {
             ),
           ],
           const SizedBox(height: 16),
+          if (_actions.isNotEmpty) ...[
+            _OnCompleteTimeline(actions: _actions),
+            const SizedBox(height: 16),
+          ],
           if (_actions.isEmpty)
             const SizedBox(
               height: 200,
@@ -3906,9 +3927,11 @@ class _AlCerrarTabState extends State<_AlCerrarTab> {
               separatorBuilder: (context2, i2) => const SizedBox(height: 8),
               itemBuilder: (_, i) => _ActionCard(
                 action: _actions[i],
+                index: i,
                 canManage: widget.canManage,
                 onEdit: () => _openActionDialog(_actions[i]),
                 onDelete: () => _deleteAction(_actions[i]),
+                onToggle: () => _toggleAction(_actions[i]),
               ),
             ),
           const SizedBox(height: 24),
@@ -3919,21 +3942,6 @@ class _AlCerrarTabState extends State<_AlCerrarTab> {
 }
 
 // ── _ActionCard ───────────────────────────────────────────────────────────────
-
-IconData _actionIcon(String? type) {
-  switch (type) {
-    case 'open_flow_n_times':
-      return Icons.account_tree_outlined;
-    case 'webhook_out':
-      return Icons.webhook_outlined;
-    case 'emit_event':
-      return Icons.notifications_outlined;
-    case 'google_sheets_append_row':
-      return Icons.table_chart_outlined;
-    default:
-      return Icons.account_tree_outlined;
-  }
-}
 
 String _actionLabel(String? type) {
   switch (type) {
@@ -3947,6 +3955,8 @@ String _actionLabel(String? type) {
       return 'Emitir evento';
     case 'google_sheets_append_row':
       return 'Google Sheets — Agregar fila';
+    case 'google_sheets_update_row':
+      return 'Google Sheets — Actualizar fila';
     default:
       return 'Abrir flujo';
   }
@@ -3974,73 +3984,456 @@ String _actionSubtitle(Map<String, dynamic> action) {
       final sid = config['spreadsheet_id'] as String? ?? '';
       final display = sid.length > 20 ? '${sid.substring(0, 20)}…' : sid;
       return '📊 $display';
+    case 'google_sheets_update_row':
+      final uConfig = action['config'] as Map? ?? {};
+      final uSid = uConfig['spreadsheet_id'] as String? ?? '';
+      final uDisplay = uSid.length > 20 ? '${uSid.substring(0, 20)}…' : uSid;
+      return '📊 $uDisplay';
     default:
       return '';
   }
 }
 
-class _ActionCard extends StatelessWidget {
+Color _actionCatColor(String? type) => switch (type) {
+      'open_flow' || 'open_flow_n_times' => const Color(0xFF8B5CF6),
+      'webhook_out' => const Color(0xFF3B82F6),
+      'google_sheets_append_row' || 'google_sheets_update_row' => const Color(0xFF10B981),
+      'emit_event' => const Color(0xFFF59E0B),
+      _ => AppColors.ctTeal,
+    };
+
+String _actionCatLabel(String? type) => switch (type) {
+      'open_flow' || 'open_flow_n_times' => 'Encadenar flujos',
+      'webhook_out' => 'Sistemas externos',
+      'google_sheets_append_row' || 'google_sheets_update_row' => 'Hojas de cálculo',
+      'emit_event' => 'Eventos internos',
+      _ => 'Acción',
+    };
+
+class _ActionCard extends StatefulWidget {
   const _ActionCard({
     required this.action,
+    required this.index,
     required this.canManage,
     required this.onEdit,
     required this.onDelete,
+    required this.onToggle,
   });
 
   final Map<String, dynamic> action;
+  final int index;
   final bool canManage;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onToggle;
+
+  @override
+  State<_ActionCard> createState() => _ActionCardState();
+}
+
+class _ActionCardState extends State<_ActionCard> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final type = action['type'] as String?;
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.ctSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.ctBorder),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
-        children: [
-          Icon(_actionIcon(type), size: 20, color: AppColors.ctTeal),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _actionLabel(type),
-                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  _actionSubtitle(action),
-                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
-                ),
-              ],
+    final type = widget.action['type'] as String? ?? '';
+    final condition = widget.action['condition'] as String?;
+    final enabled = widget.action['enabled'] as bool? ?? true;
+    final catColor = _actionCatColor(type);
+    final catLabel = _actionCatLabel(type);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.6,
+        child: InkWell(
+          onTap: widget.canManage ? widget.onEdit : null,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: AppColors.ctSurface,
+              border: Border.all(color: AppColors.ctBorder),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // [1] Strip izquierdo
+                  Container(
+                    width: 38,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          catColor.withValues(alpha: 0.07),
+                          catColor.withValues(alpha: 0.04),
+                        ],
+                      ),
+                      border: Border(
+                        right: BorderSide(color: catColor.withValues(alpha: 0.12)),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 14),
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Container(
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: catColor,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${widget.index + 1}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // [2] Mini diagrama
+                  Container(
+                    width: 120,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFAFAFA),
+                      border: Border(
+                        right: BorderSide(color: Color(0xFFF1F1F1)),
+                      ),
+                    ),
+                    child: Center(
+                      child: ActionMiniDiagram(type: type, catColor: catColor),
+                    ),
+                  ),
+
+                  // [3] Body
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Badges row
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: catColor.withValues(alpha: 0.07),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: catColor.withValues(alpha: 0.15)),
+                                ),
+                                child: Text(
+                                  catLabel,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: catColor,
+                                  ),
+                                ),
+                              ),
+                              if (!enabled)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF3F4F6),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                                  ),
+                                  child: const Text(
+                                    'Pausada',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF6B7280),
+                                    ),
+                                  ),
+                                ),
+                              if (condition != null && condition.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF3C7),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: const Color(0xFFFDE68A)),
+                                  ),
+                                  child: const Text(
+                                    '\u2935 Condicional',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF92400E),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          // Title
+                          Text(
+                            _actionLabel(type),
+                            style: AppTextStyles.body.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF1E2722),
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          // Subtitle
+                          Text(
+                            _actionSubtitle(widget.action),
+                            style: AppTextStyles.bodySmall.copyWith(
+                              fontSize: 13,
+                              color: const Color(0xFF4C5D73),
+                            ),
+                          ),
+                          // Condition detail
+                          if (condition != null && condition.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFFBEB),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFFDE68A)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 3,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF59E0B),
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: RichText(
+                                      text: TextSpan(
+                                        children: [
+                                          TextSpan(
+                                            text: 'Solo si ',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFF92400E),
+                                            ),
+                                          ),
+                                          TextSpan(
+                                            text: condition,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontFamily: 'Geist',
+                                              color: const Color(0xFF7C2D12),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // [4] Actions
+                  if (widget.canManage)
+                    AnimatedOpacity(
+                      opacity: _hovered ? 1.0 : 0.45,
+                      duration: const Duration(milliseconds: 150),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            left: BorderSide(color: Color(0xFFF1F1F1)),
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Toggle
+                            GestureDetector(
+                              onTap: widget.onToggle,
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: Container(
+                                  width: 36,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(10),
+                                    color: enabled ? catColor : const Color(0xFFE5E7EB),
+                                  ),
+                                  child: AnimatedAlign(
+                                    duration: const Duration(milliseconds: 150),
+                                    alignment: enabled ? Alignment.centerRight : Alignment.centerLeft,
+                                    child: Container(
+                                      width: 16,
+                                      height: 16,
+                                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, size: 15),
+                              color: const Color(0xFF4C5D73),
+                              onPressed: widget.onEdit,
+                              tooltip: 'Editar',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                            ),
+                            const SizedBox(height: 4),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 15),
+                              color: AppColors.ctDanger,
+                              onPressed: widget.onDelete,
+                              tooltip: 'Eliminar',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
-          if (canManage) ...[
-            IconButton(
-              icon: const Icon(Icons.edit_outlined,
-                  size: 16, color: AppColors.ctText2),
-              onPressed: onEdit,
-              tooltip: 'Editar',
-              padding: EdgeInsets.zero,
-              constraints:
-                  const BoxConstraints(minWidth: 30, minHeight: 30),
+        ),
+      ),
+    );
+  }
+}
+
+// ── _OnCompleteTimeline ──────────────────────────────────────────────────────
+
+class _OnCompleteTimeline extends StatelessWidget {
+  const _OnCompleteTimeline({required this.actions});
+  final List<Map<String, dynamic>> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFF1F1F1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '\uD83C\uDFAC  L\u00CDNEA DE TIEMPO AL CERRAR EL FLUJO',
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.08,
+              color: const Color(0xFF6B7280),
             ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline,
-                  size: 16, color: AppColors.ctDanger),
-              onPressed: onDelete,
-              tooltip: 'Eliminar',
-              padding: EdgeInsets.zero,
-              constraints:
-                  const BoxConstraints(minWidth: 30, minHeight: 30),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (var i = 0; i < actions.length; i++) ...[
+                _timelineChip(actions[i], i),
+                if (i < actions.length - 1)
+                  Text(' \u2192 ',
+                      style: TextStyle(
+                          fontSize: 11, color: const Color(0xFFD1D5DB))),
+              ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: const Color(0xFF15803D).withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  '\u2713 Flujo completo',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF15803D),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _timelineChip(Map<String, dynamic> action, int index) {
+    final type = action['type'] as String? ?? '';
+    final catColor = _actionCatColor(type);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: catColor.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: catColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              color: catColor,
+              shape: BoxShape.circle,
             ),
-          ],
+            child: Center(
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            _actionLabel(type),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: catColor,
+            ),
+          ),
         ],
       ),
     );
@@ -4071,6 +4464,7 @@ class _ActionDialog extends StatefulWidget {
 }
 
 class _ActionDialogState extends State<_ActionDialog> {
+  late bool _showTypeCatalog;
   String _type = 'open_flow';
 
   // open_flow — replaced TextField with dropdown
@@ -4087,9 +4481,19 @@ class _ActionDialogState extends State<_ActionDialog> {
   // emit_event
   final _eventNameCtrl = TextEditingController();
 
-  // google_sheets_append_row
+  // google_sheets_append_row / update_row
   final _spreadsheetIdCtrl = TextEditingController();
   final _sheetNameCtrl = TextEditingController();
+  final _lookupColumnCtrl = TextEditingController();
+  String? _lookupValueFieldKey;
+  final _sheetUrlCtrl = TextEditingController();
+  List<String> _availableSheetsForAction = [];
+  List<String> _availableColumns = [];
+  String? _selectedSheetForAction;
+  bool _loadingSheetPreview = false;
+  bool _googleConnected = false;
+  bool _checkingGoogleOAuth = false;
+  Timer? _sheetUrlDebounce;
   // catalog schemas for asset_ref fields: {catalog_slug: fields_schema}
   Map<String, List<Map<String, dynamic>>> _catalogSchemas = {};
   bool _loadingCatalogSchemas = false;
@@ -4124,6 +4528,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         'webhook_out',
         'emit_event',
         'google_sheets_append_row',
+        'google_sheets_update_row',
       }.contains(_type);
 
   List<Map<String, dynamic>> _fieldsForActionType(String type) {
@@ -4167,7 +4572,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         });
       }
     } catch (e) {
-      print('[_loadActionTypes] error: $e');
+      debugPrint('[_loadActionTypes] error: $e');
     }
   }
 
@@ -4233,6 +4638,7 @@ class _ActionDialogState extends State<_ActionDialog> {
   @override
   void initState() {
     super.initState();
+    _showTypeCatalog = widget.action == null;
     final a = widget.action;
     if (a != null) {
       _type = a['type'] as String? ?? 'open_flow';
@@ -4245,10 +4651,11 @@ class _ActionDialogState extends State<_ActionDialog> {
         _selectedFlowSlug = a['flow_slug'] as String?;
         _selectedCountFieldKey = a['count_field_key'] as String?;
       }
-      if (_type == 'google_sheets_append_row') {
+      if (_type == 'google_sheets_append_row' || _type == 'google_sheets_update_row') {
         final cfg = a['config'] as Map? ?? {};
         _spreadsheetIdCtrl.text = cfg['spreadsheet_id'] as String? ?? '';
         _sheetNameCtrl.text = cfg['sheet_name'] as String? ?? 'Sheet1';
+        _selectedSheetForAction = cfg['sheet_name'] as String?;
         final mapping = cfg['column_mapping'] as Map? ?? {};
         final fieldKeyRe = RegExp(r'^\{\{fields\.([\w.]+)\}\}$');
         for (final e in mapping.entries) {
@@ -4259,6 +4666,10 @@ class _ActionDialogState extends State<_ActionDialog> {
             TextEditingController(text: e.key.toString()),
             TextEditingController(text: valStr),
           ));
+        if (_type == 'google_sheets_update_row') {
+          _lookupColumnCtrl.text = cfg['lookup_column'] as String? ?? '';
+          _lookupValueFieldKey = cfg['lookup_value_field_key'] as String?;
+        }
         }
       }
       final cond = a['condition'] as String?;
@@ -4284,6 +4695,10 @@ class _ActionDialogState extends State<_ActionDialog> {
     _loadWaChannel();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadActionTypes());
     _loadCatalogSchemas();
+    if (_type == 'google_sheets_append_row' || _type == 'google_sheets_update_row') {
+      _checkGoogleOAuthForAction();
+    }
+    _sheetUrlCtrl.addListener(_onSheetUrlChangedForAction);
   }
 
   Future<void> _loadCatalogSchemas() async {
@@ -4326,6 +4741,182 @@ class _ActionDialogState extends State<_ActionDialog> {
       debugPrint('[_loadCatalogSchemas] ERROR: $e');
       if (!mounted) return;
       setState(() => _loadingCatalogSchemas = false);
+    }
+  }
+
+  List<Widget> _buildGoogleSheetsFields() {
+    if (_checkingGoogleOAuth) {
+      return [
+        const Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctTeal),
+          ),
+        ),
+      ];
+    }
+    if (!_googleConnected) {
+      return [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFFBEB),
+            border: Border.all(color: const Color(0xFFF59E0B)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded,
+                      size: 16, color: Color(0xFFB45309)),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Tu cuenta de Google no est\u00E1 conectada.',
+                    style: AppTextStyles.bodySmall.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF92400E)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              AppButton(
+                label: 'Conectar Google',
+                variant: AppButtonVariant.primary,
+                size: AppButtonSize.sm,
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  context.go('/connections');
+                },
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+    return [
+      Row(
+        children: [
+          const Icon(Icons.check_circle_rounded,
+              size: 16, color: Color(0xFF16A34A)),
+          const SizedBox(width: 6),
+          Text('Google conectado',
+              style: AppTextStyles.bodySmall.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF16A34A))),
+        ],
+      ),
+      const SizedBox(height: 12),
+      _FormField(
+        label: 'URL del Google Sheet',
+        controller: _sheetUrlCtrl,
+        placeholder: 'https://docs.google.com/spreadsheets/d/\u2026',
+      ),
+      if (_loadingSheetPreview) ...[
+        const SizedBox(height: 6),
+        const LinearProgressIndicator(color: AppColors.ctTeal),
+      ],
+      if (_availableSheetsForAction.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        AppDropdown<String?>(
+          label: 'Hoja (pesta\u00F1a)',
+          value: _selectedSheetForAction,
+          hint: 'Seleccionar hoja',
+          items: _availableSheetsForAction
+              .map((s) => AppDropdownItem<String?>(value: s, label: s))
+              .toList(),
+          onChanged: (s) {
+            setState(() => _selectedSheetForAction = s);
+            if (s != null) _loadSheetPreviewForAction(sheetName: s);
+          },
+        ),
+      ],
+      // Fallback: if editing with existing spreadsheet_id but no URL entered yet
+      if (_sheetUrlCtrl.text.trim().isEmpty && _spreadsheetIdCtrl.text.trim().isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFAFAFA),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.ctBorder),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.info_outline, size: 14, color: AppColors.ctText3),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'ID actual: ${_spreadsheetIdCtrl.text}',
+                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ];
+  }
+
+  static String _columnLetter(int index) {
+    int n = index + 1;
+    String result = '';
+    while (n > 0) {
+      n--;
+      result = String.fromCharCode((n % 26) + 65) + result;
+      n ~/= 26;
+    }
+    return result;
+  }
+
+  Future<void> _checkGoogleOAuthForAction() async {
+    setState(() => _checkingGoogleOAuth = true);
+    try {
+      final status = await ConnectionsApi.getGoogleStatus();
+      if (mounted) setState(() => _googleConnected = status['connected'] == true);
+    } catch (_) {
+      if (mounted) setState(() => _googleConnected = false);
+    } finally {
+      if (mounted) setState(() => _checkingGoogleOAuth = false);
+    }
+  }
+
+  void _onSheetUrlChangedForAction() {
+    _sheetUrlDebounce?.cancel();
+    final url = _sheetUrlCtrl.text.trim();
+    if (url.contains('spreadsheets/d/')) {
+      _sheetUrlDebounce = Timer(
+        const Duration(milliseconds: 800),
+        () { if (mounted) _loadSheetPreviewForAction(); },
+      );
+    }
+  }
+
+  Future<void> _loadSheetPreviewForAction({String? sheetName}) async {
+    if (_sheetUrlCtrl.text.trim().isEmpty) return;
+    setState(() => _loadingSheetPreview = true);
+    try {
+      final result = await CatalogsApi.sheetsPreview(
+        tenantId: widget.tenantId,
+        sheetUrl: _sheetUrlCtrl.text.trim(),
+        sheetName: sheetName ?? _selectedSheetForAction,
+      );
+      if (!mounted) return;
+      setState(() {
+        _availableSheetsForAction = List<String>.from(result['sheets'] as List? ?? []);
+        _availableColumns = List<String>.from(result['columns'] as List? ?? []);
+        _selectedSheetForAction = result['selected_sheet'] as String?;
+        _loadingSheetPreview = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingSheetPreview = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error al cargar preview: $e'),
+        backgroundColor: AppColors.ctDanger,
+        duration: const Duration(seconds: 4),
+      ));
     }
   }
 
@@ -4401,12 +4992,95 @@ class _ActionDialogState extends State<_ActionDialog> {
     }
   }
 
+  void _initProactiveMappingFromTemplate(Map<String, dynamic> template) {
+    // 1. Variables declared in template
+    final declared = ((template['variables'] as List<dynamic>?) ?? [])
+        .map((v) => {
+              'slot': (v as Map)['slot'] as int? ?? 0,
+              'key': v['key'] as String? ?? '',
+            })
+        .toList();
+
+    // 2. Slots in body_text via {{N}}
+    final body = template['body_text'] as String? ?? '';
+    final bodySlots = RegExp(r'\{\{(\d+)\}\}')
+        .allMatches(body)
+        .map((m) => int.tryParse(m.group(1) ?? '') ?? 0)
+        .where((s) => s > 0)
+        .toSet();
+
+    // 3. Synthetic entries for slots in body but not in variables
+    final declaredSlots = declared.map((v) => v['slot'] as int).toSet();
+    final missing = bodySlots.difference(declaredSlots);
+    for (final slot in missing.toList()..sort()) {
+      declared.add({'slot': slot, 'key': 'variable_$slot'});
+    }
+
+    // 4. Sort by slot
+    declared.sort((a, b) =>
+        (a['slot'] as int).compareTo(b['slot'] as int));
+
+    // 5. Preserve existing mapping sources
+    final existing = Map<String, String>.fromEntries(
+      _proactiveMappingRows
+          .map((e) => MapEntry(
+                e['variable'] as String? ?? '',
+                e['source'] as String? ?? '',
+              ))
+          .where((e) => e.key.isNotEmpty),
+    );
+
+    setState(() {
+      _proactiveMappingRows = declared.map((v) {
+        final key = v['key'] as String;
+        return <String, dynamic>{
+          'variable': key,
+          'source': existing[key] ?? '',
+          'slot': v['slot'] as int,
+        };
+      }).toList();
+    });
+  }
+
+  Widget _buildActionTemplateBodyPreview(String body) {
+    final spans = <TextSpan>[];
+    final regex = RegExp(r'(\{\{\d+\}\})');
+    int lastEnd = 0;
+    for (final match in regex.allMatches(body)) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(
+          text: body.substring(lastEnd, match.start),
+          style: AppTextStyles.body,
+        ));
+      }
+      spans.add(TextSpan(
+        text: match.group(0),
+        style: AppTextStyles.body.copyWith(
+          color: AppColors.ctTeal,
+          fontWeight: FontWeight.w600,
+        ),
+      ));
+      lastEnd = match.end;
+    }
+    if (lastEnd < body.length) {
+      spans.add(TextSpan(
+        text: body.substring(lastEnd),
+        style: AppTextStyles.body,
+      ));
+    }
+    return RichText(text: TextSpan(children: spans));
+  }
+
   @override
   void dispose() {
     _integrationCtrl.dispose();
     _eventNameCtrl.dispose();
     _spreadsheetIdCtrl.dispose();
     _sheetNameCtrl.dispose();
+    _lookupColumnCtrl.dispose();
+    _sheetUrlCtrl.removeListener(_onSheetUrlChangedForAction);
+    _sheetUrlCtrl.dispose();
+    _sheetUrlDebounce?.cancel();
     for (final row in _columnMappingRows) {
       row.$1.dispose();
       row.$2.dispose();
@@ -4435,8 +5109,8 @@ class _ActionDialogState extends State<_ActionDialog> {
     return keys;
   }
 
-  List<DropdownMenuItem<String?>> _buildFieldDropdownItems() {
-    final items = <DropdownMenuItem<String?>>[];
+  List<AppDropdownItem<String?>> _buildFieldDropdownItems() {
+    final items = <AppDropdownItem<String?>>[];
     for (final f in widget.flowFields) {
       final key = f['key'] as String? ?? '';
       final label = f['label'] as String? ?? key;
@@ -4447,42 +5121,89 @@ class _ActionDialogState extends State<_ActionDialog> {
           final colKey = col['key'] as String? ?? '';
           final colLabel = col['label'] as String? ?? colKey;
           if (colKey.isEmpty) continue;
-          items.add(DropdownMenuItem<String?>(
+          items.add(AppDropdownItem<String?>(
             value: '$key.data.$colKey',
-            child: Text(
-              '$label > $colLabel',
-              style: const TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 13,
-                color: AppColors.ctText,
-              ),
-            ),
+            label: '$label > $colLabel',
           ));
         }
       } else {
-        items.add(DropdownMenuItem<String?>(
+        items.add(AppDropdownItem<String?>(
           value: key,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 13,
-              color: AppColors.ctText,
-            ),
-          ),
+          label: label,
         ));
       }
     }
     return items;
   }
 
+  static List<AppDropdownItem<String>> _conditionOpsForType(String? type) {
+    switch (type) {
+      case 'number':
+      case 'date':
+        return const [
+          AppDropdownItem(value: '==', label: '== igual'),
+          AppDropdownItem(value: '!=', label: '!= distinto'),
+          AppDropdownItem(value: '>',  label: '>  mayor'),
+          AppDropdownItem(value: '<',  label: '<  menor'),
+          AppDropdownItem(value: '>=', label: '>= mayor o igual'),
+          AppDropdownItem(value: '<=', label: '<= menor o igual'),
+        ];
+      default:
+        return const [
+          AppDropdownItem(value: '==', label: '== igual'),
+          AppDropdownItem(value: '!=', label: '!= distinto'),
+        ];
+    }
+  }
+
+  Widget _buildConditionValueWidget(String? fieldType, Map<String, dynamic>? field) {
+    if (fieldType == 'select') {
+      final options = (field?['options'] as List?) ?? [];
+      if (options.isNotEmpty) {
+        return AppDropdown<String?>(
+          value: _conditionValueCtrl.text.isNotEmpty ? _conditionValueCtrl.text : null,
+          hint: 'Seleccionar valor',
+          items: options
+              .map((o) => AppDropdownItem<String?>(
+                    value: o.toString(),
+                    label: o.toString(),
+                  ))
+              .toList(),
+          onChanged: (v) => setState(() => _conditionValueCtrl.text = v ?? ''),
+        );
+      }
+    }
+    return TextField(
+      controller: _conditionValueCtrl,
+      style: AppTextStyles.body,
+      keyboardType: fieldType == 'number' ? TextInputType.number : TextInputType.text,
+      inputFormatters: fieldType == 'number'
+          ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]'))]
+          : [],
+      decoration: InputDecoration(
+        hintText: fieldType == 'number' ? 'ej. 5' : 'ej. Si, Granjas',
+        hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+        filled: true,
+        fillColor: AppColors.ctSurface2,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: AppColors.ctBorder2),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: AppColors.ctTeal, width: 1.5),
+        ),
+      ),
+      onChanged: (_) => setState(() {}),
+    );
+  }
+
   String? _buildConditionExpression() {
     final val = _conditionValueCtrl.text.trim();
     if (_conditionField != null && val.isNotEmpty) {
       return 'fields.$_conditionField $_conditionOp "$val"';
-    }
-    if (_conditionField == null && val.isNotEmpty) {
-      return val;
     }
     return null;
   }
@@ -4516,7 +5237,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         } else {
           updated.remove('proactive_message');
         }
-        updated.remove('carry_fields');
+
         updated.remove('integration_id');
         updated.remove('include_ancestors');
         updated.remove('event_name');
@@ -4529,7 +5250,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         updated['count_field_key'] = _selectedCountFieldKey!;
         updated.remove('target_flow_slug');
         updated.remove('carry_ancestors');
-        updated.remove('carry_fields');
+
         updated.remove('integration_id');
         updated.remove('include_ancestors');
         updated.remove('event_name');
@@ -4541,7 +5262,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         updated['integration_id'] = _integrationCtrl.text.trim();
         updated['include_ancestors'] = _includeAncestors;
         updated.remove('target_flow_slug');
-        updated.remove('carry_fields');
+
         updated.remove('carry_ancestors');
         updated.remove('event_name');
         updated.remove('event_data');
@@ -4550,14 +5271,19 @@ class _ActionDialogState extends State<_ActionDialog> {
         if (_eventNameCtrl.text.trim().isEmpty) return;
         updated['event_name'] = _eventNameCtrl.text.trim();
         updated.remove('target_flow_slug');
-        updated.remove('carry_fields');
+
         updated.remove('carry_ancestors');
         updated.remove('integration_id');
         updated.remove('include_ancestors');
         updated.remove('config');
         break;
       case 'google_sheets_append_row':
-        final sid = _spreadsheetIdCtrl.text.trim();
+        final url = _sheetUrlCtrl.text.trim();
+        final extractedId = RegExp(r'/spreadsheets/d/([a-zA-Z0-9-_]+)')
+            .firstMatch(url)?.group(1) ?? '';
+        final sid = extractedId.isNotEmpty
+            ? extractedId
+            : _spreadsheetIdCtrl.text.trim();
         if (sid.isEmpty) return;
         final validRows = _columnMappingRows
             .where((r) => r.$1.text.trim().isNotEmpty)
@@ -4565,15 +5291,47 @@ class _ActionDialogState extends State<_ActionDialog> {
         if (validRows.isEmpty) return;
         updated['config'] = {
           'spreadsheet_id': sid,
-          'sheet_name': _sheetNameCtrl.text.trim().isEmpty
-              ? 'Sheet1'
-              : _sheetNameCtrl.text.trim(),
+          'sheet_name': _selectedSheetForAction ??
+              (_sheetNameCtrl.text.trim().isEmpty
+                  ? 'Sheet1'
+                  : _sheetNameCtrl.text.trim()),
           'column_mapping': {
             for (final r in validRows) r.$1.text.trim(): r.$2.text.trim(),
           },
         };
         updated.remove('target_flow_slug');
-        updated.remove('carry_fields');
+
+        updated.remove('carry_ancestors');
+        updated.remove('integration_id');
+        updated.remove('include_ancestors');
+        updated.remove('event_name');
+        updated.remove('event_data');
+        break;
+      case 'google_sheets_update_row':
+        final url = _sheetUrlCtrl.text.trim();
+        final extractedId = RegExp(r'/spreadsheets/d/([a-zA-Z0-9-_]+)')
+            .firstMatch(url)?.group(1) ?? '';
+        final sid = extractedId.isNotEmpty
+            ? extractedId
+            : _spreadsheetIdCtrl.text.trim();
+        if (sid.isEmpty) return;
+        final validRows = _columnMappingRows
+            .where((r) => r.$1.text.trim().isNotEmpty)
+            .toList();
+        if (validRows.isEmpty) return;
+        updated['config'] = {
+          'spreadsheet_id': sid,
+          'sheet_name': _selectedSheetForAction ??
+              (_sheetNameCtrl.text.trim().isEmpty
+                  ? 'Sheet1'
+                  : _sheetNameCtrl.text.trim()),
+          'column_mapping': {
+            for (final r in validRows) r.$1.text.trim(): r.$2.text.trim(),
+          },
+          'lookup_column': _lookupColumnCtrl.text.trim(),
+          'lookup_value_field_key': _lookupValueFieldKey ?? '',
+        };
+        updated.remove('target_flow_slug');
         updated.remove('carry_ancestors');
         updated.remove('integration_id');
         updated.remove('include_ancestors');
@@ -4596,64 +5354,238 @@ class _ActionDialogState extends State<_ActionDialog> {
     Navigator.pop(context);
   }
 
+  static const _kActionCategories = [
+    ('flow', 'Encadenar flujos', 'Abre otros flujos al completar este', Color(0xFF8B5CF6), ['open_flow', 'open_flow_n_times']),
+    ('external', 'Sistemas externos', 'Env\u00EDa datos a servicios externos', Color(0xFF3B82F6), ['webhook_out']),
+    ('sheets', 'Hojas de c\u00E1lculo', 'Escribe o actualiza datos en Google Sheets', Color(0xFF10B981), ['google_sheets_append_row', 'google_sheets_update_row']),
+    ('events', 'Eventos internos', 'Emite eventos para otros sistemas', Color(0xFFF59E0B), ['emit_event']),
+  ];
+
+  static const _kActionExamples = <String, String>{
+    'open_flow': 'Al completar "Inicio de Ruta", abre "Registro de Entrega".',
+    'open_flow_n_times': 'Abre N instancias de un flujo basado en un campo num\u00E9rico.',
+    'webhook_out': 'Env\u00EDa los datos capturados a un endpoint HTTP externo.',
+    'google_sheets_append_row': 'Agrega una fila nueva con los datos del flujo.',
+    'google_sheets_update_row': 'Actualiza una fila existente en la hoja.',
+    'emit_event': 'Emite un evento interno para otros flujos o servicios.',
+  };
+
+  bool _hasActionTypesInCategory(List<String> types) {
+    return types.any((t) => t != 'emit_event' && _availableActionTypes.any((at) => at['type'] == t));
+  }
+
+  Widget _buildTypeCatalog() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Nueva acci\u00F3n al cerrar',
+                        style: AppTextStyles.body.copyWith(
+                            fontWeight: FontWeight.w700, fontSize: 17)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Elige qu\u00E9 debe ocurrir cuando el flujo se complete',
+                      style: AppTextStyles.bodySmall.copyWith(
+                          color: const Color(0xFF4C5D73)),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 18, color: AppColors.ctText2),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Divider(height: 1, color: AppColors.ctBorder),
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final cat in _kActionCategories) ...[
+                  if (_hasActionTypesInCategory(cat.$5)) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: cat.$4,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(cat.$2,
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: cat.$4)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(cat.$3,
+                              style: AppTextStyles.bodySmall.copyWith(
+                                  fontSize: 11, color: const Color(0xFF6B7280))),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: cat.$5
+                          .where((t) => t != 'emit_event' && _availableActionTypes.any((at) => at['type'] == t))
+                          .map((type) => SizedBox(
+                                width: 200,
+                                child: _ActionTypeCard(
+                                  type: type,
+                                  label: _actionLabel(type),
+                                  example: _kActionExamples[type] ?? '',
+                                  catColor: cat.$4,
+                                  onTap: () {
+                                    setState(() {
+                                      _type = type;
+                                      _showTypeCatalog = false;
+                                      if (!_isKnownType) _initDynamicFields(type, {});
+                                    });
+                                    if (type == 'google_sheets_append_row' || type == 'google_sheets_update_row') {
+                                      _checkGoogleOAuthForAction();
+                                    }
+                                  },
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ],
+                ],
+                if (_availableActionTypes.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.ctTeal),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final catColor = _actionCatColor(_type);
+
     return Dialog(
       backgroundColor: AppColors.ctSurface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.ctBorder),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _isEdit ? 'Acción' : 'Nueva acción',
-                style: AppTextStyles.pageTitle,
-              ),
-              const SizedBox(height: 20),
+        constraints: BoxConstraints(
+          maxWidth: _showTypeCatalog ? 680 : 520,
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        ),
+        child: _showTypeCatalog
+            ? _buildTypeCatalog()
+            : _buildActionForm(catColor),
+      ),
+    );
+  }
 
-              // Tipo
-              Text(
-                'Tipo de acción',
-                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+  Widget _buildActionForm(Color catColor) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
+          child: Row(
+            children: [
+              if (!_isEdit) ...[
+                GestureDetector(
+                  onTap: () => setState(() => _showTypeCatalog = true),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Text('\u2190 Tipo',
+                        style: AppTextStyles.bodySmall.copyWith(
+                            color: const Color(0xFF6B7280))),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _isEdit ? 'Editar acci\u00F3n' : _actionLabel(_type),
+                      style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.w700, fontSize: 17),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(_kActionExamples[_type] ?? '',
+                        style: AppTextStyles.bodySmall.copyWith(
+                            color: const Color(0xFF4C5D73))),
+                  ],
+                ),
               ),
-              const SizedBox(height: 6),
-              _availableActionTypes.isEmpty
-                  ? Text('Cargando tipos...',
-                      style: AppTextStyles.body.copyWith(color: AppColors.ctText3))
-                  : _DropdownContainer(
-                      child: DropdownButton<String>(
-                        value: _availableActionTypes.any((t) => t['type'] == _type)
-                            ? _type
-                            : null,
-                        isExpanded: true,
-                        underline: const SizedBox.shrink(),
-                        dropdownColor: AppColors.ctSurface,
-                        hint: Text('Seleccionar tipo',
-                            style: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
-                        items: _availableActionTypes
-                            .map((t) => DropdownMenuItem(
-                                  value: t['type'] as String? ?? '',
-                                  child: Text(t['label'] as String? ?? '',
-                                      style: AppTextStyles.body),
-                                ))
-                            .toList(),
-                        onChanged: (v) {
-                          if (v == null) return;
-                          setState(() {
-                            _type = v;
-                            if (!_isKnownType) _initDynamicFields(v, {});
-                          });
-                        },
+              IconButton(
+                icon: const Icon(Icons.close, size: 18, color: AppColors.ctText2),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Divider(height: 1, color: AppColors.ctBorder),
+        // Body
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Hero diagram
+                Container(
+                  width: double.infinity,
+                  height: 100,
+                  margin: const EdgeInsets.only(top: 16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        catColor.withValues(alpha: 0.08),
+                        catColor.withValues(alpha: 0.02),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: catColor.withValues(alpha: 0.12)),
+                  ),
+                  child: Center(
+                    child: SizedBox(
+                      width: 150,
+                      height: 90,
+                      child: FittedBox(
+                        child: ActionMiniDiagram(type: _type, catColor: catColor),
                       ),
                     ),
-              const SizedBox(height: 16),
+                  ),
+                ),
+                const SizedBox(height: 16),
 
               // Campos condicionales
               if (_type == 'open_flow') ...[
@@ -4684,26 +5616,15 @@ class _ActionDialogState extends State<_ActionDialog> {
                     ),
                   )
                 else
-                  _DropdownContainer(
-                    child: DropdownButton<String>(
-                      value: _selectedFlowSlug,
-                      isExpanded: true,
-                      underline: const SizedBox.shrink(),
-                      dropdownColor: AppColors.ctSurface,
-                      hint: Text('Selecciona un flujo',
-                          style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
-                      items: _availableFlows.map((f) {
-                        final slug = f['slug'] as String? ?? '';
-                        final name = f['name'] as String? ?? slug;
-                        return DropdownMenuItem<String>(
-                          value: slug,
-                          child: Text(name,
-                              style: AppTextStyles.body),
-                        );
-                      }).toList(),
-                      onChanged: (v) =>
-                          setState(() => _selectedFlowSlug = v),
-                    ),
+                  AppDropdown<String?>(
+                    hint: 'Selecciona un flujo',
+                    value: _selectedFlowSlug,
+                    items: _availableFlows.map((f) {
+                      final slug = f['slug'] as String? ?? '';
+                      final name = f['name'] as String? ?? slug;
+                      return AppDropdownItem<String?>(value: slug, label: name);
+                    }).toList(),
+                    onChanged: (v) => setState(() => _selectedFlowSlug = v),
                   ),
                 const SizedBox(height: 8),
                 SwitchListTile(
@@ -4735,7 +5656,7 @@ class _ActionDialogState extends State<_ActionDialog> {
                       _proactiveMappingRows = [];
                     }
                   }),
-                  activeColor: AppColors.ctTeal,
+                  activeThumbColor: AppColors.ctTeal,
                 ),
                 if (_sendProactive) ...[
                   const SizedBox(height: 8),
@@ -4760,196 +5681,256 @@ class _ActionDialogState extends State<_ActionDialog> {
                             style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)),
                         const SizedBox(height: 6),
                         AppButton(
-                          label: 'Crear plantilla en Meta',
+                          label: 'Crear plantilla',
                           variant: AppButtonVariant.ghost,
                           size: AppButtonSize.sm,
-                          onPressed: () => launchUrl(
-                            Uri.parse('https://business.facebook.com/wa/manage/message-templates/'),
-                          ),
+                          onPressed: () {
+                            if (_waChannelId == null) return;
+                            showDialog<void>(
+                              context: context,
+                              builder: (_) => TemplateCreateDialog(
+                                channelId: _waChannelId!,
+                                tenantId: widget.tenantId,
+                              ),
+                            ).then((_) {
+                              if (_waChannelId != null) _loadTemplatesForAction(_waChannelId!);
+                            });
+                          },
                         ),
                       ],
                     )
                   else ...[
-                    AppDropdown<String>(
+                    AppDropdown<String?>(
                       label: 'Plantilla',
                       value: _selectedTemplateId,
                       hint: 'Selecciona una plantilla aprobada',
-                      items: _approvedTemplates.map((t) {
-                        final id = t['id'] as String? ?? t['name'] as String? ?? '';
-                        final name = t['name'] as String? ?? id;
-                        final lang = t['language'] as String? ?? '';
-                        return AppDropdownItem<String>(
-                          value: id,
-                          label: '$name ($lang)',
-                        );
-                      }).toList(),
-                      onChanged: (v) => setState(() => _selectedTemplateId = v),
-                    ),
-                    const SizedBox(height: 6),
-                    AppButton(
-                      label: 'Crear nueva plantilla',
-                      variant: AppButtonVariant.ghost,
-                      size: AppButtonSize.sm,
-                      onPressed: () => launchUrl(
-                        Uri.parse('https://business.facebook.com/wa/manage/message-templates/'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Text('Mapeo de variables', style: AppTextStyles.formLabel),
-                        const Spacer(),
-                        AppButton(
-                          label: '+ Agregar',
-                          variant: AppButtonVariant.ghost,
-                          size: AppButtonSize.sm,
-                          onPressed: () => setState(() =>
-                              _proactiveMappingRows.add({'variable': '', 'source': ''})),
+                      items: [
+                        const AppDropdownItem<String?>(value: null, label: '\u2014 Sin plantilla \u2014'),
+                        ..._approvedTemplates.map((t) {
+                          final id = t['id'] as String? ?? t['name'] as String? ?? '';
+                          final name = t['name'] as String? ?? id;
+                          final lang = t['language'] as String? ?? '';
+                          return AppDropdownItem<String?>(
+                            value: id,
+                            label: '$name ($lang)',
+                          );
+                        }),
+                        const AppDropdownItem<String?>(
+                          value: '__create__',
+                          label: '\uFF0B Crear nueva plantilla',
                         ),
                       ],
+                      onChanged: (v) {
+                        if (v == '__create__') {
+                          if (_waChannelId == null) return;
+                          showDialog<void>(
+                            context: context,
+                            builder: (_) => TemplateCreateDialog(
+                              channelId: _waChannelId!,
+                              tenantId: widget.tenantId,
+                            ),
+                          ).then((_) {
+                            if (_waChannelId != null) _loadTemplatesForAction(_waChannelId!);
+                          });
+                          return;
+                        }
+                        if (v == null) {
+                          setState(() {
+                            _selectedTemplateId = null;
+                            _proactiveMappingRows = [];
+                          });
+                        } else {
+                          setState(() => _selectedTemplateId = v);
+                          final t = _approvedTemplates
+                              .where((t) => (t['id'] as String? ?? t['name'] as String? ?? '') == v)
+                              .firstOrNull;
+                          if (t != null) _initProactiveMappingFromTemplate(t);
+                        }
+                      },
                     ),
-                    if (_proactiveMappingRows.isEmpty)
-                      Text('Sin variables configuradas',
-                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3))
-                    else
+                    // ── Template preview ──
+                    Builder(builder: (_) {
+                      final sel = _selectedTemplateId == null
+                          ? null
+                          : _approvedTemplates
+                              .where((t) => (t['id'] as String? ?? t['name'] as String? ?? '') == _selectedTemplateId)
+                              .firstOrNull;
+                      if (sel == null) return const SizedBox.shrink();
+                      final body = sel['body_text'] as String?;
+                      if (body == null || body.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.ctSurface2,
+                            border: Border.all(color: AppColors.ctBorder),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if ((sel['header_text'] as String?) != null) ...[
+                                Text(
+                                  sel['header_text'] as String,
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.ctText2,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                              ],
+                              _buildActionTemplateBodyPreview(body),
+                              if ((sel['footer_text'] as String?) != null) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  sel['footer_text'] as String,
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.ctText3,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                    // ── Mapeo de variables (auto-generado desde template) ──
+                    if (_proactiveMappingRows.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text('Mapeo de variables',
+                          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 12),
                       ...List.generate(_proactiveMappingRows.length, (i) {
                         final row = _proactiveMappingRows[i];
+                        final varKey = row['variable'] as String? ?? '';
+                        final slot = row['slot'] as int? ?? (i + 1);
+                        final varLabel = varKey.startsWith('variable_')
+                            ? '{{$slot}}'
+                            : '$varKey  {{$slot}}';
                         return Padding(
-                          padding: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.only(bottom: 8),
                           child: Row(
                             children: [
                               Expanded(
-                                child: AppTextField(
-                                  controller: TextEditingController(text: row['variable'] as String? ?? ''),
-                                  hint: 'Ej: 1',
-                                  label: i == 0 ? 'Variable' : null,
-                                  onChanged: (v) => _proactiveMappingRows[i]['variable'] = v,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.ctSurface,
+                                    border: Border.all(color: AppColors.ctBorder),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(varLabel, style: AppTextStyles.body),
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: AppDropdown<String>(
-                                  label: i == 0 ? 'Campo fuente' : null,
                                   value: (row['source'] as String?)?.isEmpty == true
                                       ? null
                                       : row['source'] as String?,
                                   hint: 'Campo fuente',
-                                  items: [
-                                    const AppDropdownItem(value: '', label: '— Sin campo —'),
-                                    ...widget.flowFields.map((f) {
-                                      final key = f['key'] as String? ?? '';
-                                      final lbl = f['label'] as String? ?? key;
-                                      return AppDropdownItem(value: 'fields.$key', label: lbl);
-                                    }),
+                                  items: const [
+                                    AppDropdownItem<String>(value: '', label: '\u2014 Sin campo \u2014'),
+                                    AppDropdownItem<String>(value: 'system:operator.name', label: 'Nombre del operador'),
+                                    AppDropdownItem<String>(value: 'system:operator.phone', label: 'Tel\u00E9fono del operador'),
+                                    AppDropdownItem<String>(value: 'system:tenant.name', label: 'Nombre de la empresa'),
+                                    AppDropdownItem<String>(value: 'system:flow.name', label: 'Nombre del flujo'),
+                                    AppDropdownItem<String>(value: 'system:flow.fields_summary', label: 'Campos del flujo (lista)'),
                                   ],
-                                  onChanged: (v) =>
-                                      setState(() => _proactiveMappingRows[i]['source'] = v ?? ''),
+                                  onChanged: (v) {
+                                    setState(() => _proactiveMappingRows[i] = {
+                                      ..._proactiveMappingRows[i],
+                                      'source': v ?? '',
+                                    });
+                                  },
                                 ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.close, size: 16, color: AppColors.ctText3),
-                                onPressed: () =>
-                                    setState(() => _proactiveMappingRows.removeAt(i)),
                               ),
                             ],
                           ),
                         );
                       }),
+                    ],
                   ],
                 ],
               ] else if (_type == 'open_flow_n_times') ...[
                 Text(
-                  'Flow slug',
+                  'Flujo destino',
                   style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 6),
-                _DropdownContainer(
-                  child: _loadingFlows
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(vertical: 12),
-                            child: CircularProgressIndicator(
-                                color: AppColors.ctTeal, strokeWidth: 2),
-                          ),
-                        )
-                      : DropdownButton<String>(
-                          value: _selectedFlowSlug,
-                          isExpanded: true,
-                          underline: const SizedBox.shrink(),
-                          dropdownColor: AppColors.ctSurface,
-                          hint: Text('Seleccionar flow',
-                              style: AppTextStyles.body
-                                  .copyWith(color: AppColors.ctText3)),
-                          items: _availableFlows
-                              .map((f) => DropdownMenuItem<String>(
-                                    value: f['slug'] as String?,
-                                    child: Text(
-                                      '${f['name'] ?? f['slug']}',
-                                      style: AppTextStyles.body,
-                                    ),
-                                  ))
-                              .toList(),
-                          onChanged: (v) =>
-                              setState(() => _selectedFlowSlug = v),
-                        ),
-                ),
+                if (_loadingFlows)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: CircularProgressIndicator(
+                          color: AppColors.ctTeal, strokeWidth: 2),
+                    ),
+                  )
+                else
+                  AppDropdown<String?>(
+                    hint: 'Selecciona un flujo',
+                    value: _selectedFlowSlug,
+                    items: _availableFlows.map((f) {
+                      final slug = f['slug'] as String? ?? '';
+                      final name = f['name'] as String? ?? slug;
+                      return AppDropdownItem<String?>(value: slug, label: name);
+                    }).toList(),
+                    onChanged: (v) => setState(() => _selectedFlowSlug = v),
+                  ),
                 const SizedBox(height: 12),
                 Text(
                   'Campo de conteo',
                   style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 6),
-                _DropdownContainer(
-                  child: DropdownButton<String>(
-                    value: _selectedCountFieldKey,
-                    isExpanded: true,
-                    underline: const SizedBox.shrink(),
-                    dropdownColor: AppColors.ctSurface,
-                    hint: Text('Seleccionar campo',
-                        style: AppTextStyles.body
-                            .copyWith(color: AppColors.ctText3)),
-                    items: widget.flowFields
-                        .map((f) => DropdownMenuItem<String>(
-                              value: f['key'] as String?,
-                              child: Text(
-                                '${f['label'] ?? f['key']}',
-                                style: AppTextStyles.body,
-                              ),
-                            ))
-                        .toList(),
-                    onChanged: (v) =>
-                        setState(() => _selectedCountFieldKey = v),
-                  ),
-                ),
-                if (_selectedCountFieldKey != null) ...[
-                  Builder(builder: (_) {
-                    final field = widget.flowFields.firstWhere(
-                      (f) => (f['key'] as String?) == _selectedCountFieldKey,
-                      orElse: () => <String, dynamic>{},
+                Builder(builder: (_) {
+                  final numericFields = widget.flowFields
+                      .where((f) => (f['type'] as String?) == 'number')
+                      .toList();
+                  if (numericFields.isEmpty) {
+                    return _SemanticWarning(
+                      message: 'Este flujo no tiene campos de tipo Número. '
+                          'Agrega uno en la pestaña Campos antes de configurar esta acción.',
                     );
-                    final isRequired = field['required'] as bool? ?? false;
-                    final fieldType = field['type'] as String? ?? '';
-                    final warnings = <String>[];
-                    if (fieldType.isNotEmpty && fieldType != 'number') {
-                      warnings.add('Este campo es de tipo "$fieldType". '
-                          'Se recomienda usar un campo de tipo Número para evitar errores.');
-                    }
-                    if (!isRequired) {
-                      warnings.add('Este campo no es obligatorio. '
-                          'Si el operador no lo captura, no se crearán instancias hijas.');
-                    }
-                    if (warnings.isEmpty) return const SizedBox.shrink();
-                    return Column(
-                      children: [
-                        const SizedBox(height: 6),
-                        for (final w in warnings) ...[
-                          _SemanticWarning(message: w),
-                          const SizedBox(height: 4),
-                        ],
-                      ],
-                    );
-                  }),
-                ],
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AppDropdown<String?>(
+                        value: _selectedCountFieldKey,
+                        hint: 'Seleccionar campo numérico',
+                        items: numericFields
+                            .map((f) => AppDropdownItem<String?>(
+                                  value: f['key'] as String?,
+                                  label: '${f['label'] ?? f['key']}',
+                                ))
+                            .toList(),
+                        onChanged: (v) =>
+                            setState(() => _selectedCountFieldKey = v),
+                      ),
+                      if (_selectedCountFieldKey != null)
+                        Builder(builder: (_) {
+                          final field = widget.flowFields.firstWhere(
+                            (f) => (f['key'] as String?) == _selectedCountFieldKey,
+                            orElse: () => <String, dynamic>{},
+                          );
+                          final isRequired = field['required'] as bool? ?? false;
+                          if (isRequired) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: _SemanticWarning(
+                              message: 'Este campo no es obligatorio. '
+                                  'Si el operador no lo captura, no se crearán instancias hijas.',
+                            ),
+                          );
+                        }),
+                    ],
+                  );
+                }),
               ] else if (_type == 'webhook_out') ...[
                 _FormField(
                   label: 'ID de integración',
@@ -4975,17 +5956,7 @@ class _ActionDialogState extends State<_ActionDialog> {
                   placeholder: 'ej. flujo_completado',
                 ),
               ] else if (_type == 'google_sheets_append_row') ...[
-                _FormField(
-                  label: 'ID de hoja de cálculo',
-                  controller: _spreadsheetIdCtrl,
-                  placeholder: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms',
-                ),
-                const SizedBox(height: 12),
-                _FormField(
-                  label: 'Nombre de pestaña',
-                  controller: _sheetNameCtrl,
-                  placeholder: 'Hoja1',
-                ),
+                ..._buildGoogleSheetsFields(),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -5045,51 +6016,36 @@ class _ActionDialogState extends State<_ActionDialog> {
                             ),
                             if (hasFields)
                               Expanded(
-                                child: _DropdownContainer(
-                                  child: DropdownButton<String?>(
-                                    value: effectiveKey,
-                                    isExpanded: true,
-                                    underline: const SizedBox.shrink(),
-                                    dropdownColor: AppColors.ctSurface,
-                                    hint: Text(
-                                      _loadingCatalogSchemas
-                                          ? 'Cargando campos…'
-                                          : 'Campo del flujo…',
-                                      style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                                child: AppDropdown<String?>(
+                                  value: effectiveKey,
+                                  hint: _loadingCatalogSchemas
+                                      ? 'Cargando campos\u2026'
+                                      : 'Campo del flujo\u2026',
+                                  items: [
+                                    const AppDropdownItem<String?>(
+                                      value: null,
+                                      label: 'Personalizado\u2026',
                                     ),
-                                    items: [
-                                      DropdownMenuItem<String?>(
-                                        value: null,
-                                        child: Text(
-                                          'Personalizado…',
-                                          style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                                        ),
+                                    ..._buildFieldDropdownItems(),
+                                    if (_loadingCatalogSchemas &&
+                                        effectiveKey != null &&
+                                        effectiveKey.contains('.') &&
+                                        !_buildAllValidKeys().contains(effectiveKey))
+                                      AppDropdownItem<String?>(
+                                        value: effectiveKey,
+                                        label: 'Cargando\u2026',
                                       ),
-                                      ..._buildFieldDropdownItems(),
-                                      // Temporary item while schemas load for compound keys
-                                      if (_loadingCatalogSchemas &&
-                                          effectiveKey != null &&
-                                          effectiveKey.contains('.') &&
-                                          !_buildAllValidKeys().contains(effectiveKey))
-                                        DropdownMenuItem<String?>(
-                                          value: effectiveKey,
-                                          child: Text(
-                                            'Cargando…',
-                                            style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                                          ),
-                                        ),
-                                    ],
-                                    onChanged: (v) => setState(() {
-                                      if (_columnMappingKeys.length > i) {
-                                        _columnMappingKeys[i] = v;
-                                      }
-                                      if (v != null) {
-                                        row.$2.text = '{{fields.$v}}';
-                                      } else {
-                                        row.$2.clear();
-                                      }
-                                    }),
-                                  ),
+                                  ],
+                                  onChanged: (v) => setState(() {
+                                    if (_columnMappingKeys.length > i) {
+                                      _columnMappingKeys[i] = v;
+                                    }
+                                    if (v != null) {
+                                      row.$2.text = '{{fields.$v}}';
+                                    } else {
+                                      row.$2.clear();
+                                    }
+                                  }),
                                 ),
                               )
                             else
@@ -5131,6 +6087,165 @@ class _ActionDialogState extends State<_ActionDialog> {
                     ),
                   );
                 }),
+              ] else if (_type == 'google_sheets_update_row') ...[
+                ..._buildGoogleSheetsFields(),
+                const SizedBox(height: 16),
+                Text('Columna de b\u00FAsqueda',
+                    style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 6),
+                if (_availableColumns.isNotEmpty)
+                  AppDropdown<String?>(
+                    hint: 'Selecciona columna\u2026',
+                    value: _lookupColumnCtrl.text.isNotEmpty
+                        ? _lookupColumnCtrl.text : null,
+                    items: List.generate(_availableColumns.length, (i) {
+                      final letter = _columnLetter(i);
+                      final name = _availableColumns[i];
+                      return AppDropdownItem<String?>(
+                        value: letter,
+                        label: '$letter \u2014 $name',
+                      );
+                    }),
+                    onChanged: (v) => setState(() =>
+                        _lookupColumnCtrl.text = v ?? ''),
+                  )
+                else
+                  _FormField(
+                    label: '',
+                    controller: _lookupColumnCtrl,
+                    placeholder: 'ej. A',
+                  ),
+                const SizedBox(height: 12),
+                Text('Campo fuente del valor de b\u00FAsqueda',
+                    style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 6),
+                AppDropdown<String?>(
+                  hint: 'Campo del flujo\u2026',
+                  value: _lookupValueFieldKey,
+                  items: widget.flowFields.map((f) {
+                    final key = f['key'] as String? ?? '';
+                    final label = f['label'] as String? ?? key;
+                    return AppDropdownItem<String?>(value: key, label: label);
+                  }).toList(),
+                  onChanged: (v) => setState(() => _lookupValueFieldKey = v),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Mapeo de columnas',
+                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+                    ),
+                    AppButton(
+                      label: '+ Agregar columna',
+                      variant: AppButtonVariant.ghost,
+                      size: AppButtonSize.sm,
+                      prefixIcon: const Icon(Icons.add, size: 14, color: AppColors.ctTeal),
+                      onPressed: () => setState(() {
+                        _columnMappingRows.add((
+                          TextEditingController(),
+                          TextEditingController(),
+                        ));
+                        _columnMappingKeys.add(null);
+                      }),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ..._columnMappingRows.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final row = entry.value;
+                  final selectedKey = _columnMappingKeys.length > i ? _columnMappingKeys[i] : null;
+                  final hasFields = widget.flowFields.isNotEmpty;
+                  final allKeys = _buildAllValidKeys();
+                  final effectiveKey = (selectedKey != null &&
+                      (allKeys.contains(selectedKey) ||
+                       (_loadingCatalogSchemas && selectedKey.contains('.'))))
+                      ? selectedKey
+                      : null;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 70,
+                              child: _ColMappingField(
+                                controller: row.$1,
+                                placeholder: 'A',
+                                onChanged: () => setState(() {}),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                              child: Text('\u2192',
+                                  style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
+                            ),
+                            if (hasFields)
+                              Expanded(
+                                child: AppDropdown<String?>(
+                                  value: effectiveKey,
+                                  hint: 'Campo del flujo\u2026',
+                                  items: [
+                                    const AppDropdownItem<String?>(
+                                      value: null,
+                                      label: 'Personalizado\u2026',
+                                    ),
+                                    ..._buildFieldDropdownItems(),
+                                  ],
+                                  onChanged: (v) => setState(() {
+                                    if (_columnMappingKeys.length > i) {
+                                      _columnMappingKeys[i] = v;
+                                    }
+                                    if (v != null) {
+                                      row.$2.text = '{{fields.$v}}';
+                                    } else {
+                                      row.$2.clear();
+                                    }
+                                  }),
+                                ),
+                              )
+                            else
+                              Expanded(
+                                child: _ColMappingField(
+                                  controller: row.$2,
+                                  placeholder: '{{fields.nombre}}',
+                                  onChanged: () => setState(() {}),
+                                ),
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle_outline,
+                                  size: 16, color: AppColors.ctDanger),
+                              onPressed: _columnMappingRows.length > 1
+                                  ? () => setState(() {
+                                        row.$1.dispose();
+                                        row.$2.dispose();
+                                        _columnMappingRows.removeAt(i);
+                                        _columnMappingKeys.removeAt(i);
+                                      })
+                                  : null,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 28, minHeight: 28),
+                            ),
+                          ],
+                        ),
+                        if (hasFields && (effectiveKey == null))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 78, top: 4),
+                            child: _ColMappingField(
+                              controller: row.$2,
+                              placeholder: '{{fields.nombre}} o valor fijo',
+                              onChanged: () => setState(() {}),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }),
               ],
               if (!_isKnownType) ..._renderDynamicActionFields(),
 
@@ -5150,161 +6265,235 @@ class _ActionDialogState extends State<_ActionDialog> {
               const SizedBox(height: 10),
 
               // Campo
-              Text(
-                'Campo',
-                style: AppTextStyles.bodySmall.copyWith(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.ctText2,
-                ),
-              ),
-              const SizedBox(height: 6),
-              _DropdownContainer(
-                child: DropdownButton<String?>(
-                  value: _conditionField,
-                  isExpanded: true,
-                  underline: const SizedBox.shrink(),
-                  dropdownColor: AppColors.ctSurface,
-                  items: [
-                    DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text(
-                        'Sin condición',
-                        style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                      ),
-                    ),
-                    ...widget.flowFields.map((f) {
-                      final key = f['key'] as String? ?? '';
-                      final label = f['label'] as String? ?? key;
-                      return DropdownMenuItem<String?>(
-                        value: key,
-                        child: Text(
-                          label,
-                          style: AppTextStyles.body,
-                        ),
-                      );
-                    }),
-                  ],
-                  onChanged: (v) => setState(() {
-                    _conditionField = v;
-                    _conditionValueCtrl.clear();
-                  }),
-                ),
-              ),
-
-              if (_conditionField != null) ...[
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    // Operador
-                    SizedBox(
-                      width: 110,
-                      child: _DropdownContainer(
-                        child: DropdownButton<String>(
-                          value: _conditionOp,
-                          isExpanded: true,
-                          underline: const SizedBox.shrink(),
-                          dropdownColor: AppColors.ctSurface,
-                          items: const [
-                            DropdownMenuItem(value: '==', child: Text('== igual', style: AppTextStyles.body)),
-                            DropdownMenuItem(value: '!=', child: Text('!= distinto', style: AppTextStyles.body)),
-                            DropdownMenuItem(value: '>',  child: Text('>  mayor', style: AppTextStyles.body)),
-                            DropdownMenuItem(value: '<',  child: Text('<  menor', style: AppTextStyles.body)),
-                            DropdownMenuItem(value: '>=', child: Text('>= mayor o igual', style: AppTextStyles.body)),
-                            DropdownMenuItem(value: '<=', child: Text('<= menor o igual', style: AppTextStyles.body)),
-                          ],
-                          onChanged: (v) {
-                            if (v != null) setState(() => _conditionOp = v);
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Valor
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.ctSurface2,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.ctBorder2),
-                        ),
-                        child: TextField(
-                          controller: _conditionValueCtrl,
-                          style: AppTextStyles.body,
-                          decoration: InputDecoration(
-                            hintText: 'ej. Si, Granjas, 5',
-                            hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding:
-                                EdgeInsets.symmetric(vertical: 8),
-                          ),
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ] else ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.ctSurface2,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.ctBorder2),
-                  ),
-                  child: TextField(
-                    controller: _conditionValueCtrl,
-                    style: AppTextStyles.body,
-                    decoration: InputDecoration(
-                      hintText: 'ej. fields.receta == "Si"',
-                      hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 8),
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-              ],
-
-              // Preview
               Builder(builder: (_) {
-                final expr = _buildConditionExpression();
-                if (expr == null) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    'Expresión: $expr',
-                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
-                  ),
+                const conditionableTypes = {'text', 'number', 'boolean', 'select', 'date'};
+                final conditionableFields = widget.flowFields
+                    .where((f) => conditionableTypes.contains(f['type'] as String?))
+                    .toList();
+                final selectedField = conditionableFields
+                    .where((f) => f['key'] == _conditionField)
+                    .firstOrNull;
+                final fieldType = selectedField?['type'] as String?;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AppDropdown<String?>(
+                      label: 'Campo',
+                      value: _conditionField,
+                      hint: 'Sin condici\u00F3n',
+                      items: [
+                        const AppDropdownItem<String?>(value: null, label: 'Sin condici\u00F3n'),
+                        ...conditionableFields.map((f) {
+                          final key = f['key'] as String? ?? '';
+                          final label = f['label'] as String? ?? key;
+                          return AppDropdownItem<String?>(value: key, label: label);
+                        }),
+                      ],
+                      onChanged: (v) => setState(() {
+                        _conditionField = v;
+                        _conditionValueCtrl.clear();
+                        final newField = conditionableFields
+                            .where((f) => f['key'] == v)
+                            .firstOrNull;
+                        final newType = newField?['type'] as String?;
+                        final ops = _conditionOpsForType(newType);
+                        if (!ops.any((o) => o.value == _conditionOp)) {
+                          _conditionOp = '==';
+                        }
+                      }),
+                    ),
+
+                    if (_conditionField != null) ...[
+                      const SizedBox(height: 10),
+                      if (fieldType == 'boolean') ...[
+                        // Boolean: chips, no operator dropdown
+                        Row(
+                          children: [
+                            for (final entry in [('true', 'Verdadero'), ('false', 'Falso')]) ...[
+                              if (entry.$1 == 'false') const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () => setState(() => _conditionValueCtrl.text = entry.$1),
+                                child: MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: _conditionValueCtrl.text == entry.$1
+                                          ? AppColors.ctTeal.withValues(alpha: 0.12)
+                                          : Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: _conditionValueCtrl.text == entry.$1
+                                            ? AppColors.ctTeal
+                                            : AppColors.ctBorder,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      entry.$2,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: _conditionValueCtrl.text == entry.$1
+                                            ? FontWeight.w600 : FontWeight.w400,
+                                        color: _conditionValueCtrl.text == entry.$1
+                                            ? AppColors.ctTeal : AppColors.ctText2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ] else ...[
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 160,
+                              child: AppDropdown<String>(
+                                value: _conditionOp,
+                                hint: 'Operador',
+                                items: _conditionOpsForType(fieldType),
+                                onChanged: (v) {
+                                  if (v != null) setState(() => _conditionOp = v);
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(child: _buildConditionValueWidget(fieldType, selectedField)),
+                          ],
+                        ),
+                      ],
+                      // Preview
+                      Builder(builder: (_) {
+                        final expr = _buildConditionExpression();
+                        if (expr == null) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Expresi\u00F3n: $expr',
+                            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+                          ),
+                        );
+                      }),
+                    ],
+                  ],
                 );
               }),
 
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _GhostButton(
-                      label: 'Cancelar',
-                      onTap: () => Navigator.pop(context)),
-                  const SizedBox(width: 10),
-                  _PrimaryButton(
-                    label: 'Guardar',
-                    onTap: _submit,
-                    enabled: switch (_type) {
-                      'open_flow' => _selectedFlowSlug != null,
-                      'google_sheets_append_row' =>
-                        _spreadsheetIdCtrl.text.trim().isNotEmpty &&
-                        _columnMappingRows.any((r) => r.$1.text.trim().isNotEmpty),
-                      _ => true,
-                    },
-                  ),
-                ],
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+        ),
+        // Footer
+        Container(
+          padding: const EdgeInsets.fromLTRB(24, 10, 24, 14),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: AppColors.ctBorder)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              AppButton(
+                label: 'Cancelar',
+                variant: AppButtonVariant.ghost,
+                size: AppButtonSize.sm,
+                onPressed: () => Navigator.pop(context),
+              ),
+              const SizedBox(width: 8),
+              AppButton(
+                label: _isEdit ? 'Guardar cambios' : 'Crear acci\u00F3n',
+                variant: AppButtonVariant.primary,
+                size: AppButtonSize.sm,
+                onPressed: _submit,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── _ActionTypeCard ──────────────────────────────────────────────────────────
+
+class _ActionTypeCard extends StatefulWidget {
+  const _ActionTypeCard({
+    required this.type,
+    required this.label,
+    required this.example,
+    required this.catColor,
+    required this.onTap,
+  });
+  final String type;
+  final String label;
+  final String example;
+  final Color catColor;
+  final VoidCallback onTap;
+
+  @override
+  State<_ActionTypeCard> createState() => _ActionTypeCardState();
+}
+
+class _ActionTypeCardState extends State<_ActionTypeCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.ctSurface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: _hovered
+                  ? widget.catColor.withValues(alpha: 0.4)
+                  : const Color(0xFFE5E7EB),
+            ),
+            boxShadow: _hovered
+                ? [
+                    BoxShadow(
+                      color: widget.catColor.withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFAFAFA),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: ActionMiniDiagram(
+                      type: widget.type, catColor: widget.catColor),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(widget.label,
+                  style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w700, fontSize: 13)),
+              const SizedBox(height: 2),
+              Text(
+                widget.example,
+                style: AppTextStyles.bodySmall.copyWith(
+                    fontSize: 11, color: const Color(0xFF6B7280)),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -5328,25 +6517,26 @@ class _ColMappingField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.ctSurface2,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.ctBorder2),
-      ),
-      child: TextField(
-        controller: controller,
-        style: AppTextStyles.body,
-        decoration: InputDecoration(
-          hintText: placeholder,
-          hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-          border: InputBorder.none,
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+    return TextField(
+      controller: controller,
+      style: AppTextStyles.body,
+      decoration: InputDecoration(
+        hintText: placeholder,
+        hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+        filled: true,
+        fillColor: AppColors.ctSurface2,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: AppColors.ctBorder2),
         ),
-        onChanged: (_) => onChanged(),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: AppColors.ctTeal, width: 1.5),
+        ),
       ),
+      onChanged: (_) => onChanged(),
     );
   }
 }
@@ -5540,6 +6730,7 @@ class _PrecondicionesTab extends StatefulWidget {
     required this.tenantId,
     required this.tenantWorkerId,
     required this.currentFlowSlug,
+    required this.currentFlowFields,
     required this.onChanged,
   });
   final List<Map<String, dynamic>> rules;
@@ -5548,6 +6739,7 @@ class _PrecondicionesTab extends StatefulWidget {
   final String tenantId;
   final String tenantWorkerId;
   final String currentFlowSlug;
+  final List<Map<String, dynamic>> currentFlowFields;
   final ValueChanged<List<Map<String, dynamic>>> onChanged;
 
   @override
@@ -5582,7 +6774,7 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
       final types = await FlowsApi.getPreconditionTypes();
       if (mounted) setState(() => _availableTypes = types);
     } catch (e, st) {
-      print('[_loadTypes] error: $e\n$st');
+      debugPrint('[_loadTypes] error: $e\n$st');
     }
   }
 
@@ -5614,6 +6806,7 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
         types: _availableTypes,
         workerFlows: _workerFlows,
         currentFlowSlug: widget.currentFlowSlug,
+        currentFlowFields: widget.currentFlowFields,
         tenantId: widget.tenantId,
         onSaved: (updated) {
           setState(() {
@@ -5742,7 +6935,7 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: inherited.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
               itemBuilder: (_, i) => _RuleCard(
                 rule: inherited[i],
                 index: i,
@@ -5766,7 +6959,7 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: declared.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
               itemBuilder: (_, i) => _RuleCard(
                 rule: declared[i],
                 index: i,
@@ -6419,6 +7612,7 @@ class _AddRuleDialog extends StatefulWidget {
     required this.types,
     required this.workerFlows,
     required this.currentFlowSlug,
+    required this.currentFlowFields,
     required this.tenantId,
     required this.onSaved,
   });
@@ -6427,6 +7621,7 @@ class _AddRuleDialog extends StatefulWidget {
   final List<Map<String, dynamic>> types;
   final List<Map<String, dynamic>> workerFlows;
   final String currentFlowSlug;
+  final List<Map<String, dynamic>> currentFlowFields;
   final String tenantId;
   final ValueChanged<Map<String, dynamic>> onSaved;
 
@@ -6444,12 +7639,16 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
 
   // Dynamic per-type field state
   final Map<String, TextEditingController> _textCtrls = {};
+  final Map<String, TextEditingController> _durationCtrls = {};
   final Map<String, String?> _selectVals = {};
   final Map<String, bool> _boolVals = {};
   final Map<String, List<String>> _multiSelectVals = {};
   final Map<String, int> _durationValues = {};
   final Map<String, String> _durationUnits = {};
   final Map<String, String> _semanticWarnings = {};
+  final Set<String> _fieldErrors = {};
+  final Map<String, List<Map<String, dynamic>>> _fetchedFlowFields = {};
+  final Set<String> _loadingFlowFields = {};
 
   List<Map<String, dynamic>> _availableCatalogs = [];
   bool _loadingCatalogs = false;
@@ -6470,6 +7669,49 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     'sibling_slug', 'flow_slug', 'parent_flow_slug',
     'child_flow_slug', 'slug',
   }.contains(key);
+
+  void _clearDependentFieldKeys(String changedKey) {
+    if (_type == null) return;
+    for (final field in _fieldsForType(_type!)) {
+      if (field['type'] != 'flow_field_key') continue;
+      final source = field['source_flow_field'] as String? ?? 'self';
+      if (source == changedKey) {
+        final depKey = field['key'] as String? ?? '';
+        _textCtrls[depKey]?.text = '';
+      }
+    }
+    // Clear cached fields for old slug so they reload for new slug
+    final oldSlug = _textCtrls[changedKey]?.text ?? '';
+    if (oldSlug.isNotEmpty) _fetchedFlowFields.remove(oldSlug);
+  }
+
+  void _fetchFlowFields(String slug) {
+    if (_fetchedFlowFields.containsKey(slug)) return;
+    if (_loadingFlowFields.contains(slug)) return;
+    final flow = _flowBySlug(slug);
+    if (flow == null) return;
+    final flowId = flow['id'] as String?;
+    if (flowId == null || flowId.isEmpty) return;
+    _loadingFlowFields.add(slug);
+    FlowsApi.getFlow(flowId: flowId).then((data) {
+      if (!mounted) return;
+      final rawFields = data['fields'] as List?;
+      final fields = rawFields != null
+          ? List<Map<String, dynamic>>.from(
+              rawFields.whereType<Map>().map((e) => Map<String, dynamic>.from(e)))
+          : <Map<String, dynamic>>[];
+      setState(() {
+        _fetchedFlowFields[slug] = fields;
+        _loadingFlowFields.remove(slug);
+      });
+    }).catchError((_) {
+      if (!mounted) return;
+      setState(() {
+        _fetchedFlowFields[slug] = [];
+        _loadingFlowFields.remove(slug);
+      });
+    });
+  }
 
   void _validateSemantic(String fieldKey, String selectedSlug) {
     final flow = _flowBySlug(selectedSlug);
@@ -6541,12 +7783,15 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
 
   void _initFields(String type, Map<String, dynamic> params) {
     for (final c in _textCtrls.values) { c.dispose(); }
+    for (final c in _durationCtrls.values) { c.dispose(); }
     _textCtrls.clear();
+    _durationCtrls.clear();
     _selectVals.clear();
     _boolVals.clear();
     _multiSelectVals.clear();
     _durationValues.clear();
     _durationUnits.clear();
+    _fieldErrors.clear();
     for (final field in _fieldsForType(type)) {
       final key = field['key'] as String? ?? '';
       if (key.isEmpty) continue;
@@ -6564,10 +7809,20 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
               _durationValues[key] = 24;
               _durationUnits[key] = 'h';
             }
+            _durationCtrls[key] = TextEditingController(
+                text: (_durationValues[key] ?? 24).toString());
           } else if (key == 'window') {
             _durationValues[key] = 24;
             _durationUnits[key] = 'h';
+            _durationCtrls[key] = TextEditingController(text: '24');
           }
+          _textCtrls[key] = TextEditingController(text: existing?.toString() ?? '');
+        case 'time':
+          final defaultTime = key == 'start_time' ? '08:00'
+              : key == 'end_time' ? '18:00' : '';
+          _textCtrls[key] = TextEditingController(
+              text: existing?.toString().isNotEmpty == true ? existing.toString() : defaultTime);
+        case 'flow_field_key':
           _textCtrls[key] = TextEditingController(text: existing?.toString() ?? '');
         case 'select':
           _selectVals[key] = existing?.toString()
@@ -6575,6 +7830,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
         case 'bool':
           _boolVals[key] = (existing as bool?) ?? false;
         case 'role_multi_select':
+        case 'catalog_multi_select':
           if (existing is List) {
             _multiSelectVals[key] = List<String>.from(existing.map((e) => e.toString()));
           } else if (existing is String && existing.isNotEmpty) {
@@ -6619,6 +7875,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
   @override
   void dispose() {
     for (final c in _textCtrls.values) { c.dispose(); }
+    for (final c in _durationCtrls.values) { c.dispose(); }
     _messageCtrl.dispose();
     _escalationReasonCtrl.dispose();
     super.dispose();
@@ -6661,15 +7918,55 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     return map;
   }
 
+  bool _isFieldVisible(Map<String, dynamic> field) {
+    final showIf = field['show_if'] as Map<String, dynamic>?;
+    if (showIf == null) return true;
+    final depKey = showIf['field'] as String? ?? '';
+    final depOp = showIf['op'] as String? ?? 'eq';
+    final depVal = showIf['value'] as String? ?? '';
+    final currentVal = _textCtrls[depKey]?.text ?? _selectVals[depKey] ?? '';
+    if (depOp == 'eq') return currentVal == depVal;
+    if (depOp == 'neq') return currentVal != depVal;
+    return true;
+  }
+
+  bool _isFieldFilled(String key, String fieldType) {
+    return switch (fieldType) {
+      'text' => _durationValues.containsKey(key)
+          ? (_durationValues[key] ?? 0) > 0
+          : (_textCtrls[key]?.text.trim().isNotEmpty ?? false),
+      'time' || 'flow_field_key' => _textCtrls[key]?.text.trim().isNotEmpty ?? false,
+      'select' => _selectVals[key] != null && _selectVals[key]!.isNotEmpty,
+      'role_multi_select' || 'catalog_multi_select' => (_multiSelectVals[key] ?? []).isNotEmpty,
+      _ => true,
+    };
+  }
+
   void _submit() {
     if (_type == null) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Selecciona un tipo de regla')));
       return;
     }
-    if (_messageCtrl.text.trim().isEmpty) {
+    // Validate required fields
+    final errors = <String>{};
+    for (final field in _fieldsForType(_type!)) {
+      final key = field['key'] as String? ?? '';
+      if (key.isEmpty) continue;
+      if (field['required'] != true) continue;
+      if (!_isFieldVisible(field)) continue;
+      final fieldType = field['type'] as String? ?? 'text';
+      if (!_isFieldFilled(key, fieldType)) {
+        errors.add(key);
+      }
+    }
+    if (errors.isNotEmpty) {
+      setState(() {
+        _fieldErrors.clear();
+        _fieldErrors.addAll(errors);
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('El mensaje es requerido')));
+          const SnackBar(content: Text('Completa los campos requeridos')));
       return;
     }
     final escalationReason = _escalationReasonCtrl.text.trim();
@@ -6709,30 +8006,21 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
-        const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
+        AppDropdown<String>(
+          label: label,
           value: selectedSlug,
-          decoration: InputDecoration(
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.ctBorder)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.ctBorder)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
-          hint: Text('Selecciona un flujo',
-              style: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
+          hint: 'Selecciona un flujo',
           items: _workerFlows.map((f) {
             final slug = f['slug'] as String? ?? '';
             final name = f['name'] as String? ?? slug;
-            return DropdownMenuItem<String>(
-              value: slug,
-              child: Text(name, style: AppTextStyles.body),
-            );
+            return AppDropdownItem<String>(value: slug, label: name);
           }).toList(),
           onChanged: (v) {
             if (v != null) {
-              setState(() => ctrl.text = v);
+              setState(() {
+                ctrl.text = v;
+                _clearDependentFieldKeys(key);
+              });
               _validateSemantic(key, v);
             }
           },
@@ -6773,41 +8061,20 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
         ? currentSlug
         : null;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)),
-        const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          value: selectedSlug,
-          decoration: InputDecoration(
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.ctBorder)),
-            enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.ctBorder)),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
-          hint: Text('Selecciona un catálogo',
-              style: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
-          items: _availableCatalogs.map((cat) {
-            final slug = cat['slug'] as String? ?? '';
-            final catLabel = cat['label'] as String?
-                ?? cat['name'] as String?
-                ?? slug;
-            return DropdownMenuItem<String>(
-              value: slug,
-              child: Text(catLabel, style: AppTextStyles.body),
-            );
-          }).toList(),
-          onChanged: (v) {
-            if (v != null) setState(() => ctrl.text = v);
-          },
-        ),
-      ],
+    return AppDropdown<String>(
+      label: label,
+      value: selectedSlug,
+      hint: 'Selecciona un catálogo',
+      items: _availableCatalogs.map((cat) {
+        final slug = cat['slug'] as String? ?? '';
+        final catLabel = cat['label'] as String?
+            ?? cat['name'] as String?
+            ?? slug;
+        return AppDropdownItem<String>(value: slug, label: catLabel);
+      }).toList(),
+      onChanged: (v) {
+        if (v != null) setState(() => ctrl.text = v);
+      },
     );
   }
 
@@ -6871,9 +8138,9 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
           } else if (key == 'timezone') {
             widgets.add(_buildTimezoneSelector(key, label));
           } else if (key == 'window') {
-            final durVal = _durationValues[key] ?? 24;
             final durUnit = _durationUnits[key] ?? 'h';
-            final numCtrl = TextEditingController(text: durVal.toString());
+            final durCtrl = _durationCtrls[key] ??=
+                TextEditingController(text: (_durationValues[key] ?? 24).toString());
             widgets
               ..add(Text(label,
                   style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)))
@@ -6882,7 +8149,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                 children: [
                   Expanded(
                     child: TextField(
-                      controller: numCtrl,
+                      controller: durCtrl,
                       style: AppTextStyles.body,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -6922,19 +8189,140 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                 decoration: _inputDecoration,
               ));
           }
+        case 'time':
+          final timeCtrl = _textCtrls[key] ??= TextEditingController();
+          widgets
+            ..add(Text(label,
+                style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)))
+            ..add(const SizedBox(height: 6))
+            ..add(GestureDetector(
+              onTap: () async {
+                final parts = timeCtrl.text.split(':');
+                final initial = TimeOfDay(
+                  hour: int.tryParse(parts.elementAtOrNull(0) ?? '') ?? 8,
+                  minute: int.tryParse(parts.elementAtOrNull(1) ?? '') ?? 0,
+                );
+                final picked = await showTimePicker(
+                  context: context,
+                  initialTime: initial,
+                );
+                if (picked != null) {
+                  final hh = picked.hour.toString().padLeft(2, '0');
+                  final mm = picked.minute.toString().padLeft(2, '0');
+                  setState(() => timeCtrl.text = '$hh:$mm');
+                }
+              },
+              child: AbsorbPointer(
+                child: TextField(
+                  controller: timeCtrl,
+                  style: AppTextStyles.body,
+                  decoration: _inputDecoration.copyWith(
+                    hintText: '08:00',
+                    suffixIcon: const Icon(Icons.access_time, size: 18),
+                  ),
+                ),
+              ),
+            ));
+        case 'flow_field_key':
+          final sourceFlowField = field['source_flow_field'] as String? ?? 'self';
+          final typeFilter = (field['field_type_filter'] as List?)?.cast<String>();
+          final flowFieldCtrl = _textCtrls[key] ??= TextEditingController();
+          List<Map<String, dynamic>> sourceFields;
+          bool waitingForDep = false;
+          bool loadingFields = false;
+          if (sourceFlowField == 'self') {
+            sourceFields = widget.currentFlowFields;
+          } else {
+            final depSlug = _textCtrls[sourceFlowField]?.text ?? _selectVals[sourceFlowField] ?? '';
+            if (depSlug.isEmpty) {
+              waitingForDep = true;
+              sourceFields = [];
+            } else if (_fetchedFlowFields.containsKey(depSlug)) {
+              sourceFields = _fetchedFlowFields[depSlug]!;
+            } else {
+              _fetchFlowFields(depSlug);
+              loadingFields = true;
+              sourceFields = [];
+            }
+          }
+          final filteredFields = typeFilter != null
+              ? sourceFields.where((f) => typeFilter.contains(f['type'])).toList()
+              : sourceFields;
+          widgets
+            ..add(Text(label,
+                style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)))
+            ..add(const SizedBox(height: 6));
+          if (waitingForDep) {
+            widgets.add(Text('Selecciona primero el flow relacionado',
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)));
+          } else if (loadingFields) {
+            widgets.add(const SizedBox(
+              height: 40,
+              child: Center(child: SizedBox(
+                width: 18, height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctTeal),
+              )),
+            ));
+          } else if (filteredFields.isEmpty && sourceFields.isNotEmpty) {
+            widgets.add(Text('No hay campos del tipo requerido en este flow',
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)));
+          } else if (filteredFields.isEmpty) {
+            widgets.add(TextField(
+              controller: flowFieldCtrl,
+              style: AppTextStyles.body,
+              decoration: _inputDecoration.copyWith(
+                hintText: 'ej. numero_guia',
+                helperText: 'Debe coincidir exactamente con el key del campo en el flow',
+                helperStyle: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.ctText3, fontSize: 11),
+              ),
+            ));
+          } else {
+            final currentVal = flowFieldCtrl.text;
+            final selectedVal = filteredFields.any((f) => (f['key'] as String?) == currentVal)
+                ? currentVal
+                : null;
+            widgets.add(AppDropdown<String>(
+              value: selectedVal,
+              hint: 'Selecciona un campo',
+              items: filteredFields.map((f) {
+                final fKey = f['key'] as String? ?? '';
+                final fLabel = f['label'] as String? ?? f['name'] as String? ?? fKey;
+                return AppDropdownItem<String>(value: fKey, label: fLabel);
+              }).toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => flowFieldCtrl.text = v);
+              },
+            ));
+          }
         case 'select':
-          widgets.add(AppDropdown<String>(
-            label: label,
-            value: _selectVals[key],
-            hint: 'Seleccionar',
-            items: safeOptions
-                .map((o) => AppDropdownItem<String>(
-                      value: o['value'] as String? ?? '',
-                      label: o['label'] as String? ?? '',
-                    ))
-                .toList(),
-            onChanged: (val) => setState(() => _selectVals[key] = val),
-          ));
+          final displayAs = field['display_as'] as String?;
+          if (displayAs == 'radio') {
+            final catColor = _type != null ? _precondCatColor(_type!) : AppColors.ctTeal;
+            widgets
+              ..add(Text(label,
+                  style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)))
+              ..add(const SizedBox(height: 6))
+              ..add(_AppRadioGroup(
+                options: safeOptions,
+                value: _selectVals[key],
+                color: catColor,
+                onChanged: (val) => setState(() => _selectVals[key] = val),
+              ));
+          } else {
+            widgets.add(AppDropdown<String>(
+              label: label,
+              value: _selectVals[key],
+              hint: 'Seleccionar',
+              items: safeOptions
+                  .map((o) => AppDropdownItem<String>(
+                        value: o['value'] as String? ?? '',
+                        label: o['label'] as String? ?? '',
+                      ))
+                  .toList(),
+              onChanged: (val) => setState(() => _selectVals[key] = val),
+            ));
+          }
         case 'bool':
           widgets.add(SwitchListTile(
             contentPadding: EdgeInsets.zero,
@@ -7004,8 +8392,78 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
               }).toList(),
             ));
           }
+        case 'catalog_multi_select':
+          final catSelected = _multiSelectVals[key] ?? [];
+          final catColor = _type != null ? _precondCatColor(_type!) : AppColors.ctTeal;
+          widgets
+            ..add(Text(label,
+                style: AppTextStyles.formLabel.copyWith(color: AppColors.ctText2)))
+            ..add(const SizedBox(height: 6));
+          if (_availableCatalogs.isEmpty) {
+            widgets.add(Text('No hay catálogos disponibles',
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)));
+          } else {
+            widgets.add(Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _availableCatalogs.map((cat) {
+                final slug = cat['slug'] as String? ?? '';
+                final catLabel = cat['label'] as String?
+                    ?? cat['name'] as String?
+                    ?? slug;
+                final isSelected = catSelected.contains(slug);
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      final list = List<String>.from(catSelected);
+                      if (isSelected) { list.remove(slug); } else { list.add(slug); }
+                      _multiSelectVals[key] = list;
+                    });
+                  },
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isSelected ? catColor.withValues(alpha: 0.12) : const Color(0xFFFAFAFA),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isSelected ? catColor : const Color(0xFFE5E7EB),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isSelected) ...[
+                            Icon(Icons.check_rounded, size: 14, color: catColor),
+                            const SizedBox(width: 4),
+                          ],
+                          Text(
+                            catLabel,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                              color: isSelected ? catColor : const Color(0xFF4C5D73),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ));
+          }
         case 'timezone':
           widgets.add(_buildTimezoneSelector(key, label));
+      }
+      if (_fieldErrors.contains(key)) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text('Este campo es requerido',
+              style: TextStyle(fontSize: 12, color: AppColors.ctDanger)),
+        ));
       }
     }
     return widgets;
@@ -7080,7 +8538,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: 680,
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
         ),
         child: _showTypeCatalog
             ? _buildTypeCatalog()
@@ -7306,14 +8764,14 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
                             color: AppColors.ctText3)),
                   ),
                 ],
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
               ],
             ),
           ),
         ),
         // Footer
         Container(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+          padding: const EdgeInsets.fromLTRB(24, 10, 24, 14),
           decoration: const BoxDecoration(
             border: Border(top: BorderSide(color: AppColors.ctBorder)),
           ),
@@ -7337,6 +8795,95 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── _AppRadioGroup ───────────────────────────────────────────────────────────
+
+class _AppRadioGroup extends StatelessWidget {
+  const _AppRadioGroup({
+    required this.options,
+    required this.value,
+    required this.color,
+    required this.onChanged,
+  });
+  final List<Map<String, dynamic>> options;
+  final String? value;
+  final Color color;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: options.map((o) {
+        final optValue = o['value'] as String? ?? '';
+        final optLabel = o['label'] as String? ?? optValue;
+        final optDesc = o['description'] as String?;
+        final selected = value == optValue;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: GestureDetector(
+            onTap: () => onChanged(optValue),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: double.infinity,
+                constraints: const BoxConstraints(minHeight: 56),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: selected ? color.withValues(alpha: 0.06) : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: selected ? color : const Color(0xFFE5E7EB),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 18,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: selected ? color : const Color(0xFFD1D5DB),
+                          width: selected ? 5 : 1.5,
+                        ),
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(optLabel,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                                color: selected ? color : const Color(0xFF1E2722),
+                              )),
+                          if (optDesc != null && optDesc.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(optDesc,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: const Color(0xFF6B7280),
+                                )),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }
@@ -7678,7 +9225,7 @@ class _PrecondHeroDiagram extends StatelessWidget {
       'shift' => 'Turno activo',
       _ => 'Día calendario',
     };
-    final scopeLabel = scope == 'tenant' ? 'Todo el tenant' : 'Solo este operador';
+    final scopeLabel = _scopeLabel(scope);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
