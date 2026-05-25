@@ -63,7 +63,6 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
     (value: 'it',    label: 'Italiano (it)'),
   ];
 
-  static final _nameRe = RegExp(r'^[a-z0-9_]*$');
 
   @override
   void initState() {
@@ -150,7 +149,18 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
     return result;
   }
 
-  bool _nameValid(String v) => _nameRe.hasMatch(v);
+  static String _normalizeTemplateName(String input) {
+    const accents = '\u00E1\u00E0\u00E4\u00E2\u00E3\u00E9\u00E8\u00EB\u00EA\u00ED\u00EC\u00EF\u00EE\u00F3\u00F2\u00F6\u00F4\u00F5\u00FA\u00F9\u00FC\u00FB\u00F1\u00C1\u00C0\u00C4\u00C2\u00C3\u00C9\u00C8\u00CB\u00CA\u00CD\u00CC\u00CF\u00CE\u00D3\u00D2\u00D6\u00D4\u00D5\u00DA\u00D9\u00DC\u00DB\u00D1';
+    const replacements = 'aaaaaeeeeiiiioooooouuuunAAAAAEEEEIIIIOOOOOUUUUN';
+    var result = input;
+    for (var i = 0; i < accents.length; i++) {
+      result = result.replaceAll(accents[i], replacements[i].toLowerCase());
+    }
+    result = result.toLowerCase();
+    result = result.replaceAll(' ', '_');
+    result = result.replaceAll(RegExp(r'[^a-z0-9_]'), '');
+    return result;
+  }
 
   static const _varHints = {
     1: 'Ej: Juan García',
@@ -205,9 +215,8 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
 
   Future<void> _submit() async {
     final name = _nameCtrl.text.trim();
-    if (name.isEmpty || !_nameValid(name)) {
-      setState(() => _nameError =
-          'Solo letras minúsculas, números y guiones bajos.');
+    if (name.isEmpty) {
+      setState(() => _nameError = 'El nombre es requerido.');
       return;
     }
     if (_bodyCtrl.text.trim().isEmpty) return;
@@ -377,13 +386,26 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
             ),
             style: AppTextStyles.body,
             onChanged: (v) {
+              final normalized = _normalizeTemplateName(v);
+              if (normalized != v) {
+                _nameCtrl.value = _nameCtrl.value.copyWith(
+                  text: normalized,
+                  selection: TextSelection.collapsed(offset: normalized.length),
+                );
+              }
               if (_nameError != null) {
-                setState(() =>
-                    _nameError = (v.isEmpty || _nameValid(v)) ? null : 'Solo letras minúsculas, números y guiones bajos.');
+                setState(() => _nameError = null);
+              } else {
+                setState(() {});
               }
             },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 4),
+          Text(
+            'Solo min\u00FAsculas, n\u00FAmeros y _. Los espacios se convierten autom\u00E1ticamente.',
+            style: AppTextStyles.caption.copyWith(color: AppColors.ctText3),
+          ),
+          const SizedBox(height: 12),
 
           // 2 ── Categoría + Idioma (row)
           Row(

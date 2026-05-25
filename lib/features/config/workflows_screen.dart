@@ -5,10 +5,14 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/ai_workers_api.dart';
 import '../../core/api/flows_api.dart';
+import '../../core/api/operator_roles_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_detail_row.dart';
+import '../../shared/widgets/app_text_field.dart';
+import '../../shared/widgets/app_wizard_shell.dart';
 import '../../shared/widgets/screen_header.dart';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -163,13 +167,18 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
   }
 
   void _openForm({Map<String, dynamic>? flow}) {
+    if (flow != null) return; // edit lives in FlowDetailPanel
     showDialog(
       context: context,
-      builder: (_) => _FlowFormDialog(
-        flow: flow,
+      barrierDismissible: false,
+      builder: (_) => _NewFlowDialog(
+        tenantId: ref.read(activeTenantIdProvider),
         workers: _workers,
-        onSaved: _fetchAll,
         preselectedWorkerId: widget.tenantWorkerId,
+        onCreated: (newFlowId) {
+          _fetchAll();
+          widget.onFlowSelected?.call(newFlowId);
+        },
       ),
     );
   }
@@ -594,56 +603,79 @@ class _FieldRow extends StatelessWidget {
   }
 }
 
-// ── Flow form dialog ──────────────────────────────────────────────────────────
+// ── New flow wizard ──────────────────────────────────────────────────────────
 
-class _FlowFormDialog extends StatefulWidget {
-  const _FlowFormDialog({
+class _NewFlowDialog extends StatefulWidget {
+  const _NewFlowDialog({
+    required this.tenantId,
     required this.workers,
-    required this.onSaved,
-    this.flow,
+    required this.onCreated,
     this.preselectedWorkerId,
   });
-  final Map<String, dynamic>? flow;
+  final String tenantId;
   final List<Map<String, dynamic>> workers;
-  final Future<void> Function() onSaved;
   final String? preselectedWorkerId;
+  final void Function(String flowId) onCreated;
 
   @override
-  State<_FlowFormDialog> createState() => _FlowFormDialogState();
+  State<_NewFlowDialog> createState() => _NewFlowDialogState();
 }
 
-class _FlowFormDialogState extends State<_FlowFormDialog> {
+class _NewFlowDialogState extends State<_NewFlowDialog> {
+  // Step 1 — Identidad
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   String? _selectedWorkerId;
-  bool _saving = false;
   String? _slugError;
 
-  bool get _isEdit => widget.flow != null;
+  // Step 2 — Acceso
+  List<Map<String, dynamic>> _availableRoles = [];
+  final List<String> _selectedRoleIds = [];
+  final List<String> _selectedTriggers = [];
+  bool _loadingRoles = false;
+
+  static const _triggerOptions = [
+    ('conversational', 'Conversacional', 'El operador inicia el flujo por chat'),
+    ('ingest',         'API / Ingesta',  'Se activa por carga de datos externa'),
+    ('scheduled',      'Programado',     'Se ejecuta en horario autom\u00E1tico'),
+    ('on_complete',    'Al completar otro flujo', 'Se abre como acci\u00F3n de cierre'),
+  ];
 
   String get _slug => _slugify(_nameCtrl.text.trim());
-  bool get _slugValid => _isEdit || _slug.length >= 3;
+  bool get _slugValid => _slug.length >= 3;
+  bool get _canAdvance =>
+      _nameCtrl.text.trim().isNotEmpty && _slugValid && _selectedWorkerId != null;
 
   @override
   void initState() {
     super.initState();
-    if (_isEdit) {
-      _nameCtrl.text = widget.flow!['name'] as String? ?? '';
-      _descCtrl.text = widget.flow!['description'] as String? ?? '';
-    }
     if (widget.preselectedWorkerId != null) {
       _selectedWorkerId = widget.preselectedWorkerId;
     } else if (widget.workers.isNotEmpty) {
       _selectedWorkerId = widget.workers.first['id'] as String?;
     }
     _nameCtrl.addListener(_onNameChanged);
+    _loadRoles();
   }
 
   void _onNameChanged() {
-    if (!_isEdit && _slugError != null) {
+    if (_slugError != null) {
       setState(() => _slugError = null);
-    } else if (!_isEdit) {
+    } else {
       setState(() {});
+    }
+  }
+
+  Future<void> _loadRoles() async {
+    setState(() => _loadingRoles = true);
+    try {
+      final roles = await OperatorRolesApi.listRoles(tenantId: widget.tenantId);
+      if (mounted) {
+        setState(() => _availableRoles = List<Map<String, dynamic>>.from(roles));
+      }
+    } catch (_) {}
+    finally {
+      if (mounted) setState(() => _loadingRoles = false);
     }
   }
 
@@ -655,197 +687,374 @@ class _FlowFormDialogState extends State<_FlowFormDialog> {
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) return;
+  String _workerName(String? id) {
+    if (id == null) return '\u2014';
+    final w = widget.workers.where((w) => w['id'] == id).firstOrNull;
+    return w?['display_name'] as String? ?? w?['catalog_name'] as String? ?? '\u2014';
+  }
 
-    setState(() => _saving = true);
+  Future<void> _submit() async {
+    if (_selectedWorkerId == null) return;
     try {
-      final desc = _descCtrl.text.trim();
-      if (_isEdit) {
-        await FlowsApi.updateFlow(
-          flowId: widget.flow!['id'] as String,
-          name: name,
-          description: desc.isNotEmpty ? desc : null,
-        );
-      } else {
-        if (_selectedWorkerId == null) return;
-        await FlowsApi.createFlow(
-          tenantWorkerId: _selectedWorkerId!,
-          name: name,
-          slug: _slug,
-          description: desc.isNotEmpty ? desc : null,
-        );
-      }
-      await widget.onSaved();
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
+      final result = await FlowsApi.createFlow(
+        tenantWorkerId: _selectedWorkerId!,
+        name: _nameCtrl.text.trim(),
+        slug: _slug,
+        description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+        allowedRoleIds: _selectedRoleIds.isEmpty ? null : _selectedRoleIds,
+        triggerSources: _selectedTriggers.isEmpty ? null : _selectedTriggers,
+      );
       if (!mounted) return;
-      final isDio = e is DioException;
-      final is409 = isDio && e.response?.statusCode == 409;
-      if (is409) {
-        setState(() {
-          _saving = false;
-          _slugError = 'Ya existe un flujo con este nombre';
-        });
-      } else {
-        setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: AppColors.ctDanger,
-          content: Text(
-            _dioError(e),
-            style: AppTextStyles.body.copyWith(color: Colors.white),
-          ),
-          duration: const Duration(seconds: 3),
-        ));
+      Navigator.of(context).pop();
+      widget.onCreated(result['id'] as String);
+    } on DioException catch (e) {
+      if (!mounted) return;
+      if (e.response?.statusCode == 409) {
+        setState(() => _slugError = 'Ya existe un flujo con este nombre');
+        rethrow;
       }
+      rethrow;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final editWorkerName = _isEdit
-        ? (widget.flow!['worker_name'] as String? ??
-            widget.flow!['display_name'] as String?)
-        : null;
+    return AppWizardShell(
+      sidebarTitle: 'Nuevo flujo',
+      confirmLabel: 'Crear flujo',
+      canAdvance: _canAdvance,
+      onCancel: () => Navigator.of(context).pop(),
+      onConfirm: _submit,
+      steps: [
+        AppWizardStep(title: 'Identidad', builder: (_) => _buildStep1()),
+        AppWizardStep(title: 'Acceso', builder: (_) => _buildStep2()),
+        AppWizardStep(title: 'Confirmar', builder: (_) => _buildStep3()),
+      ],
+    );
+  }
 
-    return Dialog(
-      backgroundColor: AppColors.ctSurface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.ctBorder),
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _isEdit ? 'Editar flujo' : 'Nuevo flujo',
-                style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist'),
-              ),
-              const SizedBox(height: 20),
-
-              // Nombre
-              _DialogField(
-                label: 'Nombre del flujo',
-                controller: _nameCtrl,
-                placeholder: 'Ej: Flujo 4 · Entregas',
-              ),
-              if (!_isEdit && _nameCtrl.text.trim().isNotEmpty) ...[
-                const SizedBox(height: 6),
-                _SlugPreview(slug: _slug, error: _slugError),
-              ],
-              const SizedBox(height: 14),
-
-              // Worker
-              Text(
-                'Worker',
-                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 6),
-              if (_isEdit)
-                Container(
+  Widget _buildStep1() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppTextField(
+          controller: _nameCtrl,
+          label: 'Nombre del flujo',
+          hint: 'Ej: Entrega de paquete',
+        ),
+        if (_nameCtrl.text.trim().isNotEmpty) ...[
+          const SizedBox(height: 6),
+          _SlugIndicator(slug: _slug, error: _slugError),
+        ],
+        const SizedBox(height: 16),
+        AppTextField(
+          controller: _descCtrl,
+          label: 'Descripci\u00F3n (opcional)',
+          hint: 'Describe el prop\u00F3sito de este flujo...',
+          maxLines: 3,
+        ),
+        if (widget.preselectedWorkerId == null && widget.workers.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('Worker',
+              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+          const SizedBox(height: 6),
+          ...widget.workers.map((w) {
+            final id = w['id'] as String? ?? '';
+            final name = w['display_name'] as String? ??
+                w['catalog_name'] as String? ?? '\u2014';
+            final color = w['catalog_color'] as String?;
+            final selected = _selectedWorkerId == id;
+            return GestureDetector(
+              onTap: () => setState(() => _selectedWorkerId = id),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: AppColors.ctSurface2,
+                    color: selected
+                        ? AppColors.ctTeal.withValues(alpha: 0.08)
+                        : AppColors.ctSurface,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.ctBorder2),
+                    border: Border.all(
+                      color: selected ? AppColors.ctTeal : AppColors.ctBorder,
+                    ),
                   ),
-                  child: Text(
-                    editWorkerName ?? '—',
-                    style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                  ),
-                )
-              else if (widget.workers.isEmpty)
-                Text(
-                  'No hay workers disponibles',
-                  style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                )
-              else
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.ctSurface2,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.ctBorder2),
-                  ),
-                  child: DropdownButton<String>(
-                    value: _selectedWorkerId,
-                    isExpanded: true,
-                    underline: const SizedBox.shrink(),
-                    dropdownColor: AppColors.ctSurface,
-                    items: widget.workers.map((w) {
-                      final wName  = w['display_name'] as String? ??
-                          w['catalog_name'] as String? ?? '—';
-                      final wColor = w['catalog_color'] as String?;
-                      return DropdownMenuItem<String>(
-                        value: w['id'] as String?,
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: _hexColor(wColor),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              wName,
-                              style: AppTextStyles.body,
-                            ),
-                          ],
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: _hexColor(color),
+                          shape: BoxShape.circle,
                         ),
-                      );
-                    }).toList(),
-                    onChanged: (v) => setState(() => _selectedWorkerId = v),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(name,
+                            style: AppTextStyles.body.copyWith(
+                              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                            )),
+                      ),
+                      if (selected)
+                        const Icon(Icons.check_rounded,
+                            size: 16, color: AppColors.ctTeal),
+                    ],
                   ),
                 ),
-              const SizedBox(height: 14),
-
-              // Descripción
-              _DialogField(
-                label: 'Descripción',
-                controller: _descCtrl,
-                placeholder: 'Describe el propósito de este flujo...',
-                maxLines: 3,
               ),
-              const SizedBox(height: 24),
+            );
+          }),
+        ],
+      ],
+    );
+  }
 
-              // Buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  AppButton(
-                    label: 'Cancelar',
-                    variant: AppButtonVariant.outline,
-                    size: AppButtonSize.sm,
-                    onPressed: () => Navigator.pop(context),
+  Widget _buildStep2() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Roles con acceso',
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text('Selecciona qu\u00E9 roles pueden iniciar este flujo. Si no seleccionas ninguno, todos los roles tendr\u00E1n acceso.',
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
+        const SizedBox(height: 12),
+        if (_loadingRoles)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(child: SizedBox(
+              width: 18, height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctTeal),
+            )),
+          )
+        else if (_availableRoles.isEmpty)
+          Text('No hay roles disponibles. Podr\u00E1s asignarlos despu\u00E9s.',
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3))
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _availableRoles.map((role) {
+              final id = role['id'] as String? ?? '';
+              final name = role['label'] as String? ?? role['name'] as String? ?? id;
+              final selected = _selectedRoleIds.contains(id);
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    if (selected) {
+                      _selectedRoleIds.remove(id);
+                    } else {
+                      _selectedRoleIds.add(id);
+                    }
+                  });
+                },
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppColors.ctTeal.withValues(alpha: 0.1)
+                          : AppColors.ctSurface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: selected ? AppColors.ctTeal : AppColors.ctBorder,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (selected) ...[
+                          const Icon(Icons.check_rounded, size: 14, color: AppColors.ctTeal),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(name,
+                            style: AppTextStyles.body.copyWith(
+                              fontSize: 12,
+                              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                              color: selected ? AppColors.ctTealDark : AppColors.ctText2,
+                            )),
+                      ],
+                    ),
                   ),
-                  const SizedBox(width: 10),
-                  AppButton(
-                    label: 'Guardar',
-                    variant: AppButtonVariant.teal,
-                    size: AppButtonSize.sm,
-                    isLoading: _saving,
-                    isDisabled: !_slugValid,
-                    onPressed: _submit,
+                ),
+              );
+            }).toList(),
+          ),
+        const SizedBox(height: 24),
+        Text('Or\u00EDgenes de ejecuci\u00F3n',
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text('\u00BFDesde d\u00F3nde puede iniciarse este flujo?',
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
+        const SizedBox(height: 12),
+        ..._triggerOptions.map((opt) {
+          final selected = _selectedTriggers.contains(opt.$1);
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                if (selected) {
+                  _selectedTriggers.remove(opt.$1);
+                } else {
+                  _selectedTriggers.add(opt.$1);
+                }
+              });
+            },
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? AppColors.ctTeal.withValues(alpha: 0.06)
+                      : AppColors.ctSurface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: selected ? AppColors.ctTeal : AppColors.ctBorder,
                   ),
-                ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 18,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: selected ? AppColors.ctTeal : AppColors.ctBorder2,
+                          width: selected ? 2 : 1.5,
+                        ),
+                        color: selected ? AppColors.ctTeal : Colors.transparent,
+                      ),
+                      child: selected
+                          ? const Icon(Icons.check, size: 12, color: Colors.white)
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(opt.$2, style: AppTextStyles.body.copyWith(
+                              fontWeight: selected ? FontWeight.w600 : FontWeight.w400)),
+                          Text(opt.$3, style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.ctText3)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildStep3() {
+    final roleNames = _availableRoles
+        .where((r) => _selectedRoleIds.contains(r['id'] as String))
+        .map((r) => r['label'] as String? ?? r['name'] as String? ?? '')
+        .join(', ');
+    final triggerLabels = _triggerOptions
+        .where((t) => _selectedTriggers.contains(t.$1))
+        .map((t) => t.$2)
+        .join(', ');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Revisa la configuraci\u00F3n antes de crear el flujo.',
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
+        const SizedBox(height: 16),
+        AppDetailRow(
+          label: 'Nombre',
+          value: Text(_nameCtrl.text.trim(), style: AppTextStyles.body),
+        ),
+        const Divider(height: 1),
+        AppDetailRow(
+          label: 'Slug',
+          value: Text(_slug, style: AppTextStyles.body.copyWith(
+              fontFamily: 'Geist', color: AppColors.ctText2)),
+        ),
+        const Divider(height: 1),
+        AppDetailRow(
+          label: 'Worker',
+          value: Text(_workerName(_selectedWorkerId), style: AppTextStyles.body),
+        ),
+        if (_descCtrl.text.trim().isNotEmpty) ...[
+          const Divider(height: 1),
+          AppDetailRow(
+            label: 'Descripci\u00F3n',
+            crossAxisAlignment: CrossAxisAlignment.start,
+            value: Text(_descCtrl.text.trim(), style: AppTextStyles.bodySmall),
+          ),
+        ],
+        const Divider(height: 1),
+        AppDetailRow(
+          label: 'Roles',
+          value: Text(
+            roleNames.isEmpty ? 'Todos los roles' : roleNames,
+            style: AppTextStyles.body,
           ),
         ),
-      ),
+        const Divider(height: 1),
+        AppDetailRow(
+          label: 'Or\u00EDgenes',
+          value: Text(
+            triggerLabels.isEmpty ? 'Sin or\u00EDgenes seleccionados' : triggerLabels,
+            style: AppTextStyles.body,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SlugIndicator extends StatelessWidget {
+  const _SlugIndicator({required this.slug, this.error});
+  final String slug;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    if (error != null) {
+      return Row(
+        children: [
+          const Icon(Icons.error_outline, size: 13, color: AppColors.ctDanger),
+          const SizedBox(width: 4),
+          Text(error!,
+              style: AppTextStyles.bodySmall.copyWith(
+                  fontSize: 12, color: AppColors.ctDanger)),
+        ],
+      );
+    }
+    final valid = slug.length >= 3;
+    return Row(
+      children: [
+        Icon(
+          valid ? Icons.check_circle_outline : Icons.warning_amber_outlined,
+          size: 13,
+          color: valid ? AppColors.ctOk : AppColors.ctText3,
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            valid ? slug : (slug.isEmpty ? 'Escribe un nombre' : 'Nombre muy corto'),
+            style: AppTextStyles.bodySmall.copyWith(
+                fontSize: 12,
+                color: valid ? AppColors.ctOk : AppColors.ctText3),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -983,96 +1192,4 @@ class _EditButtonState extends State<_EditButton> {
   }
 }
 
-class _DialogField extends StatelessWidget {
-  const _DialogField({
-    required this.label,
-    required this.controller,
-    required this.placeholder,
-    this.maxLines = 1,
-  });
-  final String label;
-  final TextEditingController controller;
-  final String placeholder;
-  final int maxLines;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          maxLines: maxLines,
-          minLines: maxLines,
-          style: AppTextStyles.body,
-          decoration: InputDecoration(
-            hintText: placeholder,
-            hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-            filled: true,
-            fillColor: AppColors.ctSurface2,
-            contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.ctBorder2),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.ctBorder2),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.ctTeal),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SlugPreview extends StatelessWidget {
-  const _SlugPreview({required this.slug, this.error});
-  final String slug;
-  final String? error;
-
-  @override
-  Widget build(BuildContext context) {
-    final isValid = error == null && slug.length >= 3;
-    if (error != null) {
-      return Row(
-        children: [
-          const Icon(Icons.error_outline, size: 13, color: AppColors.ctDanger),
-          const SizedBox(width: 4),
-          Text(
-            error!,
-            style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctDanger),
-          ),
-        ],
-      );
-    }
-    return Row(
-      children: [
-        Icon(
-          isValid ? Icons.check_circle_outline : Icons.warning_amber_outlined,
-          size: 13,
-          color: isValid ? AppColors.ctOk : AppColors.ctDanger,
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(
-            isValid ? slug : (slug.isEmpty ? 'Nombre inválido' : 'Nombre inválido (slug: "$slug")'),
-            style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: isValid ? AppColors.ctOk : AppColors.ctDanger, fontFeatures: const [FontFeature.tabularFigures()]),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-}
 

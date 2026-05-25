@@ -5,7 +5,7 @@
 > lee este archivo completo. Las reglas aquí superan cualquier patrón anterior que hayas visto
 > en el repo.
 > **Fuente:** Auditoría 2026-05-17 + primitivos creados en sprints de refactor.
-> **Última actualización:** 2026-05-24 — agregados AppDropdown, AppMultiSelect, AppActionButton, AppDetailHeader, AppSectionHeader, AppStackedMetricCard.
+> **Última actualización:** 2026-05-25 — agregados ActionMiniDiagram, patrones de Card con strip numerado, Timeline de evaluación, _AppRadioGroup; actualizada deuda técnica.
 > **Mantenimiento:** Actualizar al agregar primitivos nuevos a lib/shared/widgets/.
 
 ---
@@ -645,6 +645,65 @@ Tarjeta de métricas apiladas con línea de acento superior y layout para 2-3 KP
 
 ---
 
+### 2.16 AppWizardShell · `lib/shared/widgets/app_wizard_shell.dart`
+
+Scaffold de wizard multi-paso reutilizable. Encapsula indicadores de progreso,
+area de contenido por paso y navegacion. Sin logica de negocio — cero imports
+de APIs o providers.
+
+```dart
+import '../../shared/widgets/app_wizard_shell.dart';
+
+// Uso basico
+await AppWizardShell.show(
+  context: context,
+  sidebarTitle: 'Nuevo flujo',
+  steps: [
+    AppWizardStep(title: 'Identidad', builder: (_) => _StepIdentidad()),
+    AppWizardStep(title: 'Acceso',    builder: (_) => _StepAcceso()),
+    AppWizardStep(title: 'Confirmar', builder: (_) => _StepConfirmar()),
+  ],
+  onCancel: () => Navigator.of(context).pop(),
+  onConfirm: _submitForm,
+  confirmLabel: 'Crear flujo',
+);
+
+// Con validacion de avance por paso
+AppWizardShell.show(
+  context: context,
+  sidebarTitle: 'Nuevo canal',
+  steps: [...],
+  canAdvance: _nameCtrl.text.trim().isNotEmpty,
+  onCancel: () => Navigator.of(context).pop(),
+  onConfirm: _submit,
+);
+```
+
+**Props:**
+
+| Prop | Tipo | Default | Descripcion |
+|---|---|---|---|
+| `steps` | `List<AppWizardStep>` | requerido | Pasos del wizard |
+| `onCancel` | `VoidCallback` | requerido | Accion del boton Cancelar |
+| `onConfirm` | `Future<void> Function()` | requerido | Accion del boton Confirmar (ultimo paso) |
+| `canAdvance` | `bool` | `true` | Habilita/deshabilita Siguiente y Confirmar |
+| `confirmLabel` | `String` | `'Confirmar'` | Label del boton de confirmacion |
+| `isLoading` | `bool` | `false` | Loading externo adicional en boton Confirmar |
+| `sidebarTitle` | `String` | `'Nuevo elemento'` | Titulo del sidebar izquierdo |
+
+**Layout (ADR-337):** sidebar 200px con lista de pasos numerados (circulos ctTeal/ctOk/ctBorder2)
++ contenido derecho (header del paso + SingleChildScrollView + footer Cancelar/Atras/Siguiente/Confirmar).
+
+ADRs: ADR-262 (stepper custom), ADR-263 (compatible con selectors inline), ADR-337 (layout sidebar).
+
+**PROHIBIDO:** steppers ad-hoc con Column + indicadores duplicados en features.
+Usar `AppWizardShell` siempre para wizards multi-paso.
+
+**Wizards pendientes de migracion (WIZARD-002):** `_NewAssignmentDialog`, canal nuevo en `channels_screen.dart`.
+Ya migrado: `_NewFlowDialog` en `workflows_screen.dart`.
+
+---
+
 ## 3. Feature-level widgets — Capa 3
 
 Widgets con lógica de negocio que viven en `lib/features/[módulo]/widgets/`.
@@ -652,8 +711,58 @@ No son primitivos — usan primitivos de Capa 2.
 
 | Widget | Archivo | Uso |
 |---|---|---|
-| `PrecondMiniDiagram` | `lib/features/flows/widgets/precond_mini_diagram.dart` | Diagrama 86×60dp por tipo de precondición (11 tipos) |
+| `PrecondMiniDiagram` | `lib/features/flows/widgets/precond_mini_diagram.dart` | Diagrama 86×60dp por tipo de precondición (12 tipos, incluye legacy) |
+| `ActionMiniDiagram` | `lib/features/flows/widgets/action_mini_diagram.dart` | Diagrama 100×60dp por tipo de acción on_complete (6 tipos) |
 | `FieldCard` | `lib/features/flows/widgets/field_card.dart` | Card de campo de flow con tipo, valor, acciones |
+
+### ActionMiniDiagram · `lib/features/flows/widgets/action_mini_diagram.dart`
+
+Widget 100×60dp para los 6 tipos de acción on_complete.
+Patrón: `SizedBox(width: 100, height: 60)` + Stack/Row de Containers.
+Sin CustomPainter. Sin SVG assets. Sin dependencias externas.
+
+```dart
+import 'widgets/action_mini_diagram.dart';
+
+ActionMiniDiagram(type: action['type'] ?? '', catColor: catColor)
+```
+
+Tipos soportados: `open_flow`, `open_flow_n_times`, `webhook_out`,
+`google_sheets_append_row`, `google_sheets_update_row`, `emit_event`.
+Tipo no reconocido → `SizedBox.expand()` vacío del mismo tamaño.
+
+### Patrón de Card con strip numerado + mini diagram
+
+Tanto `_RuleCard` (precondiciones) como `_ActionCard` (on_complete) siguen
+el mismo patrón estructural:
+
+```
+IntrinsicHeight > Row(crossAxisAlignment.stretch):
+  [1] Strip izquierdo 38px — gradient catColor 0.07→0.04, círculo numerado 22×22
+  [2] Mini diagram 120px — fondo FAFAFA, borde derecho F1F1F1, PrecondMiniDiagram / ActionMiniDiagram
+  [3] Body Expanded — badges Wrap + título + resumen + mensaje/condición
+  [4] Actions — AnimatedOpacity (hover) con toggle + edit + delete
+```
+
+Colores de categoría por tipo:
+- Precondiciones: `_precondCatColor(type)` — state, relation, operator, data
+- Acciones: `_actionCatColor(type)` — morado (flows), azul (external), verde (sheets), amber (events)
+
+### Patrón de Timeline de evaluación
+
+Tanto `_EvaluationChainPreview` (precondiciones) como `_OnCompleteTimeline`
+(on_complete) siguen el mismo patrón:
+
+```
+Container(bg FAFAFA, border F1F1F1, borderRadius 10, padding 14×12)
+  Label uppercase 9px 700 → Wrap de chips numerados con ' → ' separadores → chip final verde '✓'
+```
+
+### _AppRadioGroup (privado en flow_detail_screen.dart)
+
+Radio group de cards full-width para campos `select` con pocas opciones.
+Se renderiza cuando `field['display_as'] == 'radio'` en el formulario dinámico de precondiciones.
+No extraer como primitivo compartido todavía — uso específico al wizard.
 
 ---
 
@@ -834,7 +943,7 @@ No los repliques en código nuevo:
 | `lib/shared/widgets/app_chip.dart` | `TextStyle` local Geist 500 12px (token faltante en AppTextStyles) | Pendiente agregar token |
 | `AppTextStyles.btnPrimary` | Color `ctNavy` fijo — debería ser sin color | Pendiente corrección DS |
 | `lib/features/conversations/conversations_screen.dart` | 113 TextStyle inline, 14 botones ad-hoc | Pendiente migración |
-| `lib/features/flows/flow_detail_screen.dart` | ~50 TextStyle inline restantes, 3 DropdownButtonFormField en _buildFlowSlugSelector/_buildCatalogSlugSelector (legacy) | Parcialmente migrado — _FieldDialog, _ComportamientoTab, _AddRuleDialog ya usan AppDropdown/AppTextField/AppButton |
+| `lib/features/flows/flow_detail_screen.dart` | 0 DropdownButtonFormField, 0 DropdownButton legacy. TextStyle inline restantes en widgets internos (_RuleCard, _ActionCard, _PrecondHeroDiagram) que usan colores de categoría dinámicos | flutter analyze: 0 infos, 0 warnings, 0 errors (2026-05-25) |
 | `lib/features/` (generalizado) | 97 `CircularProgressIndicator` sueltos — pendiente migrar a `AppLoadingState` | Pendiente migración |
 | `lib/features/` (generalizado) | 64 `showDialog` ad-hoc — pendiente migrar a `AppConfirmDialog` | Pendiente migración |
 | `lib/features/` (generalizado) | 101 `TextField`/`TextFormField` sueltos — pendiente migrar a `AppTextField` | Pendiente migración |
