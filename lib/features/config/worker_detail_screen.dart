@@ -5,15 +5,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/ai_workers_api.dart';
+import '../../core/api/flows_api.dart';
+import '../../core/api/operator_roles_api.dart';
+import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_header.dart';
 import '../../shared/widgets/app_loading_state.dart';
+import '../../shared/widgets/app_search_bar.dart';
 import '../../shared/widgets/app_stacked_metric_card.dart';
 import 'channel_detail_screen.dart';
 import 'channels_screen.dart';
 import '../flows/flow_detail_screen.dart';
-import 'workflows_screen.dart';
 
 // ── Helpers de archivo ────────────────────────────────────────────────────────
 
@@ -277,8 +281,8 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
                   ],
                 ),
           _selectedFlowId == null
-              ? WorkflowsScreen(
-                  tenantWorkerId: widget.workerId,
+              ? _WorkerFlowsTab(
+                  workerId: widget.workerId,
                   onFlowSelected: (id) => setState(() => _selectedFlowId = id),
                 )
               : FlowDetailPanel(
@@ -1319,6 +1323,527 @@ class _SkillsCard extends StatelessWidget {
                 )).toList(),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── _WorkerFlowsTab ─────────────────────────────────────────────────────────
+
+class _WorkerFlowsTab extends ConsumerStatefulWidget {
+  const _WorkerFlowsTab({
+    required this.workerId,
+    required this.onFlowSelected,
+  });
+  final String workerId;
+  final void Function(String flowId) onFlowSelected;
+
+  @override
+  ConsumerState<_WorkerFlowsTab> createState() => _WorkerFlowsTabState();
+}
+
+class _WorkerFlowsTabState extends ConsumerState<_WorkerFlowsTab> {
+  List<Map<String, dynamic>> _flows = [];
+  Map<String, String> _roleNames = {};
+  bool _loading = true;
+  String? _error;
+  String _search = '';
+  String _viewMode = 'list';
+  final Map<String, bool> _collapsedRoles = {};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final tenantId = ref.read(activeTenantIdProvider);
+      final results = await Future.wait([
+        FlowsApi.getFlowsByWorker(tenantWorkerId: widget.workerId),
+        OperatorRolesApi.listRoles(tenantId: tenantId),
+      ]);
+      if (!mounted) return;
+      final flows = List<Map<String, dynamic>>.from(results[0] as List);
+      final roles = List<Map<String, dynamic>>.from(
+          (results[1] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
+      setState(() {
+        _flows = flows;
+        _roleNames = {
+          for (final r in roles)
+            (r['id'] as String? ?? ''): (r['label'] as String? ?? r['name'] as String? ?? ''),
+        };
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  List<Map<String, dynamic>> get _filtered {
+    if (_search.isEmpty) return _flows;
+    final q = _search.toLowerCase();
+    return _flows.where((f) {
+      final name = (f['name'] as String? ?? '').toLowerCase();
+      final slug = (f['slug'] as String? ?? '').toLowerCase();
+      return name.contains(q) || slug.contains(q);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(22, 18, 22, 0),
+          child: Row(
+            children: [
+              Text('Flujos de trabajo',
+                  style: AppTextStyles.body.copyWith(
+                      fontSize: 15, fontWeight: FontWeight.w700)),
+              const Spacer(),
+              AppButton(
+                label: '+ Nuevo flujo',
+                variant: AppButtonVariant.teal,
+                size: AppButtonSize.sm,
+                onPressed: () {
+                  // Open wizard from WorkflowsScreen — navigate to tab then open
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        // Controls
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          child: Row(
+            children: [
+              Expanded(
+                child: AppSearchBar(
+                  hint: 'Buscar por nombre o slug\u2026',
+                  onChanged: (v) => setState(() => _search = v),
+                ),
+              ),
+              const SizedBox(width: 12),
+              _ViewToggle(
+                value: _viewMode,
+                onChanged: (v) => setState(() => _viewMode = v),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        // Body
+        Expanded(child: _buildBody()),
+      ],
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctTeal),
+        ),
+      );
+    }
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_error!, style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger)),
+            const SizedBox(height: 8),
+            AppButton(label: 'Reintentar', variant: AppButtonVariant.ghost, size: AppButtonSize.sm, onPressed: _load),
+          ],
+        ),
+      );
+    }
+    final flows = _filtered;
+    if (_flows.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.account_tree_outlined, size: 40, color: AppColors.ctText3),
+            const SizedBox(height: 12),
+            Text('Sin flujos configurados',
+                style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
+          ],
+        ),
+      );
+    }
+    if (flows.isEmpty) {
+      return Center(
+        child: Text('Sin resultados para \u00AB$_search\u00BB',
+            style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
+      );
+    }
+    if (_viewMode == 'roles') {
+      return _buildRolesView(flows);
+    }
+    return _buildListView(flows);
+  }
+
+  Widget _buildListView(List<Map<String, dynamic>> flows) {
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
+      itemCount: flows.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      itemBuilder: (_, i) => _WorkerFlowCard(
+        flow: flows[i],
+        onTap: () => widget.onFlowSelected(flows[i]['id'] as String? ?? ''),
+      ),
+    );
+  }
+
+  Widget _buildRolesView(List<Map<String, dynamic>> flows) {
+    // Collect all role IDs referenced
+    final roleGroups = <String, List<Map<String, dynamic>>>{};
+    final noRole = <Map<String, dynamic>>[];
+
+    for (final f in flows) {
+      final roleIds = (f['allowed_role_ids'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [];
+      if (roleIds.isEmpty) {
+        noRole.add(f);
+      } else {
+        for (final rid in roleIds) {
+          roleGroups.putIfAbsent(rid, () => []).add(f);
+        }
+      }
+    }
+
+    final sortedKeys = roleGroups.keys.toList()
+      ..sort((a, b) => (_roleNames[a] ?? a).compareTo(_roleNames[b] ?? b));
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
+      children: [
+        for (final rid in sortedKeys)
+          _RoleGroup(
+            roleName: _roleNames[rid] ?? 'Rol ${rid.substring(0, 8)}\u2026',
+            flows: roleGroups[rid]!,
+            isCollapsed: _collapsedRoles[rid] ?? false,
+            onToggle: () => setState(() =>
+                _collapsedRoles[rid] = !(_collapsedRoles[rid] ?? false)),
+            onFlowSelected: widget.onFlowSelected,
+          ),
+        if (noRole.isNotEmpty)
+          _RoleGroup(
+            roleName: 'Sin rol asignado',
+            flows: noRole,
+            isCollapsed: _collapsedRoles['__none__'] ?? false,
+            onToggle: () => setState(() =>
+                _collapsedRoles['__none__'] = !(_collapsedRoles['__none__'] ?? false)),
+            onFlowSelected: widget.onFlowSelected,
+          ),
+      ],
+    );
+  }
+}
+
+// ── _ViewToggle ──────────────────────────────────────────────────────────────
+
+class _ViewToggle extends StatelessWidget {
+  const _ViewToggle({required this.value, required this.onChanged});
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 34,
+      decoration: BoxDecoration(
+        color: AppColors.ctSurface2,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.ctBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _toggleItem('list', 'Lista', value == 'list'),
+          _toggleItem('roles', 'Por rol', value == 'roles'),
+        ],
+      ),
+    );
+  }
+
+  Widget _toggleItem(String key, String label, bool active) {
+    return GestureDetector(
+      onTap: () => onChanged(key),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: active ? AppColors.ctSurface : Colors.transparent,
+            borderRadius: BorderRadius.circular(7),
+            boxShadow: active
+                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 2)]
+                : null,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: AppTextStyles.bodySmall.copyWith(
+              fontSize: 12,
+              fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+              color: active ? AppColors.ctText : AppColors.ctText2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── _RoleGroup ───────────────────────────────────────────────────────────────
+
+class _RoleGroup extends StatelessWidget {
+  const _RoleGroup({
+    required this.roleName,
+    required this.flows,
+    required this.isCollapsed,
+    required this.onToggle,
+    required this.onFlowSelected,
+  });
+  final String roleName;
+  final List<Map<String, dynamic>> flows;
+  final bool isCollapsed;
+  final VoidCallback onToggle;
+  final void Function(String) onFlowSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.ctBorder),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          // Header
+          GestureDetector(
+            onTap: onToggle,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.ctSurface,
+                  border: isCollapsed
+                      ? null
+                      : const Border(bottom: BorderSide(color: AppColors.ctBorder)),
+                ),
+                child: Row(
+                  children: [
+                    AnimatedRotation(
+                      turns: isCollapsed ? 0 : 0.25,
+                      duration: const Duration(milliseconds: 200),
+                      child: const Icon(Icons.chevron_right_rounded,
+                          size: 18, color: AppColors.ctText2),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(roleName,
+                          style: AppTextStyles.body.copyWith(
+                              fontFamily: 'Onest',
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: AppColors.ctText)),
+                    ),
+                    AppBadge(
+                      label: '${flows.length}',
+                      variant: AppBadgeVariant.neutral,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Flows
+          if (!isCollapsed)
+            ...flows.map((f) => _WorkerFlowCard(
+                  flow: f,
+                  onTap: () => onFlowSelected(f['id'] as String? ?? ''),
+                )),
+        ],
+      ),
+    );
+  }
+}
+
+// ── _WorkerFlowCard ──────────────────────────────────────────────────────────
+
+class _WorkerFlowCard extends StatefulWidget {
+  const _WorkerFlowCard({required this.flow, required this.onTap});
+  final Map<String, dynamic> flow;
+  final VoidCallback onTap;
+
+  @override
+  State<_WorkerFlowCard> createState() => _WorkerFlowCardState();
+}
+
+class _WorkerFlowCardState extends State<_WorkerFlowCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final f = widget.flow;
+    final name = f['name'] as String? ?? '\u2014';
+    final slug = f['slug'] as String? ?? '';
+    final desc = f['description'] as String? ?? '';
+    final isActive = f['is_active'] as bool? ?? false;
+    final fields = f['fields'] as List? ?? [];
+    final triggers = (f['trigger_sources'] as List?)?.cast<String>() ?? [];
+    final preconds = f['preconditions'] as List? ?? [];
+    final onComplete = f['on_complete'] as Map? ?? {};
+    final actions = onComplete['actions'] as List? ?? [];
+    final execCount = f['execution_count'] as int? ?? 0;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: _hovered
+                ? AppColors.ctTeal.withValues(alpha: 0.03)
+                : AppColors.ctSurface,
+            border: const Border(
+              bottom: BorderSide(color: AppColors.ctBorder),
+            ),
+          ),
+          child: Row(
+            children: [
+              // Left: name + slug + desc
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name,
+                        style: AppTextStyles.body.copyWith(
+                            fontSize: 14, fontWeight: FontWeight.w600)),
+                    if (slug.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(slug,
+                          style: AppTextStyles.caption.copyWith(
+                              fontFamily: 'Geist', color: AppColors.ctText3)),
+                    ],
+                    if (desc.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(desc,
+                          style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                    ],
+                    const SizedBox(height: 8),
+                    // Chips
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        // Trigger icons
+                        for (final t in triggers)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppColors.ctSurface2,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: AppColors.ctBorder),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  switch (t) {
+                                    'conversational' => Icons.chat_bubble_outline_rounded,
+                                    'scheduled' => Icons.schedule_rounded,
+                                    'on_complete' => Icons.account_tree_rounded,
+                                    _ => Icons.bolt_rounded,
+                                  },
+                                  size: 12,
+                                  color: AppColors.ctText2,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  switch (t) {
+                                    'conversational' => 'Chat',
+                                    'scheduled' => 'Programado',
+                                    'on_complete' => 'Al cerrar',
+                                    'ingest' => 'API',
+                                    _ => t,
+                                  },
+                                  style: AppTextStyles.caption.copyWith(
+                                      color: AppColors.ctText2, fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (fields.isNotEmpty)
+                          AppBadge(
+                            label: '${fields.length} campo${fields.length == 1 ? '' : 's'}',
+                            variant: AppBadgeVariant.neutral,
+                          ),
+                        if (execCount > 0)
+                          AppBadge(
+                            label: '$execCount ejecuci\u00F3n${execCount == 1 ? '' : 'es'}',
+                            variant: AppBadgeVariant.info,
+                          ),
+                        if (preconds.isNotEmpty)
+                          AppBadge(
+                            label: '${preconds.length} precond.',
+                            variant: AppBadgeVariant.warn,
+                          ),
+                        if (actions.isNotEmpty)
+                          AppBadge(
+                            label: '${actions.length} al cerrar',
+                            variant: AppBadgeVariant.teal,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Right: active badge + chevron
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  AppBadge(
+                    label: isActive ? 'Activo' : 'Inactivo',
+                    variant: isActive ? AppBadgeVariant.ok : AppBadgeVariant.neutral,
+                  ),
+                  const SizedBox(height: 8),
+                  Icon(Icons.chevron_right_rounded,
+                      size: 18, color: AppColors.ctText3),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

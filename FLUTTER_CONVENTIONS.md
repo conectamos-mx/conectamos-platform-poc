@@ -418,3 +418,46 @@ Patrones frecuentes a evitar:
 - `activeColor` en SwitchListTile → usar `activeThumbColor`
 - `if (mounted)` en callbacks de widgets hijos → usar `if (!context.mounted) return;`
 - `(_, __)` en separatorBuilder → usar `(context, index)`
+
+---
+
+## 15. Wizards multi-paso (ADR-262, ADR-337)
+
+Todo wizard multi-paso en la plataforma usa `AppWizardShell`
+(`lib/shared/widgets/app_wizard_shell.dart`).
+**NUNCA** crear steppers ad-hoc con Column + indicadores visuales en features.
+
+```dart
+await AppWizardShell.show(
+  context: context,
+  sidebarTitle: 'Nuevo flujo',
+  steps: [
+    AppWizardStep(title: 'Identidad', builder: (_) => _Step1()),
+    AppWizardStep(title: 'Acceso',    builder: (_) => _Step2()),
+    AppWizardStep(title: 'Confirmar', builder: (_) => _Step3()),
+  ],
+  onCancel: () => Navigator.of(context).pop(),
+  onConfirm: _submit,
+  confirmLabel: 'Crear flujo',
+  canAdvance: _isValid,
+);
+```
+
+**Layout:** sidebar 200px (lista de pasos numerados con circulos ctTeal/ctOk/ctBorder2)
++ contenido derecho (header del paso + SingleChildScrollView + footer con botones).
+
+**Reglas de contenido por paso:**
+- Cada paso recibe un `WidgetBuilder` — puede ser StatefulWidget propio
+- No usar `DropdownButton` dentro del builder (ADR-263) — usar `AppDropdown`
+- `canAdvance` se evalua en el padre — pasar `false` deshabilita Siguiente/Confirmar
+- `onConfirm` es `Future<void>` — el shell maneja el loading state
+
+**Wizards existentes pendientes de migracion (WIZARD-002):**
+
+| Wizard actual | Archivo | Estado |
+|---|---|---|
+| `_NewFlowDialog` | `workflows_screen.dart` | Migrado a AppWizardShell |
+| `_NewAssignmentDialog` | `assignments_screen.dart` | Pendiente |
+| `_AddRuleDialog` | `flow_detail_screen.dart` | Wizard custom (2 pasos) — evaluar migracion |
+| `_ActionDialog` | `flow_detail_screen.dart` | Wizard custom (catalogo + form) — evaluar migracion |
+| Canal nuevo (inline) | `channels_screen.dart` | Stepper custom sidebar — evaluar migracion |

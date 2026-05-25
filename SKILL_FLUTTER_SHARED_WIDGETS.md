@@ -645,6 +645,65 @@ Tarjeta de métricas apiladas con línea de acento superior y layout para 2-3 KP
 
 ---
 
+### 2.16 AppWizardShell · `lib/shared/widgets/app_wizard_shell.dart`
+
+Scaffold de wizard multi-paso reutilizable. Encapsula indicadores de progreso,
+area de contenido por paso y navegacion. Sin logica de negocio — cero imports
+de APIs o providers.
+
+```dart
+import '../../shared/widgets/app_wizard_shell.dart';
+
+// Uso basico
+await AppWizardShell.show(
+  context: context,
+  sidebarTitle: 'Nuevo flujo',
+  steps: [
+    AppWizardStep(title: 'Identidad', builder: (_) => _StepIdentidad()),
+    AppWizardStep(title: 'Acceso',    builder: (_) => _StepAcceso()),
+    AppWizardStep(title: 'Confirmar', builder: (_) => _StepConfirmar()),
+  ],
+  onCancel: () => Navigator.of(context).pop(),
+  onConfirm: _submitForm,
+  confirmLabel: 'Crear flujo',
+);
+
+// Con validacion de avance por paso
+AppWizardShell.show(
+  context: context,
+  sidebarTitle: 'Nuevo canal',
+  steps: [...],
+  canAdvance: _nameCtrl.text.trim().isNotEmpty,
+  onCancel: () => Navigator.of(context).pop(),
+  onConfirm: _submit,
+);
+```
+
+**Props:**
+
+| Prop | Tipo | Default | Descripcion |
+|---|---|---|---|
+| `steps` | `List<AppWizardStep>` | requerido | Pasos del wizard |
+| `onCancel` | `VoidCallback` | requerido | Accion del boton Cancelar |
+| `onConfirm` | `Future<void> Function()` | requerido | Accion del boton Confirmar (ultimo paso) |
+| `canAdvance` | `bool` | `true` | Habilita/deshabilita Siguiente y Confirmar |
+| `confirmLabel` | `String` | `'Confirmar'` | Label del boton de confirmacion |
+| `isLoading` | `bool` | `false` | Loading externo adicional en boton Confirmar |
+| `sidebarTitle` | `String` | `'Nuevo elemento'` | Titulo del sidebar izquierdo |
+
+**Layout (ADR-337):** sidebar 200px con lista de pasos numerados (circulos ctTeal/ctOk/ctBorder2)
++ contenido derecho (header del paso + SingleChildScrollView + footer Cancelar/Atras/Siguiente/Confirmar).
+
+ADRs: ADR-262 (stepper custom), ADR-263 (compatible con selectors inline), ADR-337 (layout sidebar).
+
+**PROHIBIDO:** steppers ad-hoc con Column + indicadores duplicados en features.
+Usar `AppWizardShell` siempre para wizards multi-paso.
+
+**Wizards pendientes de migracion (WIZARD-002):** `_NewAssignmentDialog`, canal nuevo en `channels_screen.dart`.
+Ya migrado: `_NewFlowDialog` en `workflows_screen.dart`.
+
+---
+
 ## 3. Feature-level widgets — Capa 3
 
 Widgets con lógica de negocio que viven en `lib/features/[módulo]/widgets/`.
