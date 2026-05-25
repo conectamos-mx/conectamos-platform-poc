@@ -1349,7 +1349,7 @@ class _WorkerFlowsTabState extends ConsumerState<_WorkerFlowsTab> {
   bool _loading = true;
   String? _error;
   String _search = '';
-  String _viewMode = 'list';
+  String _viewMode = 'roles';
   final Map<String, bool> _collapsedRoles = {};
 
   @override
