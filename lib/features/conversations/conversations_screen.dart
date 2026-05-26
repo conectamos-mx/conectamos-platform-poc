@@ -1008,7 +1008,11 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
                 itemBuilder: (context, i) {
                   final conv       = filtered[i];
                   final chatId     = conv['chat_id'] as String? ?? '';
-                  final name       = conv['display_name'] as String? ?? chatId;
+                  final isGroup    = conv['is_group'] as bool? ?? false;
+                  final groupName  = conv['group_display_name'] as String?;
+                  final name       = (isGroup && groupName != null)
+                      ? groupName
+                      : (conv['display_name'] as String? ?? chatId);
                   final photoUrl   = conv['profile_picture_url'] as String?;
                   final lastMsg    = conv['last_message'] as Map<String, dynamic>?;
                   final body       = lastMsg?['body'] as String?;
@@ -1021,6 +1025,7 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
                   final windowOpen = conv['window_open'] as bool? ?? true;
                   return _ApiConvoItem(
                     name: name,
+                    isGroup: isGroup,
                     photoUrl: photoUrl,
                     preview: mediaType != null
                         ? null
@@ -1492,6 +1497,7 @@ class _ApiConvoItem extends StatefulWidget {
     this.mediaType,
     this.unreadCount = 0,
     this.isWindowOpen = true,
+    this.isGroup = false,
   });
   final String name;
   final String? photoUrl;
@@ -1503,6 +1509,7 @@ class _ApiConvoItem extends StatefulWidget {
   final VoidCallback onTap;
   final int unreadCount;
   final bool isWindowOpen;
+  final bool isGroup;
 
   @override
   State<_ApiConvoItem> createState() => _ApiConvoItemState();
@@ -1542,7 +1549,18 @@ class _ApiConvoItemState extends State<_ApiConvoItem> {
               // Avatar + status dot
               Stack(
                 children: [
-                  _OperatorAvatar(name: widget.name, photoUrl: widget.photoUrl, size: 32),
+                  if (widget.isGroup)
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: AppColors.ctNavy.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.groups, size: 16, color: AppColors.ctNavy),
+                    )
+                  else
+                    _OperatorAvatar(name: widget.name, photoUrl: widget.photoUrl, size: 32),
                   Positioned(
                     bottom: 0,
                     right: 0,

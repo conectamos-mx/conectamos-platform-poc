@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/catalogs_api.dart';
 import '../../core/api/channels_api.dart';
 import '../../core/api/flows_api.dart';
+import '../../core/api/groups_api.dart';
 import '../../shared/widgets/asset_item_selector.dart';
 import '../../core/api/operator_roles_api.dart';
 import '../../core/constants/field_types.dart';
@@ -3968,6 +3969,8 @@ IconData _actionIcon(String? type) {
       return Icons.notifications_outlined;
     case 'google_sheets_append_row':
       return Icons.table_chart_outlined;
+    case 'notify_group':
+      return Icons.campaign_outlined;
     default:
       return Icons.account_tree_outlined;
   }
@@ -3985,6 +3988,8 @@ String _actionLabel(String? type) {
       return 'Emitir evento';
     case 'google_sheets_append_row':
       return 'Google Sheets — Agregar fila';
+    case 'notify_group':
+      return 'Notificar grupo';
     default:
       return 'Abrir flujo';
   }
@@ -4012,6 +4017,9 @@ String _actionSubtitle(Map<String, dynamic> action) {
       final sid = config['spreadsheet_id'] as String? ?? '';
       final display = sid.length > 20 ? '${sid.substring(0, 20)}…' : sid;
       return '📊 $display';
+    case 'notify_group':
+      final gName = action['_group_display_name'] as String? ?? action['group_id'] as String? ?? '';
+      return '📢 $gName';
     default:
       return '';
   }
@@ -4136,6 +4144,14 @@ class _ActionDialogState extends State<_ActionDialog> {
   // Parallel list: selected flowField key per row (null = custom text mode)
   final List<String?> _columnMappingKeys = [];
 
+  // notify_group
+  List<Map<String, dynamic>> _groups = [];
+  bool _loadingGroups = false;
+  String? _selectedGroupId;
+  final _messageTemplateCtrl = TextEditingController();
+  final _waTemplateNameCtrl = TextEditingController();
+  final _waTemplateVarsCtrl = TextEditingController();
+
   // condition
   String? _conditionField;
   String _conditionOp = '==';
@@ -4154,6 +4170,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         'webhook_out',
         'emit_event',
         'google_sheets_append_row',
+        'notify_group',
       }.contains(_type);
 
   List<Map<String, dynamic>> _fieldsForActionType(String type) {
@@ -4275,6 +4292,17 @@ class _ActionDialogState extends State<_ActionDialog> {
         _selectedFlowSlug = a['flow_slug'] as String?;
         _selectedCountFieldKey = a['count_field_key'] as String?;
       }
+      if (_type == 'notify_group') {
+        _selectedGroupId = a['group_id'] as String?;
+        _messageTemplateCtrl.text = a['message_template'] as String? ?? '';
+        _waTemplateNameCtrl.text = a['wa_template_name'] as String? ?? '';
+        final waVars = a['wa_template_variables'];
+        if (waVars is List) {
+          _waTemplateVarsCtrl.text = waVars.join(', ');
+        } else if (waVars is String) {
+          _waTemplateVarsCtrl.text = waVars;
+        }
+      }
       if (_type == 'google_sheets_append_row') {
         final cfg = a['config'] as Map? ?? {};
         _spreadsheetIdCtrl.text = cfg['spreadsheet_id'] as String? ?? '';
@@ -4310,8 +4338,19 @@ class _ActionDialogState extends State<_ActionDialog> {
       _columnMappingKeys.add(null);
     }
     _loadFlows();
+    _loadGroups();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadActionTypes());
     _loadCatalogSchemas();
+  }
+
+  Future<void> _loadGroups() async {
+    setState(() => _loadingGroups = true);
+    try {
+      final data = await GroupsApi.listGroupsByTenant();
+      if (mounted) setState(() { _groups = data; _loadingGroups = false; });
+    } catch (e) {
+      if (mounted) setState(() => _loadingGroups = false);
+    }
   }
 
   Future<void> _loadCatalogSchemas() async {
@@ -4518,6 +4557,32 @@ class _ActionDialogState extends State<_ActionDialog> {
         updated.remove('carry_ancestors');
         updated.remove('integration_id');
         updated.remove('include_ancestors');
+        updated.remove('config');
+        break;
+      case 'notify_group':
+        if (_selectedGroupId == null) return;
+        if (_messageTemplateCtrl.text.trim().isEmpty) return;
+        updated['group_id'] = _selectedGroupId!;
+        updated['message_template'] = _messageTemplateCtrl.text.trim();
+        // Store the display name for subtitle rendering
+        final matchedGroup = _groups.where((g) => g['id'] == _selectedGroupId).firstOrNull;
+        if (matchedGroup != null) {
+          updated['_group_display_name'] = matchedGroup['display_name'] as String? ?? '';
+        }
+        if (_waTemplateNameCtrl.text.trim().isNotEmpty) {
+          updated['wa_template_name'] = _waTemplateNameCtrl.text.trim();
+        }
+        if (_waTemplateVarsCtrl.text.trim().isNotEmpty) {
+          updated['wa_template_variables'] =
+              _waTemplateVarsCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+        }
+        updated.remove('target_flow_slug');
+        updated.remove('carry_fields');
+        updated.remove('carry_ancestors');
+        updated.remove('integration_id');
+        updated.remove('include_ancestors');
+        updated.remove('event_name');
+        updated.remove('event_data');
         updated.remove('config');
         break;
       case 'google_sheets_append_row':
@@ -4797,6 +4862,109 @@ class _ActionDialogState extends State<_ActionDialog> {
                   label: 'Nombre del evento',
                   controller: _eventNameCtrl,
                   placeholder: 'ej. flujo_completado',
+                ),
+              ] else if (_type == 'notify_group') ...[
+                Text(
+                  'Grupo',
+                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 6),
+                if (_loadingGroups)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: CircularProgressIndicator(
+                          color: AppColors.ctTeal, strokeWidth: 2),
+                    ),
+                  )
+                else if (_groups.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.ctBorder),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'No hay grupos activos en este tenant',
+                      style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+                    ),
+                  )
+                else
+                  _DropdownContainer(
+                    child: DropdownButton<String>(
+                      value: _groups.any((g) => g['id'] == _selectedGroupId)
+                          ? _selectedGroupId
+                          : null,
+                      isExpanded: true,
+                      underline: const SizedBox.shrink(),
+                      dropdownColor: AppColors.ctSurface,
+                      hint: Text('Seleccionar grupo',
+                          style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
+                      items: _groups.map((g) {
+                        final id = g['id'] as String? ?? '';
+                        final name = g['display_name'] as String? ?? id;
+                        final chType = g['channel_type'] as String? ?? '';
+                        return DropdownMenuItem<String>(
+                          value: id,
+                          child: Text('$name ($chType)',
+                              style: AppTextStyles.body),
+                        );
+                      }).toList(),
+                      onChanged: (v) =>
+                          setState(() => _selectedGroupId = v),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                Text(
+                  'Plantilla del mensaje',
+                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Soporta {{fields.X}} y {{ancestors.X}}.',
+                  style: AppTextStyles.bodySmall.copyWith(fontSize: 11, color: AppColors.ctText2),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _messageTemplateCtrl,
+                  maxLines: 3,
+                  style: AppTextStyles.body,
+                  decoration: InputDecoration(
+                    hintText: 'ej. Se completó el flujo {{fields.nombre}}',
+                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: const BorderSide(color: AppColors.ctBorder),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: const BorderSide(color: AppColors.ctBorder),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _FormField(
+                  label: 'Plantilla WhatsApp — fallback (opcional)',
+                  controller: _waTemplateNameCtrl,
+                  placeholder: 'nombre_de_plantilla_aprobada',
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Se usa si la ventana del grupo está cerrada (>24h).',
+                  style: AppTextStyles.bodySmall.copyWith(fontSize: 11, color: AppColors.ctText2),
+                ),
+                const SizedBox(height: 12),
+                _FormField(
+                  label: 'Variables de plantilla WA (opcional)',
+                  controller: _waTemplateVarsCtrl,
+                  placeholder: '{{fields.nombre}}, {{fields.telefono}}',
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Separadas por coma. Soporta {{fields.X}}.',
+                  style: AppTextStyles.bodySmall.copyWith(fontSize: 11, color: AppColors.ctText2),
                 ),
               ] else if (_type == 'google_sheets_append_row') ...[
                 _FormField(

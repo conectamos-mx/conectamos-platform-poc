@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/api/channels_api.dart';
+import '../../core/api/groups_api.dart';
+import '../../core/api/iam_api.dart';
 import '../../core/api/templates_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -19,8 +23,8 @@ const _kChannelTypeConfig = {
   'sms':      (label: 'SMS',      bg: AppColors.ctSurface2, fg: AppColors.ctText2),
 };
 
-// WhatsApp usa 3 tabs; Telegram renderiza contenido directo sin TabBar.
-const _kWaTabs = ['Información', 'Plantillas'];
+const _kWaTabs = ['Información', 'Plantillas', 'Grupos'];
+const _kTgTabs = ['Información', 'Grupos'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -104,9 +108,10 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
       if (!mounted) return;
       final isWa = (channel['channel_type'] as String? ?? '') == 'whatsapp';
       _tabCtrl?.dispose();
-      _tabCtrl = isWa
-          ? TabController(length: _kWaTabs.length, vsync: this)
-          : null;
+      _tabCtrl = TabController(
+        length: isWa ? _kWaTabs.length : _kTgTabs.length,
+        vsync: this,
+      );
       setState(() {
         _channel = channel;
         _loading = false;
@@ -288,6 +293,11 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
                 onError: _showError,
                 onSuccess: _showSuccess,
               ),
+              _GroupsTab(
+                channel: ch,
+                onError: _showError,
+                onSuccess: _showSuccess,
+              ),
             ],
           ),
         ),
@@ -296,13 +306,52 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
   }
 
   Widget _buildTgContent(Map<String, dynamic> ch) {
-    return _TelegramInfoPanel(
-      channel: ch,
-      onUpdated: (updated) {
-        if (mounted) setState(() => _channel = updated);
-      },
-      onError: _showError,
-      onSuccess: _showSuccess,
+    return Column(
+      children: [
+        Container(
+          color: AppColors.ctSurface,
+          child: Column(
+            children: [
+              const Divider(height: 1, color: AppColors.ctBorder),
+              TabBar(
+                controller: _tabCtrl!,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                dividerColor: Colors.transparent,
+                labelStyle:
+                    AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+                unselectedLabelStyle:
+                    AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+                labelColor: AppColors.ctTeal,
+                unselectedLabelColor: AppColors.ctText2,
+                indicatorColor: AppColors.ctTeal,
+                indicatorWeight: 2,
+                tabs: [for (final t in _kTgTabs) Tab(text: t)],
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabCtrl!,
+            children: [
+              _TelegramInfoPanel(
+                channel: ch,
+                onUpdated: (updated) {
+                  if (mounted) setState(() => _channel = updated);
+                },
+                onError: _showError,
+                onSuccess: _showSuccess,
+              ),
+              _GroupsTab(
+                channel: ch,
+                onError: _showError,
+                onSuccess: _showSuccess,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1466,6 +1515,828 @@ class _WelcomeTabState extends State<_WelcomeTab> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── TAB — Grupos ─────────────────────────────────────────────────────────────
+
+class _GroupsTab extends ConsumerStatefulWidget {
+  const _GroupsTab({
+    required this.channel,
+    required this.onError,
+    required this.onSuccess,
+  });
+  final Map<String, dynamic> channel;
+  final ValueChanged<String> onError;
+  final ValueChanged<String> onSuccess;
+
+  @override
+  ConsumerState<_GroupsTab> createState() => _GroupsTabState();
+}
+
+class _GroupsTabState extends ConsumerState<_GroupsTab> {
+  List<Map<String, dynamic>> _groups = [];
+  bool _loading = true;
+  Timer? _pendingTimer;
+
+  String get _channelId => widget.channel['id'] as String? ?? '';
+  String get _channelType => widget.channel['channel_type'] as String? ?? '';
+  bool get _isWhatsApp => _channelType == 'whatsapp';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGroups();
+  }
+
+  @override
+  void dispose() {
+    _pendingTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadGroups() async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+    try {
+      final list = await GroupsApi.listGroups(channelId: _channelId);
+      if (!mounted) return;
+      setState(() {
+        _groups = list;
+        _loading = false;
+      });
+      _checkPending();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _groups = [];
+        _loading = false;
+      });
+    }
+  }
+
+  void _checkPending() {
+    _pendingTimer?.cancel();
+    final hasPending = _groups.any((g) => g['status'] == 'pending');
+    if (hasPending) {
+      _pendingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+        _loadGroups();
+      });
+    }
+  }
+
+  Future<void> _openCreateDialog() async {
+    final created = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => _CreateGroupDialog(
+        channelId: _channelId,
+        onError: widget.onError,
+      ),
+    );
+    if (created == true) {
+      widget.onSuccess('Grupo creado');
+      _loadGroups();
+    }
+  }
+
+  Future<void> _openGroupDetail(Map<String, dynamic> group) async {
+    final changed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => _GroupDetailDialog(
+        group: group,
+        onError: widget.onError,
+        onSuccess: widget.onSuccess,
+      ),
+    );
+    if (changed == true) _loadGroups();
+  }
+
+  ({String label, AppBadgeVariant variant}) _statusBadge(String? status) {
+    switch (status) {
+      case 'active':
+        return (label: 'Activo', variant: AppBadgeVariant.ok);
+      case 'pending':
+        return (label: 'Creando...', variant: AppBadgeVariant.warn);
+      case 'inactive':
+        return (label: 'Inactivo', variant: AppBadgeVariant.neutral);
+      default:
+        return (label: status ?? '—', variant: AppBadgeVariant.neutral);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Toolbar
+        Container(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
+          decoration: const BoxDecoration(
+            color: AppColors.ctSurface,
+            border: Border(bottom: BorderSide(color: AppColors.ctBorder)),
+          ),
+          child: Row(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Grupos',
+                    style: AppTextStyles.body
+                        .copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${_groups.length} grupo${_groups.length == 1 ? '' : 's'}',
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.ctText2),
+                  ),
+                ],
+              ),
+              const Expanded(child: SizedBox()),
+              if (_isWhatsApp)
+                AppButton(
+                  label: '+ Crear grupo',
+                  onPressed: _openCreateDialog,
+                  variant: AppButtonVariant.teal,
+                  size: AppButtonSize.sm,
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(
+                  child:
+                      CircularProgressIndicator(color: AppColors.ctTeal))
+              : _groups.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.groups_outlined,
+                              size: 48, color: AppColors.ctText3),
+                          const SizedBox(height: 12),
+                          Text(
+                            _isWhatsApp
+                                ? 'Sin grupos. Crea uno para comenzar.'
+                                : 'Sin grupos. Los grupos se registran automáticamente cuando el bot recibe un mensaje.',
+                            style: AppTextStyles.body
+                                .copyWith(color: AppColors.ctText2),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(24),
+                      itemCount: _groups.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 8),
+                      itemBuilder: (_, i) {
+                        final g = _groups[i];
+                        final displayName =
+                            g['display_name'] as String? ?? '—';
+                        final externalName =
+                            g['external_name'] as String?;
+                        final status = g['status'] as String?;
+                        final badge = _statusBadge(status);
+                        final meta =
+                            g['metadata'] as Map<String, dynamic>? ?? {};
+                        final participantCount =
+                            meta['participant_count'] as int?;
+                        final visCount =
+                            g['visibility_count'] as int? ?? 0;
+
+                        return MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTap: () => _openGroupDetail(g),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: AppColors.ctSurface,
+                                border:
+                                    Border.all(color: AppColors.ctBorder),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.ctNavy
+                                          .withValues(alpha: 0.1),
+                                      borderRadius:
+                                          BorderRadius.circular(18),
+                                    ),
+                                    child: Icon(Icons.groups,
+                                        size: 18,
+                                        color: AppColors.ctNavy),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(displayName,
+                                            style: AppTextStyles.body
+                                                .copyWith(
+                                                    fontWeight:
+                                                        FontWeight
+                                                            .w600)),
+                                        if (externalName != null &&
+                                            externalName !=
+                                                displayName) ...[
+                                          const SizedBox(height: 2),
+                                          Text(externalName,
+                                              style: AppTextStyles
+                                                  .bodySmall
+                                                  .copyWith(
+                                                      color: AppColors
+                                                          .ctText3)),
+                                        ],
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            if (participantCount !=
+                                                null) ...[
+                                              Icon(Icons.people_outline,
+                                                  size: 12,
+                                                  color: AppColors
+                                                      .ctText3),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                  '$participantCount participantes',
+                                                  style: AppTextStyles
+                                                      .caption
+                                                      .copyWith(
+                                                          color: AppColors
+                                                              .ctText3)),
+                                              const SizedBox(width: 12),
+                                            ],
+                                            Icon(
+                                                Icons
+                                                    .visibility_outlined,
+                                                size: 12,
+                                                color:
+                                                    AppColors.ctText3),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                                '$visCount usuario${visCount == 1 ? '' : 's'}',
+                                                style: AppTextStyles
+                                                    .caption
+                                                    .copyWith(
+                                                        color: AppColors
+                                                            .ctText3)),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  AppBadge(
+                                    label: badge.label,
+                                    variant: badge.variant,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Icon(Icons.chevron_right,
+                                      size: 18,
+                                      color: AppColors.ctText3),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Create group dialog ──────────────────────────────────────────────────────
+
+class _CreateGroupDialog extends StatefulWidget {
+  const _CreateGroupDialog({
+    required this.channelId,
+    required this.onError,
+  });
+  final String channelId;
+  final ValueChanged<String> onError;
+
+  @override
+  State<_CreateGroupDialog> createState() => _CreateGroupDialogState();
+}
+
+class _CreateGroupDialogState extends State<_CreateGroupDialog> {
+  final _nameCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      await GroupsApi.createGroup(
+        channelId: widget.channelId,
+        subject: name,
+        description:
+            _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        widget.onError(_dioError(e));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.ctSurface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Crear grupo de WhatsApp',
+                  style: AppTextStyles.cardTitle),
+              const SizedBox(height: 16),
+              _FieldLabel('Nombre del grupo'),
+              const SizedBox(height: 6),
+              _StyledTextField(controller: _nameCtrl, hint: 'Mi grupo'),
+              const SizedBox(height: 4),
+              Text('Máximo 25 caracteres',
+                  style:
+                      AppTextStyles.caption.copyWith(color: AppColors.ctText3)),
+              const SizedBox(height: 16),
+              _FieldLabel('Descripción (opcional)'),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _descCtrl,
+                maxLines: 3,
+                maxLength: 512,
+                style: AppTextStyles.body.copyWith(color: AppColors.ctText),
+                decoration: InputDecoration(
+                  hintText: 'Descripción del grupo',
+                  hintStyle:
+                      AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  filled: true,
+                  fillColor: AppColors.ctSurface,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.ctBorder),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide:
+                        const BorderSide(color: AppColors.ctTeal, width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  AppButton(
+                    label: 'Cancelar',
+                    variant: AppButtonVariant.outline,
+                    size: AppButtonSize.sm,
+                    onPressed: () => Navigator.of(context).pop(false),
+                  ),
+                  const SizedBox(width: 8),
+                  AppButton(
+                    label: 'Crear',
+                    variant: AppButtonVariant.teal,
+                    size: AppButtonSize.sm,
+                    isLoading: _saving,
+                    onPressed: _create,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Group detail dialog ──────────────────────────────────────────────────────
+
+class _GroupDetailDialog extends StatefulWidget {
+  const _GroupDetailDialog({
+    required this.group,
+    required this.onError,
+    required this.onSuccess,
+  });
+  final Map<String, dynamic> group;
+  final ValueChanged<String> onError;
+  final ValueChanged<String> onSuccess;
+
+  @override
+  State<_GroupDetailDialog> createState() => _GroupDetailDialogState();
+}
+
+class _GroupDetailDialogState extends State<_GroupDetailDialog> {
+  late final TextEditingController _nameCtrl;
+  bool _savingName = false;
+  bool _changed = false;
+
+  List<Map<String, dynamic>> _visibility = [];
+  bool _loadingVis = true;
+
+  String get _groupId => widget.group['id'] as String? ?? '';
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(
+        text: widget.group['display_name'] as String? ?? '');
+    _loadVisibility();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadVisibility() async {
+    try {
+      final vis = await GroupsApi.getVisibility(groupId: _groupId);
+      if (mounted) setState(() { _visibility = vis; _loadingVis = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loadingVis = false);
+    }
+  }
+
+  Future<void> _saveName() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _savingName = true);
+    try {
+      await GroupsApi.updateGroup(groupId: _groupId, displayName: name);
+      widget.onSuccess('Nombre actualizado');
+      _changed = true;
+      if (mounted) setState(() => _savingName = false);
+    } catch (e) {
+      widget.onError(_dioError(e));
+      if (mounted) setState(() => _savingName = false);
+    }
+  }
+
+  Future<void> _removeVisibility(String tenantUserId) async {
+    try {
+      await GroupsApi.removeVisibility(
+          groupId: _groupId, tenantUserId: tenantUserId);
+      _changed = true;
+      _loadVisibility();
+    } catch (e) {
+      widget.onError(_dioError(e));
+    }
+  }
+
+  Future<void> _addUsers() async {
+    // Fetch all tenant users
+    List<Map<String, dynamic>> allUsers = [];
+    try {
+      allUsers = await IamApi.getUsers();
+    } catch (e) {
+      widget.onError(_dioError(e));
+      return;
+    }
+
+    // Filter out users already with visibility
+    final existingIds =
+        _visibility.map((v) => v['tenant_user_id'] as String).toSet();
+    final available =
+        allUsers.where((u) => !existingIds.contains(u['id'] as String?)).toList();
+
+    if (!mounted) return;
+
+    final selected = await showDialog<List<String>>(
+      context: context,
+      builder: (_) => _UserPickerDialog(users: available),
+    );
+
+    if (selected != null && selected.isNotEmpty) {
+      try {
+        await GroupsApi.addVisibility(
+            groupId: _groupId, tenantUserIds: selected);
+        _changed = true;
+        _loadVisibility();
+        widget.onSuccess('Usuarios agregados');
+      } catch (e) {
+        widget.onError(_dioError(e));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final externalName = widget.group['external_name'] as String?;
+    final inviteLink = widget.group['invite_link'] as String?;
+
+    return Dialog(
+      backgroundColor: AppColors.ctSurface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('Detalle del grupo',
+                        style: AppTextStyles.cardTitle),
+                    const Expanded(child: SizedBox()),
+                    MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        onTap: () => Navigator.of(context).pop(_changed),
+                        child: Icon(Icons.close, size: 18,
+                            color: AppColors.ctText2),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(color: AppColors.ctBorder, height: 24),
+
+                // Display name
+                _FieldLabel('Nombre visible'),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StyledTextField(
+                          controller: _nameCtrl, hint: 'Nombre del grupo'),
+                    ),
+                    const SizedBox(width: 8),
+                    AppButton(
+                      label: 'Guardar',
+                      variant: AppButtonVariant.teal,
+                      size: AppButtonSize.sm,
+                      isLoading: _savingName,
+                      onPressed: _saveName,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // External name
+                if (externalName != null) ...[
+                  _FieldLabel('Nombre en el canal'),
+                  const SizedBox(height: 4),
+                  Text(externalName,
+                      style: AppTextStyles.body
+                          .copyWith(color: AppColors.ctText2)),
+                  const SizedBox(height: 16),
+                ],
+
+                // Invite link
+                _FieldLabel('Link de invitación'),
+                const SizedBox(height: 4),
+                if (inviteLink != null && inviteLink.isNotEmpty)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(inviteLink,
+                            style: AppTextStyles.bodySmall
+                                .copyWith(color: AppColors.ctText2),
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      const SizedBox(width: 8),
+                      MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: () {
+                            Clipboard.setData(
+                                ClipboardData(text: inviteLink));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Link copiado'),
+                                duration: Duration(seconds: 2),
+                                backgroundColor: AppColors.ctOk,
+                              ),
+                            );
+                          },
+                          child: Icon(Icons.copy_rounded,
+                              size: 14, color: AppColors.ctText3),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Text('No disponible aún',
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.ctText3)),
+                const SizedBox(height: 20),
+
+                // Visibility section
+                const Divider(color: AppColors.ctBorder, height: 1),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    _FieldLabel('Visibilidad'),
+                    const Expanded(child: SizedBox()),
+                    AppButton(
+                      label: '+ Agregar usuario',
+                      variant: AppButtonVariant.outline,
+                      size: AppButtonSize.sm,
+                      onPressed: _addUsers,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_loadingVis)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.ctTeal),
+                      ),
+                    ),
+                  )
+                else if (_visibility.isEmpty)
+                  Text(
+                    'Sin usuarios asignados. Los administradores siempre tienen acceso completo.',
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.ctText3),
+                  )
+                else
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final v in _visibility)
+                        Chip(
+                          label: Text(
+                            v['nombre'] as String? ??
+                                v['tenant_user_id'] as String? ??
+                                '—',
+                            style: AppTextStyles.bodySmall,
+                          ),
+                          deleteIcon: Icon(Icons.close,
+                              size: 14, color: AppColors.ctText2),
+                          onDeleted: () => _removeVisibility(
+                              v['tenant_user_id'] as String),
+                          backgroundColor: AppColors.ctSurface2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: const BorderSide(
+                                color: AppColors.ctBorder),
+                          ),
+                        ),
+                    ],
+                  ),
+                const SizedBox(height: 12),
+                Text(
+                  'Los administradores siempre tienen acceso completo a todos los grupos.',
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.ctText3),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── User picker dialog ───────────────────────────────────────────────────────
+
+class _UserPickerDialog extends StatefulWidget {
+  const _UserPickerDialog({required this.users});
+  final List<Map<String, dynamic>> users;
+
+  @override
+  State<_UserPickerDialog> createState() => _UserPickerDialogState();
+}
+
+class _UserPickerDialogState extends State<_UserPickerDialog> {
+  final _selected = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.ctSurface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 500),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Seleccionar usuarios', style: AppTextStyles.cardTitle),
+              const SizedBox(height: 16),
+              if (widget.users.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text('Todos los usuarios ya tienen acceso.',
+                        style: AppTextStyles.body
+                            .copyWith(color: AppColors.ctText2)),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: widget.users.length,
+                    itemBuilder: (_, i) {
+                      final u = widget.users[i];
+                      final id = u['id'] as String? ?? '';
+                      final name = u['nombre'] as String? ?? u['email'] as String? ?? id;
+                      final roleName =
+                          (u['roles'] as Map?)?.cast<String, dynamic>()['name']
+                              as String? ??
+                          '';
+                      final isSelected = _selected.contains(id);
+                      return CheckboxListTile(
+                        value: isSelected,
+                        activeColor: AppColors.ctTeal,
+                        title: Text(name, style: AppTextStyles.body),
+                        subtitle: roleName.isNotEmpty
+                            ? Text(roleName,
+                                style: AppTextStyles.caption
+                                    .copyWith(color: AppColors.ctText3))
+                            : null,
+                        onChanged: (v) {
+                          setState(() {
+                            if (v == true) {
+                              _selected.add(id);
+                            } else {
+                              _selected.remove(id);
+                            }
+                          });
+                        },
+                        controlAffinity: ListTileControlAffinity.leading,
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  AppButton(
+                    label: 'Cancelar',
+                    variant: AppButtonVariant.outline,
+                    size: AppButtonSize.sm,
+                    onPressed: () => Navigator.of(context).pop(null),
+                  ),
+                  const SizedBox(width: 8),
+                  AppButton(
+                    label: 'Agregar (${_selected.length})',
+                    variant: AppButtonVariant.teal,
+                    size: AppButtonSize.sm,
+                    isDisabled: _selected.isEmpty,
+                    onPressed: () =>
+                        Navigator.of(context).pop(_selected.toList()),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
