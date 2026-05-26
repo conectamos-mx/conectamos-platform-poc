@@ -206,6 +206,23 @@ class OperatorsApi {
     return [];
   }
 
+  static Future<Map<String, dynamic>> importDryRun({
+    required Uint8List fileBytes,
+    required String fileName,
+    String strategy = 'all_or_nothing',
+  }) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
+      'strategy': strategy,
+    });
+    final response = await ApiClient.instance.post(
+      '/operators/import',
+      data: formData,
+      queryParameters: {'dry_run': 'true'},
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   static Future<Map<String, dynamic>> importOperators({
     required Uint8List fileBytes,
     required String fileName,
