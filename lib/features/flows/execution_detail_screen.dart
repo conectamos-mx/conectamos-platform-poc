@@ -398,7 +398,11 @@ class _FieldsBlockState extends State<_FieldsBlock> {
     ('location',  Icons.location_on_rounded,     'Ubicación'),
   ];
 
-  static String _normalizeType(String t) => t == 'photo' ? 'media' : t;
+  static String _normalizeType(String t) => switch (t) {
+        'photo' => 'media',
+        'boolean' => 'yesno',
+        _ => t,
+      };
 
   static bool _fvHasValue(Map<String, dynamic> fv) =>
       fv['value_text'] != null ||

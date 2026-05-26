@@ -82,7 +82,7 @@ class _FieldHeader extends StatelessWidget {
   static IconData _typeIcon(String type) => switch (type) {
         'number'    => Icons.pin_rounded,
         'date'      => Icons.calendar_month_rounded,
-        'yesno'     => Icons.toggle_on_rounded,
+        'boolean' || 'yesno' => Icons.toggle_on_rounded,
         'select'    => Icons.checklist_rounded,
         'photo' || 'media' => Icons.camera_alt_rounded,
         'asset_ref' => Icons.inventory_2_rounded,
@@ -93,7 +93,7 @@ class _FieldHeader extends StatelessWidget {
   static String _typeLabel(String type) => switch (type) {
         'number'    => 'Número',
         'date'      => 'Fecha',
-        'yesno'     => 'Sí / No',
+        'boolean' || 'yesno' => 'Sí / No',
         'select'    => 'Selección',
         'photo'     => 'Foto',
         'media'     => 'Foto/Media',
