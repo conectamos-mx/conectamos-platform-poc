@@ -1616,6 +1616,48 @@ class _GroupsTabState extends ConsumerState<_GroupsTab> {
     if (changed == true) _loadGroups();
   }
 
+  Future<void> _deleteGroup(Map<String, dynamic> group) async {
+    final groupId = group['id'] as String? ?? '';
+    final displayName = group['display_name'] as String? ?? 'este grupo';
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.ctSurface,
+        title: Text(
+          'Eliminar grupo',
+          style: AppTextStyles.cardTitle.copyWith(fontSize: 15),
+        ),
+        content: Text(
+          '¿Seguro que deseas eliminar "$displayName"? '
+          'El grupo se desactivará y dejará de recibir mensajes.',
+          style: AppTextStyles.pageSubtitle,
+        ),
+        actions: [
+          AppButton(
+            label: 'Cancelar',
+            onPressed: () => Navigator.pop(ctx, false),
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
+          ),
+          AppButton(
+            label: 'Eliminar',
+            onPressed: () => Navigator.pop(ctx, true),
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.sm,
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      await GroupsApi.deleteGroup(groupId: groupId);
+      widget.onSuccess('Grupo eliminado');
+      _loadGroups();
+    } catch (e) {
+      widget.onError(_dioError(e));
+    }
+  }
+
   ({String label, AppBadgeVariant variant}) _statusBadge(String? status) {
     switch (status) {
       case 'active':
@@ -1808,6 +1850,16 @@ class _GroupsTabState extends ConsumerState<_GroupsTab> {
                                     variant: badge.variant,
                                   ),
                                   const SizedBox(width: 8),
+                                  MouseRegion(
+                                    cursor: SystemMouseCursors.click,
+                                    child: GestureDetector(
+                                      onTap: () => _deleteGroup(g),
+                                      child: Icon(Icons.delete_outline,
+                                          size: 18,
+                                          color: AppColors.ctDanger),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
                                   Icon(Icons.chevron_right,
                                       size: 18,
                                       color: AppColors.ctText3),

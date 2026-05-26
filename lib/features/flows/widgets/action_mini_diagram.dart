@@ -26,6 +26,7 @@ class ActionMiniDiagram extends StatelessWidget {
         'google_sheets_append_row' => _sheetsAppend(),
         'google_sheets_update_row' => _sheetsUpdate(),
         'emit_event' => _emitEvent(),
+        'notify_group' => _notifyGroup(),
         _ => const SizedBox.expand(),
       };
 
@@ -208,6 +209,60 @@ class ActionMiniDiagram extends StatelessWidget {
       ),
     );
   }
+
+  // ── notify_group ───────────────────────────────────────────────────────────
+
+  Widget _notifyGroup() => Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _checkBox(),
+          _arrow(),
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: catColor.withValues(alpha: 0.15),
+                    border: Border.all(color: catColor, width: 1.2),
+                  ),
+                  child: Center(
+                    child: Icon(Icons.groups, size: 12, color: catColor),
+                  ),
+                ),
+                // chat bubble accent
+                Positioned(
+                  top: 1,
+                  right: 1,
+                  child: Container(
+                    width: 10,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: catColor.withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 4,
+                        height: 1.5,
+                        decoration: BoxDecoration(
+                          color: catColor,
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
 
   // ── emit_event ─────────────────────────────────────────────────────────────
 

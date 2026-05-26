@@ -798,7 +798,7 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
       if (mounted) {
         setState(() {
           _archivedConvs =
-              all.where((c) => c['operator_id'] == null).toList();
+              all.where((c) => c['operator_id'] == null && c['is_group'] != true).toList();
         });
       }
     } catch (_) {}
@@ -962,7 +962,8 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
       final chatIdVal = conv['chat_id'] as String?;
       if (chatIdVal == null || chatIdVal.isEmpty) return false;
       // Exclude unregistered — shown in archived panel below (only for operative channels)
-      if (!isSalesChannel && conv['operator_id'] == null) return false;
+      // Groups (is_group == true) are kept in the main list as normal conversations
+      if (!isSalesChannel && conv['operator_id'] == null && conv['is_group'] != true) return false;
       final name = conv['display_name'] as String? ?? '';
       return name.toLowerCase().contains(_search.toLowerCase());
     }).toList();

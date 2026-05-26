@@ -5439,6 +5439,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     ('external', 'Sistemas externos', 'Env\u00EDa datos a servicios externos', Color(0xFF3B82F6), ['webhook_out']),
     ('sheets', 'Hojas de c\u00E1lculo', 'Escribe o actualiza datos en Google Sheets', Color(0xFF10B981), ['google_sheets_append_row', 'google_sheets_update_row']),
     ('events', 'Eventos internos', 'Emite eventos para otros sistemas', Color(0xFFF59E0B), ['emit_event']),
+    ('groups', 'Notificaciones a grupos', 'Env\u00EDa un mensaje a un grupo de WhatsApp o Telegram', Color(0xFF00D1A3), ['notify_group']),
   ];
 
   static const _kActionExamples = <String, String>{
@@ -5448,6 +5449,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     'google_sheets_append_row': 'Agrega una fila nueva con los datos del flujo.',
     'google_sheets_update_row': 'Actualiza una fila existente en la hoja.',
     'emit_event': 'Emite un evento interno para otros flujos o servicios.',
+    'notify_group': 'Env\u00EDa un mensaje al grupo con los datos del flujo completado.',
   };
 
   bool _hasActionTypesInCategory(List<String> types) {
