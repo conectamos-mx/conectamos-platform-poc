@@ -10,7 +10,7 @@ import '../../../core/theme/text_styles.dart';
 import '../../../shared/widgets/app_badge.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_drop_zone.dart';
-import '../../../shared/widgets/app_dropdown.dart';
+
 import '../../../shared/widgets/app_import_preview_table.dart';
 import '../../../shared/widgets/app_loading_state.dart';
 import '../../../shared/widgets/app_template_download.dart';
@@ -28,7 +28,6 @@ class _ImportOperatorsDialogState extends State<ImportOperatorsDialog> {
   int _step = 0; // 0=config, 1=preview, 2=result
 
   // ── Step 1 state ──────────────────────────────────────────────────────────
-  String _strategy = 'all_or_nothing';
   Uint8List? _fileBytes;
   String? _fileName;
   bool _validating = false;
@@ -47,10 +46,11 @@ class _ImportOperatorsDialogState extends State<ImportOperatorsDialog> {
   int get _validCount => _dryValid.length;
   int get _errorCount => _dryErrors.length;
 
-  bool get _canImport {
-    if (_strategy == 'all_or_nothing' && _errorCount > 0) return false;
-    return _validCount > 0;
-  }
+  bool get _canImport => _validCount > 0;
+
+  String get _importLabel => _validCount == 1
+      ? 'Importar 1 operador'
+      : 'Importar $_validCount operadores';
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -61,7 +61,7 @@ class _ImportOperatorsDialogState extends State<ImportOperatorsDialog> {
       final result = await OperatorsApi.importDryRun(
         fileBytes: _fileBytes!,
         fileName: _fileName!,
-        strategy: _strategy,
+        strategy: 'skip_errors',
       );
       if (!mounted) return;
       setState(() {
@@ -100,7 +100,7 @@ class _ImportOperatorsDialogState extends State<ImportOperatorsDialog> {
       final result = await OperatorsApi.importOperators(
         fileBytes: _fileBytes!,
         fileName: _fileName!,
-        strategy: _strategy,
+        strategy: 'skip_errors',
       );
       if (!mounted) return;
       setState(() {
@@ -133,14 +133,21 @@ class _ImportOperatorsDialogState extends State<ImportOperatorsDialog> {
     }
   }
 
+  void _normalizePhone(Map<String, dynamic> data) {
+    final phone = data['phone'];
+    if (phone is String && phone.isNotEmpty && !phone.startsWith('+')) {
+      data['phone'] = '+$phone';
+    }
+  }
+
   void _downloadErrors() {
-    final lines = <String>['row,field,code,message'];
+    final lines = <String>['nombre,telefono,email,error'];
     for (final err in _dryErrors) {
-      final row = err['row'] ?? '';
-      final field = err['field'] ?? '';
-      final code = err['code'] ?? '';
-      final message = (err['message'] ?? '').toString().replaceAll('"', '""');
-      lines.add('$row,$field,$code,"$message"');
+      final name = _csvEscape(err['name'] ?? '');
+      final phone = _csvEscape(err['phone'] ?? '');
+      final email = _csvEscape(err['email'] ?? '');
+      final message = _csvEscape(err['message'] ?? err['code'] ?? '');
+      lines.add('$name,$phone,$email,$message');
     }
     final csv = lines.join('\n');
     final bytes = Uint8List.fromList(csv.codeUnits);
@@ -153,6 +160,13 @@ class _ImportOperatorsDialogState extends State<ImportOperatorsDialog> {
     anchor.click();
     anchor.remove();
     html.Url.revokeObjectUrl(url);
+  }
+
+  String _csvEscape(dynamic value) {
+    final s = (value ?? '').toString().replaceAll('"', '""');
+    return s.contains(',') || s.contains('"') || s.contains('\n')
+        ? '"$s"'
+        : s;
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -258,29 +272,6 @@ class _ImportOperatorsDialogState extends State<ImportOperatorsDialog> {
           ),
           const SizedBox(height: 20),
 
-          // Strategy
-          AppDropdown<String>(
-            label: 'Estrategia de importaci\u00F3n',
-            value: _strategy,
-            hint: 'Seleccionar',
-            items: const [
-              AppDropdownItem(
-                value: 'all_or_nothing',
-                label: 'Todo o nada',
-                subtitle: 'Cancela la importaci\u00F3n completa si hay errores',
-              ),
-              AppDropdownItem(
-                value: 'skip_errors',
-                label: 'Saltar errores',
-                subtitle: 'Importa las filas v\u00E1lidas y omite las que fallan',
-              ),
-            ],
-            onChanged: (v) {
-              if (v != null) setState(() => _strategy = v);
-            },
-          ),
-          const SizedBox(height: 20),
-
           // File drop zone
           Text('Archivo', style: AppTextStyles.formLabel),
           const SizedBox(height: 8),
@@ -313,6 +304,7 @@ class _ImportOperatorsDialogState extends State<ImportOperatorsDialog> {
     final rows = <ImportRow>[
       ..._dryValid.map((v) {
         final data = Map<String, dynamic>.from(v['data'] ?? v);
+        _normalizePhone(data);
         final row = v['row'] as int? ?? 0;
         return ImportRow(row: row, data: data);
       }),
@@ -516,17 +508,12 @@ class _ImportOperatorsDialogState extends State<ImportOperatorsDialog> {
                 onPressed: () => setState(() => _step = 0),
               ),
               const SizedBox(width: 8),
-              Tooltip(
-                message: !_canImport
-                    ? 'Corrige los errores y vuelve a subir'
-                    : '',
-                child: AppButton(
-                  label: 'Importar $_validCount operadores',
-                  variant: AppButtonVariant.teal,
-                  size: AppButtonSize.sm,
-                  isDisabled: !_canImport,
-                  onPressed: _import,
-                ),
+              AppButton(
+                label: _importLabel,
+                variant: AppButtonVariant.teal,
+                size: AppButtonSize.sm,
+                isDisabled: !_canImport,
+                onPressed: _import,
               ),
             ],
           _ => [
