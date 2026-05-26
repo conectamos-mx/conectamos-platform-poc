@@ -8,6 +8,7 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/screen_header.dart';
+import 'widgets/import_operators_dialog.dart';
 import 'widgets/operator_form_dialog.dart';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -140,6 +141,15 @@ class _OperatorsScreenState extends ConsumerState<OperatorsScreen> {
                   OperatorFormDialog(onSaved: _fetchOperators),
             );
           },
+          onImport: () {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (_) => ImportOperatorsDialog(
+                onSuccess: _fetchOperators,
+              ),
+            );
+          },
         ),
 
         Expanded(
@@ -164,8 +174,13 @@ class _OperatorsScreenState extends ConsumerState<OperatorsScreen> {
 // ── Action bar ────────────────────────────────────────────────────────────────
 
 class _ActionBar extends StatelessWidget {
-  const _ActionBar({required this.onAdd, required this.canManage});
+  const _ActionBar({
+    required this.onAdd,
+    required this.onImport,
+    required this.canManage,
+  });
   final VoidCallback onAdd;
+  final VoidCallback onImport;
   final bool canManage;
 
   @override
@@ -174,7 +189,11 @@ class _ActionBar extends StatelessWidget {
       title: 'Operadores',
       subtitle: 'Gestiona los operadores y sus permisos de acceso',
       actions: [
-        if (canManage) AppButton(label: '+ Agregar operador', variant: AppButtonVariant.teal, size: AppButtonSize.sm, onPressed: onAdd),
+        if (canManage) ...[
+          AppButton(label: 'Importar', variant: AppButtonVariant.outline, size: AppButtonSize.sm, prefixIcon: const Icon(Icons.upload_file_rounded, size: 14, color: AppColors.ctInk700), onPressed: onImport),
+          const SizedBox(width: 8),
+          AppButton(label: '+ Agregar operador', variant: AppButtonVariant.teal, size: AppButtonSize.sm, onPressed: onAdd),
+        ],
       ],
     );
   }

@@ -1,4 +1,6 @@
+import 'dart:typed_data';
 import 'package:conectamos_platform/core/api/api_client.dart';
+import 'package:dio/dio.dart';
 
 class OperatorsApi {
   static Future<List<Map<String, dynamic>>> listOperators() async {
@@ -202,5 +204,25 @@ class OperatorsApi {
       return List<Map<String, dynamic>>.from(data['channels'] as List);
     }
     return [];
+  }
+
+  static Future<Map<String, dynamic>> importOperators({
+    required Uint8List fileBytes,
+    required String fileName,
+    String strategy = 'all_or_nothing',
+  }) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
+      'strategy': strategy,
+    });
+    final response = await ApiClient.instance.post(
+      '/operators/import',
+      data: formData,
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  static String templateUrl({String nationality = 'MX'}) {
+    return '${ApiClient.baseUrl}/operators/export/template?nationality=$nationality';
   }
 }

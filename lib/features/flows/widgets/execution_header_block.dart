@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_menu_button.dart';
 import 'execution_export.dart';
 
 // ── Public widget ────────────────────────────────────────────────────────────
@@ -152,14 +153,32 @@ class ExecutionHeaderBlock extends StatelessWidget {
                   AppButton(
                     label: 'Ver definición',
                     onPressed: () {
-                      if (flowId.isNotEmpty) context.go('/flows/$flowId');
+                      final wId = flow['tenant_worker_id'] as String?;
+                      if (wId != null && flowId.isNotEmpty) {
+                        context.go('/workers/$wId?selectedFlow=$flowId');
+                      }
                     },
                     variant: AppButtonVariant.outline,
                     size: AppButtonSize.sm,
                     prefixIcon: const Icon(Icons.open_in_new_rounded, size: 13, color: AppColors.ctInk700),
                   ),
                   const SizedBox(width: 6),
-                  _ExportMenuButton(exec: exec, flow: flow),
+                  AppMenuButton(
+                    label: 'Exportar',
+                    icon: Icons.download_rounded,
+                    items: [
+                      AppMenuButtonItem(
+                        label: 'Exportar PDF',
+                        icon: Icons.picture_as_pdf_rounded,
+                        onTap: () => exportExecutionPdf(exec, flow),
+                      ),
+                      AppMenuButtonItem(
+                        label: 'Exportar XLS',
+                        icon: Icons.table_chart_rounded,
+                        onTap: () => exportExecutionXls(exec, flow),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ],
@@ -555,63 +574,4 @@ class _ChannelBadge extends StatelessWidget {
   }
 }
 
-class _ExportMenuButton extends StatelessWidget {
-  const _ExportMenuButton({required this.exec, required this.flow});
-  final Map<String, dynamic> exec;
-  final Map<String, dynamic> flow;
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      offset: const Offset(0, 36),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      color: AppColors.ctSurface,
-      elevation: 4,
-      onSelected: (value) {
-        if (value == 'pdf') {
-          exportExecutionPdf(exec, flow);
-        } else if (value == 'xls') {
-          exportExecutionXls(exec, flow);
-        }
-      },
-      itemBuilder: (_) => [
-        PopupMenuItem<String>(
-          value: 'pdf',
-          height: 40,
-          child: Row(
-            children: [
-              const Icon(Icons.picture_as_pdf_rounded,
-                  size: 16, color: Color(0xFFEF4444)),
-              const SizedBox(width: 10),
-              Text('Exportar PDF',
-                  style: AppFonts.geist(
-                      fontSize: 13, color: AppColors.ctText)),
-            ],
-          ),
-        ),
-        PopupMenuItem<String>(
-          value: 'xls',
-          height: 40,
-          child: Row(
-            children: [
-              const Icon(Icons.table_chart_rounded,
-                  size: 16, color: Color(0xFF107C41)),
-              const SizedBox(width: 10),
-              Text('Exportar XLS',
-                  style: AppFonts.geist(
-                      fontSize: 13, color: AppColors.ctText)),
-            ],
-          ),
-        ),
-      ],
-      child: AppButton(
-        label: 'Exportar',
-        onPressed: () {},
-        variant: AppButtonVariant.outline,
-        size: AppButtonSize.sm,
-        prefixIcon: const Icon(Icons.download_rounded, size: 13, color: AppColors.ctInk700),
-      ),
-    );
-  }
-}
 
