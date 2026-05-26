@@ -231,7 +231,11 @@ class ExecutionMetadataSidebar extends StatelessWidget {
             action: AppButton(
               label: 'Editor',
               onPressed: () {
-                if (flowSlug.isNotEmpty) context.go('/flows/$flowSlug');
+                final wId = flow['tenant_worker_id'] as String?;
+                final fId = flow['id'] as String?;
+                if (wId != null && fId != null) {
+                  context.go('/workers/$wId?selectedFlow=$fId');
+                }
               },
               prefixIcon: const Icon(Icons.arrow_outward_rounded, size: 12),
               variant: AppButtonVariant.ghost,
