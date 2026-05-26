@@ -68,6 +68,19 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
     return box?.size.width ?? 240;
   }
 
+  double _getAvailableHeight() {
+    final box = _triggerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || _triggerKey.currentContext == null) {
+      return widget.maxOverlayHeight;
+    }
+    final triggerBottomY =
+        box.localToGlobal(Offset(0, box.size.height)).dy;
+    final viewportHeight =
+        MediaQuery.of(_triggerKey.currentContext!).size.height;
+    final available = viewportHeight - triggerBottomY - 16;
+    return available.clamp(120.0, widget.maxOverlayHeight);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -247,7 +260,7 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
             color: Colors.transparent,
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxHeight: widget.maxOverlayHeight,
+                maxHeight: _getAvailableHeight(),
                 minWidth: _getTriggerWidth(),
                 maxWidth: _getTriggerWidth(),
               ),
