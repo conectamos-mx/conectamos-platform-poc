@@ -153,7 +153,10 @@ class ExecutionHeaderBlock extends StatelessWidget {
                   AppButton(
                     label: 'Ver definición',
                     onPressed: () {
-                      if (flowId.isNotEmpty) context.go('/flows/$flowId');
+                      final wId = flow['tenant_worker_id'] as String?;
+                      if (wId != null && flowId.isNotEmpty) {
+                        context.go('/workers/$wId?selectedFlow=$flowId');
+                      }
                     },
                     variant: AppButtonVariant.outline,
                     size: AppButtonSize.sm,

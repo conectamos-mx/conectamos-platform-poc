@@ -76,7 +76,18 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 3, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final selectedFlow = GoRouterState.of(context)
+          .uri
+          .queryParameters['selectedFlow'];
+      if (selectedFlow != null && selectedFlow.isNotEmpty) {
+        setState(() {
+          _selectedFlowId = selectedFlow;
+          _tabCtrl.animateTo(2);
+        });
+      }
+      _load();
+    });
   }
 
   @override

@@ -17,10 +17,12 @@ class FlowIntegrationsScreen extends ConsumerStatefulWidget {
     super.key,
     required this.flowId,
     required this.flowName,
+    required this.tenantWorkerId,
   });
 
   final String flowId;
   final String flowName;
+  final String tenantWorkerId;
 
   @override
   ConsumerState<FlowIntegrationsScreen> createState() =>
@@ -195,7 +197,7 @@ class _FlowIntegrationsScreenState
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => context.go('/flows/${widget.flowId}'),
+          onPressed: () => context.go('/workers/${widget.tenantWorkerId}?selectedFlow=${widget.flowId}'),
         ),
         title: Text(
           'Integraciones — ${widget.flowName}',
