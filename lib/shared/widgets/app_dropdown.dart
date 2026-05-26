@@ -208,7 +208,7 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
                                     : AppColors.ctText3)
                                 : AppColors.ctText3,
                           ),
-                          overflow: TextOverflow.ellipsis,
+                          softWrap: true,
                         ),
                       ),
                       const SizedBox(width: 8),

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
@@ -30,8 +31,10 @@ class AppDropZone extends StatefulWidget {
 }
 
 class _AppDropZoneState extends State<AppDropZone> {
-  bool _hovering = false;
+  bool _isDragging = false;
   String? _selectedFilename;
+
+  // ── File picker (tap fallback) ──────────────────────────────────────────
 
   Future<void> _pickFile() async {
     if (widget.isLoading) return;
@@ -45,21 +48,37 @@ class _AppDropZoneState extends State<AppDropZone> {
     if (file.bytes == null) return;
 
     if (!_isExtensionAllowed(file.name)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Extensión no permitida. Usa: ${widget.allowedExtensions.join(', ')}',
-            ),
-          ),
-        );
-      }
+      _showExtensionError();
       return;
     }
 
     setState(() => _selectedFilename = file.name);
     widget.onFilePicked(file.bytes!, file.name);
   }
+
+  // ── Drag & drop handler ─────────────────────────────────────────────────
+
+  void _onDragDone(DropDoneDetails details) {
+    if (widget.isLoading || details.files.isEmpty) return;
+    final file = details.files.first;
+
+    if (!_isExtensionAllowed(file.name)) {
+      _showExtensionError();
+      setState(() => _isDragging = false);
+      return;
+    }
+
+    file.readAsBytes().then((bytes) {
+      if (!mounted) return;
+      setState(() {
+        _selectedFilename = file.name;
+        _isDragging = false;
+      });
+      widget.onFilePicked(bytes, file.name);
+    });
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
 
   bool _isExtensionAllowed(String filename) {
     final ext = filename.split('.').last.toLowerCase();
@@ -68,65 +87,84 @@ class _AppDropZoneState extends State<AppDropZone> {
         .contains(ext);
   }
 
+  void _showExtensionError() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Extension no permitida. Usa: ${widget.allowedExtensions.join(', ')}',
+        ),
+      ),
+    );
+  }
+
   void _clear() {
     setState(() => _selectedFilename = null);
   }
 
+  // ── Build ───────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final borderColor =
-        _hovering ? AppColors.ctTeal : AppColors.ctBorder2;
-    final bgColor =
-        _hovering ? AppColors.ctTeal.withValues(alpha: 0.06) : AppColors.ctSurface;
+    final active = _isDragging && !widget.isLoading;
+    final borderColor = active ? AppColors.ctTeal : AppColors.ctBorder2;
+    final bgColor = active
+        ? AppColors.ctTeal.withValues(alpha: 0.06)
+        : AppColors.ctSurface;
 
-    return GestureDetector(
-      onTap: _selectedFilename == null ? _pickFile : null,
-      child: MouseRegion(
-        cursor: widget.isLoading
-            ? SystemMouseCursors.basic
-            : SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovering = true),
-        onExit: (_) => setState(() => _hovering = false),
-        child: Stack(
-          children: [
-            CustomPaint(
-              painter: _DashedBorderPainter(color: borderColor),
-              child: Container(
-                width: double.infinity,
-                constraints: const BoxConstraints(minHeight: 140),
-                decoration: BoxDecoration(
-                  color: bgColor,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  vertical: 28,
-                  horizontal: 24,
-                ),
-                child: _selectedFilename != null
-                    ? _SelectedFileRow(
-                        filename: _selectedFilename!,
-                        onClear: _clear,
-                      )
-                    : _EmptyState(
-                        label: widget.label,
-                        sublabel: widget.sublabel,
-                        extensions: widget.allowedExtensions,
-                      ),
-              ),
-            ),
-            if (widget.isLoading)
-              Positioned.fill(
+    return DropTarget(
+      onDragDone: _onDragDone,
+      onDragEntered: (_) => setState(() => _isDragging = true),
+      onDragExited: (_) => setState(() => _isDragging = false),
+      child: GestureDetector(
+        onTap: _selectedFilename == null && !widget.isLoading
+            ? _pickFile
+            : null,
+        child: MouseRegion(
+          cursor: widget.isLoading
+              ? SystemMouseCursors.basic
+              : SystemMouseCursors.click,
+          child: Stack(
+            children: [
+              CustomPaint(
+                painter: _DashedBorderPainter(color: borderColor),
                 child: Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(minHeight: 140),
                   decoration: BoxDecoration(
-                    color: AppColors.ctSurface.withValues(alpha: 0.7),
+                    color: bgColor,
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const AppLoadingState.inline(
-                    message: 'Procesando archivo...',
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 28,
+                    horizontal: 24,
                   ),
+                  child: _selectedFilename != null
+                      ? _SelectedFileRow(
+                          filename: _selectedFilename!,
+                          onClear: _clear,
+                        )
+                      : _EmptyState(
+                          label: widget.label,
+                          sublabel: widget.sublabel,
+                          extensions: widget.allowedExtensions,
+                        ),
                 ),
               ),
-          ],
+              if (widget.isLoading)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.ctSurface.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const AppLoadingState.inline(
+                      message: 'Procesando archivo...',
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -165,7 +203,8 @@ class _EmptyState extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          sublabel ?? 'Formatos: ${extensions.map((e) => '.${e.toUpperCase()}').join(', ')}',
+          sublabel ??
+              'Formatos: ${extensions.map((e) => '.${e.toUpperCase()}').join(', ')}',
           style: AppTextStyles.caption,
         ),
       ],
