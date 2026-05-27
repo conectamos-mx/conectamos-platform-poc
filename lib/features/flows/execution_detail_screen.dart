@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/api/executions_api.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
@@ -72,8 +73,16 @@ class _ExecutionDetailScreenState
       _error = null;
     });
     try {
-      final raw = await FlowsApi.getExecution(
-          executionId: widget.executionId);
+      final results = await Future.wait([
+        FlowsApi.getExecution(executionId: widget.executionId),
+        ExecutionsApi.getMessages(executionId: widget.executionId)
+            .catchError((_) => <Map<String, dynamic>>[]),
+      ]);
+      final raw = results[0] as Map<String, dynamic>;
+      final messages = results[1] as List<Map<String, dynamic>>;
+      if (messages.isNotEmpty && (raw['messages'] as List?)?.isEmpty != false) {
+        raw['messages'] = messages;
+      }
       final snapshot =
           (raw['flow_definition_snapshot'] as Map?)?.cast<String, dynamic>() ??
               {};

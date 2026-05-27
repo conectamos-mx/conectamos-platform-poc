@@ -163,6 +163,21 @@ class ExecutionsApi {
     }
   }
 
+  /// Lista mensajes asociados a una ejecución.
+  static Future<List<Map<String, dynamic>>> getMessages({
+    required String executionId,
+  }) async {
+    final resp = await ApiClient.instance.get(
+      '/api/v1/dashboard/executions/$executionId/messages',
+    );
+    final data = resp.data;
+    final list = data is List
+        ? data
+        : (data is Map ? (data['messages'] ?? []) : []);
+    return List<Map<String, dynamic>>.from(
+        (list as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
+  }
+
   /// Campos buscables por clave de campo (para filtro avanzado).
   static Future<Map<String, dynamic>> getSearchableFields({
     required String tenantId,
