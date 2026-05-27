@@ -404,6 +404,52 @@ class _FieldsBlockState extends State<_FieldsBlock> {
         _ => t,
       };
 
+  // ── show_if helpers ───────────────────────────────────────────────────────
+
+  /// Canonical form for comparison: "sí"/"si" → "true", "no" → "false", else lowercase trim.
+  static String _normalize(String v) {
+    final lc = v.trim().toLowerCase();
+    if (lc == 'sí' || lc == 'si') return 'true';
+    if (lc == 'no') return 'false';
+    return lc;
+  }
+
+  static bool _evalShowIfOp(String? controlValue, String op, dynamic expected) {
+    if (controlValue == null) return false; // unknown → can't satisfy
+    final a = _normalize(controlValue);
+    final b = _normalize(expected.toString());
+    return switch (op) {
+      'eq' || '==' => a == b,
+      'neq' || '!=' => a != b,
+      _ => true, // fail-open
+    };
+  }
+
+  /// Returns: 'visible', 'hidden', or 'visible_unknown'.
+  static String _fieldVisibility(
+    Map<String, dynamic> field,
+    Map<String, Map> fvMap,
+    String execStatus,
+  ) {
+    final showIf = field['show_if'];
+    if (showIf is! Map) return 'visible';
+    final depField = showIf['field'] as String?;
+    final op = showIf['op'] as String?;
+    final expected = showIf['value'];
+    if (depField == null || op == null || expected == null) return 'visible';
+
+    final depFv = fvMap[depField];
+    final controlValue = depFv?['value_text'] as String?;
+
+    if (controlValue == null) {
+      // Controlling field not yet captured
+      const activeStatuses = {'created', 'active'};
+      return activeStatuses.contains(execStatus) ? 'visible_unknown' : 'hidden';
+    }
+
+    return _evalShowIfOp(controlValue, op, expected) ? 'visible' : 'hidden';
+  }
+
   static bool _fvHasValue(Map<String, dynamic> fv) =>
       fv['value_text'] != null ||
       fv['value_numeric'] != null ||
@@ -586,14 +632,26 @@ class _FieldsBlockState extends State<_FieldsBlock> {
       if (k is String && k.isNotEmpty) fvMap[k] = item;
     }
 
-    // Types present in this flow (normalized)
+    // Execution status for show_if evaluation
+    final execStatus = widget.exec['status'] as String? ?? '';
+
+    // Compute visibility per field (show_if logic)
+    final fieldVis = <String, String>{
+      for (final f in fields)
+        (f['key'] as String? ?? ''): _fieldVisibility(f, fvMap, execStatus),
+    };
+
+    // Types present in this flow (normalized) — only non-hidden fields
     final presentTypes = fields
+        .where((f) => fieldVis[f['key'] as String? ?? ''] != 'hidden')
         .map((f) => _normalizeType(f['type'] as String? ?? 'text'))
         .toSet();
 
-    // Progress
-    final total = fields.length;
-    final filled = fields.where((f) {
+    // Progress — count only non-hidden fields
+    final expectedFields = fields.where((f) =>
+        fieldVis[f['key'] as String? ?? ''] != 'hidden');
+    final total = expectedFields.length;
+    final filled = expectedFields.where((f) {
       final key = f['key'];
       if (key is! String) return false;
       final fv = fvMap[key];
@@ -604,22 +662,28 @@ class _FieldsBlockState extends State<_FieldsBlock> {
     final assetsAttached = (widget.exec['assets_attached'] as Map?)
         ?.cast<String, dynamic>();
 
-    // Resolve values and pending list
+    // Resolve values and pending list — skip hidden fields for pending
     final values = <String, dynamic>{};
     final pending = <String>[];
+    const activeStatuses = {'created', 'active'};
     for (final field in fields) {
       final key = field['key'] as String? ?? '';
+      final vis = fieldVis[key] ?? 'visible';
       final fvRaw = fvMap[key];
       final fv = fvRaw?.cast<String, dynamic>();
-      if (fv == null || !_fvHasValue(fv)) {
-        pending.add(key);
-      } else {
+      if (fv != null && _fvHasValue(fv)) {
         values[key] = _resolveValue(
           field['type'] as String? ?? 'text',
           fv,
           assetsAttached: assetsAttached,
           fieldKey: key,
         );
+      } else if (vis != 'hidden') {
+        // Only mark as pending if visible AND (active execution OR required)
+        final isRequired = field['required'] == true;
+        if (activeStatuses.contains(execStatus) && isRequired) {
+          pending.add(key);
+        }
       }
     }
 
@@ -651,6 +715,8 @@ class _FieldsBlockState extends State<_FieldsBlock> {
     };
     final visibleFields = (fields
         .where((f) {
+          final key = f['key'] as String? ?? '';
+          if (fieldVis[key] == 'hidden') return false;
           final type = f['type'] as String? ?? 'text';
           if (type == 'photo' || type == 'media') return false;
           return !_hiddenTypes.contains(_normalizeType(type));
