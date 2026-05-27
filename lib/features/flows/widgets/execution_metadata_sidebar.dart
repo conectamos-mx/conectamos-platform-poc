@@ -111,22 +111,40 @@ class ExecutionMetadataSidebar extends StatelessWidget {
       }
     }
 
-    // Channel (nested Map or fallback to actor_type)
+    // Channel: try exec['channel'], then resolved_channels, then actor_type
     final channelRaw = exec['channel'];
     final Map<String, dynamic>? channelMap = channelRaw is Map
         ? Map<String, dynamic>.from(channelRaw)
         : null;
     final channelType = channelMap?['channel_type'] as String?;
     final channelDisplayName = channelMap?['display_name'] as String?;
-    // Fallback: infer from actor_type when channel is null
+
+    // Fallback: resolved_channels from backend
+    final resolvedChannels = exec['resolved_channels'];
+    final List<String> resolvedTypes;
+    if (channelType != null) {
+      resolvedTypes = [channelType];
+    } else if (resolvedChannels is List && resolvedChannels.isNotEmpty) {
+      resolvedTypes = resolvedChannels
+          .whereType<Map>()
+          .map((c) => c['channel_type'] as String? ?? '')
+          .where((t) => t.isNotEmpty)
+          .toSet()
+          .toList();
+    } else {
+      resolvedTypes = [];
+    }
+
+    // Fallback: infer from actor_type when no channel info
     final actorType = exec['actor_type'] as String?;
-    final inferredChannelType = channelType ??
-        switch (actorType) {
-          'operator'    => 'whatsapp',
-          'tenant_user' => 'dashboard',
-          'system'      => 'api',
-          _             => null,
-        };
+    final inferredChannelType = resolvedTypes.isNotEmpty
+        ? resolvedTypes.first
+        : switch (actorType) {
+            'operator'    => 'whatsapp',
+            'tenant_user' => 'dashboard',
+            'system'      => 'api',
+            _             => null,
+          };
     final resolvedDisplayName = channelDisplayName ??
         switch (inferredChannelType) {
           'whatsapp'  => 'WhatsApp',
@@ -198,13 +216,30 @@ class ExecutionMetadataSidebar extends StatelessWidget {
                 ),
                 _KV(
                   label: 'Canal',
-                  value: inferredChannelType != null
-                      ? _ChannelLabel(
-                          channelType: inferredChannelType,
-                          displayName: resolvedDisplayName ?? '—')
-                      : Text('—',
-                          style: AppFonts.geist(
-                              fontSize: 12, color: AppColors.ctNavy)),
+                  value: resolvedTypes.length > 1
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (int i = 0; i < resolvedTypes.length; i++) ...[
+                              if (i > 0) const SizedBox(width: 6),
+                              _ChannelLabel(
+                                channelType: resolvedTypes[i],
+                                displayName: switch (resolvedTypes[i].toLowerCase()) {
+                                  'whatsapp' => 'WhatsApp',
+                                  'telegram' => 'Telegram',
+                                  'api'      => 'API',
+                                  _          => resolvedTypes[i],
+                                }),
+                            ],
+                          ],
+                        )
+                      : inferredChannelType != null
+                          ? _ChannelLabel(
+                              channelType: inferredChannelType,
+                              displayName: resolvedDisplayName ?? '—')
+                          : Text('—',
+                              style: AppFonts.geist(
+                                  fontSize: 12, color: AppColors.ctNavy)),
                 ),
                 _KV(
                   label: 'Progreso',
