@@ -270,7 +270,7 @@ class _FieldValue extends StatelessWidget {
       'text'             => _TextValue(value: effectiveValue, multiline: field['multiline'] == true),
       'number'           => _NumberValue(value: effectiveValue, unit: field['unit'] as String?),
       'date'             => _DateValue(value: effectiveValue),
-      'yesno'            => _YesNoValue(value: effectiveValue),
+      'boolean' || 'yesno' => _YesNoValue(value: effectiveValue),
       'select'           => _SelectValue(value: effectiveValue, options: field['options'] as List? ?? [], operatorOptions: operatorOptions),
       'photo' || 'media' => _PhotoGallery(photos: _toPhotoList(effectiveValue)),
       'location'         => effectiveValue is String && effectiveValue.trim().startsWith('http')
