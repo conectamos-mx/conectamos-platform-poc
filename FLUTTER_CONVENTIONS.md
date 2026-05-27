@@ -458,3 +458,24 @@ await AppWizardShell.show(
 | `_AddRuleDialog` | `flow_detail_screen.dart` | Wizard custom (2 pasos) — evaluar migracion |
 | `_ActionDialog` | `flow_detail_screen.dart` | Wizard custom (catalogo + form) — evaluar migracion |
 | Canal nuevo (inline) | `channels_screen.dart` | Stepper custom sidebar — evaluar migracion |
+
+---
+
+## show_if evaluation en execution detail
+
+Patron establecido en ADR-347. Tres helpers en `execution_detail_screen.dart`:
+
+- `_normalize(String v)` → `String`: canonicaliza variantes de Si/No → `"true"`/`"false"`, cualquier otro → lowercase trim
+- `_evalShowIfOp(String? control, String op, dynamic expected)` → `bool`: eq/==/neq/!=, fail-open para ops desconocidos
+- `_fieldVisibility(Map field, Map fvMap, String execStatus)` → `String`: `"visible"`/`"hidden"`/`"visible_unknown"`
+
+**Regla de consumers:** solo 3 consumers usan el filtro de visibilidad:
+1. `presentTypes` — excluye hidden del set de tipos
+2. `total`/`filled` (progress counter) — cuenta solo campos no-hidden
+3. `visibleFields` filter — excluye hidden antes de renderizar
+
+**Regla de knownKeys:** SIEMPRE usa `fields` completo (snapshot sin filtrar) — nunca `activeFields`. Un campo con show_if no cumplido NO es legacy, simplemente no se renderiza.
+
+**Regla de duplicacion:** no duplicar estos helpers en otros screens. Si se necesitan en mas de un lugar, extraer a `lib/core/utils/show_if_evaluator.dart`.
+
+**Sidebar y header ring:** `execution_metadata_sidebar.dart` y `execution_header_block.dart` tienen logica de show_if inline (no importan los helpers). Si se modifica la logica, actualizar los 3 archivos.
