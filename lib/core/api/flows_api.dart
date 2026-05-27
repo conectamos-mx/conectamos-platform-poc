@@ -349,23 +349,13 @@ class FlowsApi {
   }
 
   static Future<List<Map<String, dynamic>>> getPreconditionTypes() async {
-    try {
-      final response = await ApiClient.instance.get(
-        '/flows/precondition-types',
-      );
-      final raw = response.data;
-      final list = raw is Map ? (raw['types'] ?? []) : raw;
-      return List<Map<String, dynamic>>.from(
-          (list as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
-    } on DioException catch (e) {
-      print('[getPreconditionTypes] DioException: ${e.message}');
-      print('[getPreconditionTypes] status: ${e.response?.statusCode}');
-      print('[getPreconditionTypes] body: ${e.response?.data}');
-      rethrow;
-    } catch (e) {
-      print('[getPreconditionTypes] error: $e');
-      rethrow;
-    }
+    final response = await ApiClient.instance.get(
+      '/flows/precondition-types',
+    );
+    final raw = response.data;
+    final list = raw is Map ? (raw['types'] ?? []) : raw;
+    return List<Map<String, dynamic>>.from(
+        (list as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
   }
 
   static Future<Map<String, dynamic>> getDashboardCharts(

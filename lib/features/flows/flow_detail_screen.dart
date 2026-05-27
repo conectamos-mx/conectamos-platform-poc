@@ -3944,23 +3944,6 @@ class _AlCerrarTabState extends State<_AlCerrarTab> {
 
 // ── _ActionCard ───────────────────────────────────────────────────────────────
 
-IconData _actionIcon(String? type) {
-  switch (type) {
-    case 'open_flow_n_times':
-      return Icons.account_tree_outlined;
-    case 'webhook_out':
-      return Icons.webhook_outlined;
-    case 'emit_event':
-      return Icons.notifications_outlined;
-    case 'google_sheets_append_row':
-      return Icons.table_chart_outlined;
-    case 'notify_group':
-      return Icons.campaign_outlined;
-    default:
-      return Icons.account_tree_outlined;
-  }
-}
-
 String _actionLabel(String? type) {
   switch (type) {
     case 'open_flow':
