@@ -1854,8 +1854,24 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     final status    = exec['status']   as String? ?? 'unknown';
 
     final channelObj  = exec['channel'] as Map<String, dynamic>?;
-    final channelType = channelObj?['channel_type'] as String?
+    final singleType = channelObj?['channel_type'] as String?
         ?? exec['channel_type'] as String?;
+    final List<String> channelTypes;
+    if (singleType != null) {
+      channelTypes = [singleType];
+    } else {
+      final resolved = exec['resolved_channels'];
+      if (resolved is List && resolved.isNotEmpty) {
+        channelTypes = resolved
+            .whereType<Map>()
+            .map((c) => c['channel_type'] as String? ?? '')
+            .where((t) => t.isNotEmpty)
+            .toSet()
+            .toList();
+      } else {
+        channelTypes = [];
+      }
+    }
 
     final createdStr = exec['created_at']      as String?;
     final elapsedSec = exec['elapsed_seconds'] as int?;
@@ -1895,7 +1911,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
                     operator_:   operator_,
                     worker_:     worker_,
                     status:      status,
-                    channelType: channelType,
+                    channelTypes: channelTypes,
                     createdDt:   createdDt,
                     elapsedSec:  elapsedSec,
                     captured:    captured,
@@ -1927,7 +1943,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     required Map<String, dynamic>? operator_,
     required Map<String, dynamic>? worker_,
     required String status,
-    required String? channelType,
+    required List<String> channelTypes,
     required DateTime? createdDt,
     required int? elapsedSec,
     required int captured,
@@ -1984,7 +2000,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
           style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2),
         );
       case 'channel':
-        return _ChannelBadge(channelType: channelType);
+        return _ChannelBadge(channelTypes: channelTypes);
       case 'created':
         if (createdDt == null) {
           return Text('—',
@@ -2764,17 +2780,32 @@ class _StatusBadge extends StatelessWidget {
 // ── _ChannelBadge ─────────────────────────────────────────────────────────────
 
 class _ChannelBadge extends StatelessWidget {
-  const _ChannelBadge({required this.channelType});
+  const _ChannelBadge({required this.channelTypes});
 
-  final String? channelType;
+  final List<String> channelTypes;
 
   @override
   Widget build(BuildContext context) {
-    if (channelType == null) {
+    if (channelTypes.isEmpty) {
       return Text('—',
           style: AppFonts.geist(fontSize: 12, color: AppColors.ctText3));
     }
-    final lc = channelType!.toLowerCase();
+    if (channelTypes.length == 1) {
+      return _singleBadge(channelTypes.first);
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 0; i < channelTypes.length; i++) ...[
+          if (i > 0) const SizedBox(width: 4),
+          _singleBadge(channelTypes[i]),
+        ],
+      ],
+    );
+  }
+
+  static Widget _singleBadge(String type) {
+    final lc = type.toLowerCase();
 
     final (bg, bd) = switch (lc) {
       'whatsapp' || 'wa' => (const Color(0xFFE8F8EF), const Color(0xFFBBF7D0)),
