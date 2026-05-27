@@ -705,7 +705,7 @@ class _FieldsBlockState extends State<_FieldsBlock> {
         .toList();
 
     // Legacy field_values not in snapshot
-    final knownKeys = fields.map((f) => f['key'] as String? ?? '').toSet();
+    final knownKeys = activeFields.map((f) => f['key'] as String? ?? '').toSet();
     final legacyKeys = fvMap.keys.where((k) => !knownKeys.contains(k)).toList();
     final legacyValues = <String, dynamic>{
       for (final k in legacyKeys)
