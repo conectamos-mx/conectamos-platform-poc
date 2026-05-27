@@ -94,11 +94,8 @@ appBar: AppBar(
     labelColor: AppColors.ctTeal,
     unselectedLabelColor: AppColors.ctText2,
     indicatorColor: AppColors.ctTeal,
-    labelStyle: const TextStyle(
-      fontFamily: 'Geist',
-      fontSize: 12,
-      fontWeight: FontWeight.w600,
-    ),
+    labelStyle: AppTextStyles.formLabel,
+    unselectedLabelStyle: AppTextStyles.navItem,
     tabs: const [
       Tab(text: 'INFO'),
       Tab(text: 'CAMPOS'),
