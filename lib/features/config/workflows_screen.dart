@@ -249,7 +249,10 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
                 if (widget.onFlowSelected != null) {
                   widget.onFlowSelected!(id);
                 } else {
-                  context.go('/flows/$id');
+                  final wId = entry.value['tenant_worker_id'] as String? ?? '';
+                  if (wId.isNotEmpty) {
+                    context.go('/workers/$wId?selectedFlow=$id');
+                  }
                 }
               },
               canManage: canManage,
