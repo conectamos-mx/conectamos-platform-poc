@@ -59,6 +59,11 @@ abstract final class AppColors {
   static const ctTg       = Color(0xFF229ED9);
   static const ctTgBubble = Color(0xFFDBEAFE);
 
+  // Mensajes / snackbar
+  static const waMessageBubble = Color(0xFFE7FFDB);
+  static const errorBorder     = Color(0xFFFCA5A5);
+  static const snackbarSuccess = Color(0xFF059669);
+
   // Alias legacy — no eliminar hasta migrar referencias
   static const waBubbleAi = ctWaBubble;
 }
