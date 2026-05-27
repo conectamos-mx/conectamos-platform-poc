@@ -404,30 +404,6 @@ class _FieldsBlockState extends State<_FieldsBlock> {
         _ => t,
       };
 
-  static bool _evaluateShowIf(
-    Map<String, dynamic> field,
-    Map<String, String> capturedValues,
-  ) {
-    final showIf = field['show_if'];
-    if (showIf is! Map) return true;
-    final depField = showIf['field'] as String?;
-    final op = showIf['op'] as String?;
-    final expected = showIf['value']?.toString();
-    if (depField == null || op == null || expected == null) return true;
-    final actual = capturedValues[depField];
-    return switch (op) {
-      'eq' || '==' => actual == expected,
-      'neq' || '!=' => actual != expected,
-      'in' => (showIf['value'] is List)
-          ? (showIf['value'] as List).map((e) => e.toString()).contains(actual)
-          : actual == expected,
-      'not_in' => (showIf['value'] is List)
-          ? !(showIf['value'] as List).map((e) => e.toString()).contains(actual)
-          : actual != expected,
-      _ => true, // fail-open
-    };
-  }
-
   static bool _fvHasValue(Map<String, dynamic> fv) =>
       fv['value_text'] != null ||
       fv['value_numeric'] != null ||
@@ -610,25 +586,14 @@ class _FieldsBlockState extends State<_FieldsBlock> {
       if (k is String && k.isNotEmpty) fvMap[k] = item;
     }
 
-    // Build captured values lookup for show_if evaluation
-    final capturedValues = <String, String>{
-      for (final entry in fvMap.entries)
-        entry.key: (entry.value['value_text'] as String?) ?? '',
-    };
-
-    // Filter out fields whose show_if condition is not met
-    final activeFields = fields
-        .where((f) => _evaluateShowIf(f, capturedValues))
-        .toList();
-
     // Types present in this flow (normalized)
-    final presentTypes = activeFields
+    final presentTypes = fields
         .map((f) => _normalizeType(f['type'] as String? ?? 'text'))
         .toSet();
 
     // Progress
-    final total = activeFields.length;
-    final filled = activeFields.where((f) {
+    final total = fields.length;
+    final filled = fields.where((f) {
       final key = f['key'];
       if (key is! String) return false;
       final fv = fvMap[key];
@@ -642,7 +607,7 @@ class _FieldsBlockState extends State<_FieldsBlock> {
     // Resolve values and pending list
     final values = <String, dynamic>{};
     final pending = <String>[];
-    for (final field in activeFields) {
+    for (final field in fields) {
       final key = field['key'] as String? ?? '';
       final fvRaw = fvMap[key];
       final fv = fvRaw?.cast<String, dynamic>();
@@ -660,7 +625,7 @@ class _FieldsBlockState extends State<_FieldsBlock> {
 
     // Build evidence photos list from photo/media fields
     final evidencePhotos = <({String url, String fieldLabel, String fieldKey})>[];
-    for (final field in activeFields) {
+    for (final field in fields) {
       final type = field['type'] as String? ?? 'text';
       if (type != 'photo' && type != 'media') continue;
       final key = field['key'] as String? ?? '';
@@ -684,7 +649,7 @@ class _FieldsBlockState extends State<_FieldsBlock> {
       'boolean': 3, 'yesno': 3,
       'select': 4, 'asset_ref': 5, 'location': 6,
     };
-    final visibleFields = (activeFields
+    final visibleFields = (fields
         .where((f) {
           final type = f['type'] as String? ?? 'text';
           if (type == 'photo' || type == 'media') return false;
@@ -705,7 +670,7 @@ class _FieldsBlockState extends State<_FieldsBlock> {
         .toList();
 
     // Legacy field_values not in snapshot
-    final knownKeys = activeFields.map((f) => f['key'] as String? ?? '').toSet();
+    final knownKeys = fields.map((f) => f['key'] as String? ?? '').toSet();
     final legacyKeys = fvMap.keys.where((k) => !knownKeys.contains(k)).toList();
     final legacyValues = <String, dynamic>{
       for (final k in legacyKeys)
