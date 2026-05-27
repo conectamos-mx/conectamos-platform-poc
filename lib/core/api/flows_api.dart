@@ -98,9 +98,24 @@ class FlowsApi {
   static Future<void> deleteFlow({
     required String flowId,
   }) async {
-    await ApiClient.instance.delete(
-      '/flows/$flowId',
-    );
+    try {
+      await ApiClient.instance.delete(
+        '/flows/$flowId',
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        final data = e.response?.data;
+        final detail = data is Map ? data['detail'] : null;
+        if (detail is Map) {
+          throw FlowDeleteBlockedException(
+            code: detail['code'] as String? ?? 'flow_has_active_executions',
+            message: detail['message'] as String? ?? 'Este flujo tiene ejecuciones activas.',
+            activeCount: detail['active_count'] as int? ?? 0,
+          );
+        }
+      }
+      rethrow;
+    }
   }
 
   // ── Integrations ────────────────────────────────────────────────────────────
@@ -380,4 +395,18 @@ class FlowsApi {
     }
     return byWidgetId;
   }
+}
+
+class FlowDeleteBlockedException implements Exception {
+  FlowDeleteBlockedException({
+    required this.code,
+    required this.message,
+    required this.activeCount,
+  });
+  final String code;
+  final String message;
+  final int activeCount;
+
+  @override
+  String toString() => message;
 }
