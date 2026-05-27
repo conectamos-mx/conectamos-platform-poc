@@ -69,9 +69,36 @@ class ExecutionMetadataSidebar extends StatelessWidget {
       if (k is String && k.isNotEmpty) fvMap[k] = fv;
     }
     final snapshotFields = (flow['fields'] as List?)?.whereType<Map>().toList() ?? [];
-    final total = snapshotFields.length;
+    final execStatus = exec['status'] as String? ?? '';
+    // Filter out fields hidden by show_if
+    final visibleSnapshotFields = snapshotFields.where((field) {
+      final showIf = field['show_if'];
+      if (showIf is! Map) return true;
+      final depField = showIf['field'] as String?;
+      final op = showIf['op'] as String?;
+      final expected = showIf['value'];
+      if (depField == null || op == null || expected == null) return true;
+      final controlValue = fvMap[depField]?['value_text'] as String?;
+      if (controlValue == null) {
+        return const {'created', 'active'}.contains(execStatus);
+      }
+      String norm(String v) {
+        final lc = v.trim().toLowerCase();
+        if (lc == 'sí' || lc == 'si') return 'true';
+        if (lc == 'no') return 'false';
+        return lc;
+      }
+      final a = norm(controlValue);
+      final b = norm(expected.toString());
+      return switch (op) {
+        'eq' || '==' => a == b,
+        'neq' || '!=' => a != b,
+        _ => true,
+      };
+    }).toList();
+    final total = visibleSnapshotFields.length;
     int filled = 0;
-    for (final field in snapshotFields) {
+    for (final field in visibleSnapshotFields) {
       final key = field['key'];
       if (key is! String) continue;
       final fv = fvMap[key];

@@ -575,7 +575,8 @@ class _YesNoValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (value == null) return const _PendingSlot();
-    final yes = value == true || value == 'true' || value == 1;
+    final v = value.toString().trim().toLowerCase();
+    final yes = const {'true', 'si', 'sí', 'yes', '1'}.contains(v);
 
     return Row(
       children: [
