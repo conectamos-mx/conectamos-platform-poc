@@ -576,17 +576,17 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFFE8F4FD),
+                color: AppColors.ctTgBubble,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(Icons.telegram,
-                      size: 14, color: Color(0xFF0088CC)),
+                      size: 14, color: AppColors.ctTg),
                   const SizedBox(width: 5),
                   Text(tgChatId,
-                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500, color: const Color(0xFF0088CC))),
+                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500, color: AppColors.ctTg)),
                 ],
               ),
             ),
@@ -742,9 +742,9 @@ class _ChannelTypeOrderList extends StatelessWidget {
   final ValueChanged<List<String>>? onReorder;
 
   static Color _color(String t) => switch (t) {
-    'whatsapp' => const Color(0xFF25D366),
-    'telegram' => const Color(0xFF229ED9),
-    'sms'      => const Color(0xFF6B7280),
+    'whatsapp' => AppColors.ctWa,
+    'telegram' => AppColors.ctTg,
+    'sms'      => AppColors.ctText2,
     _          => AppColors.ctText3,
   };
 
@@ -989,7 +989,7 @@ class _FlowCardState extends State<_FlowCard> {
             height: 32,
             decoration: BoxDecoration(
               color: isTelegram
-                  ? const Color(0xFFE8F4FD)
+                  ? AppColors.ctTgBubble
                   : AppColors.ctOkBg,
               shape: BoxShape.circle,
             ),
@@ -997,7 +997,7 @@ class _FlowCardState extends State<_FlowCard> {
               isTelegram ? Icons.telegram : Icons.chat_bubble_outline,
               size: 16,
               color: isTelegram
-                  ? const Color(0xFF0088CC)
+                  ? AppColors.ctTg
                   : AppColors.ctOk,
             ),
           ),
@@ -1037,7 +1037,7 @@ class _FlowCardState extends State<_FlowCard> {
               height: 28,
               child: TextButton(
                 style: TextButton.styleFrom(
-                  backgroundColor: const Color(0xFFE8F4FD),
+                  backgroundColor: AppColors.ctTgBubble,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(6)),
@@ -1050,7 +1050,7 @@ class _FlowCardState extends State<_FlowCard> {
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : Text('Enviar invitación',
                         style: AppTextStyles.badge.copyWith(
-                          color: const Color(0xFF0088CC),
+                          color: AppColors.ctTg,
                         )),
               ),
             ),
@@ -1483,17 +1483,13 @@ class _ConfirmDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancelar',
-              style:
-                  TextStyle(fontFamily: 'Geist', color: AppColors.ctText2)),
+          child: Text('Cancelar',
+              style: AppTextStyles.btnSecondary.copyWith(color: AppColors.ctText2)),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context, true),
           child: Text(confirmLabel,
-              style: TextStyle(
-                  fontFamily: 'Geist',
-                  fontWeight: FontWeight.w600,
-                  color: confirmColor)),
+              style: AppTextStyles.btnPrimary.copyWith(color: confirmColor)),
         ),
       ],
     );

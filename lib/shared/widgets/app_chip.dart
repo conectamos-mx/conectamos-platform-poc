@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/text_styles.dart';
 
 class AppChip extends StatefulWidget {
   const AppChip({
@@ -22,12 +23,7 @@ class AppChip extends StatefulWidget {
 class _AppChipState extends State<AppChip> {
   bool _hovered = false;
 
-  static const _textStyle = TextStyle(
-    fontFamily: 'Geist',
-    fontSize: 12,
-    fontWeight: FontWeight.w500,
-    letterSpacing: -0.01,
-  );
+  static const _textStyle = AppTextStyles.chipLabel;
 
   Color get _bgColor {
     if (widget.isActive) return AppColors.ctNavy;

@@ -832,12 +832,8 @@ class _NavSection extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 10, 14, 3),
       child: Text(
         label.toUpperCase(),
-        style: const TextStyle(
-          fontFamily: 'Geist',
-          fontSize: 9,
-          fontWeight: FontWeight.w700,
-          color: Color(0x40FFFFFF),
-          letterSpacing: 0.10,
+        style: AppTextStyles.navSectionLabel.copyWith(
+          color: const Color(0x40FFFFFF),
         ),
       ),
     );

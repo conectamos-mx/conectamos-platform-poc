@@ -82,7 +82,7 @@ class _FieldHeader extends StatelessWidget {
   static IconData _typeIcon(String type) => switch (type) {
         'number'    => Icons.pin_rounded,
         'date'      => Icons.calendar_month_rounded,
-        'yesno'     => Icons.toggle_on_rounded,
+        'boolean' || 'yesno' => Icons.toggle_on_rounded,
         'select'    => Icons.checklist_rounded,
         'photo' || 'media' => Icons.camera_alt_rounded,
         'asset_ref' => Icons.inventory_2_rounded,
@@ -93,7 +93,7 @@ class _FieldHeader extends StatelessWidget {
   static String _typeLabel(String type) => switch (type) {
         'number'    => 'Número',
         'date'      => 'Fecha',
-        'yesno'     => 'Sí / No',
+        'boolean' || 'yesno' => 'Sí / No',
         'select'    => 'Selección',
         'photo'     => 'Foto',
         'media'     => 'Foto/Media',
@@ -270,7 +270,7 @@ class _FieldValue extends StatelessWidget {
       'text'             => _TextValue(value: effectiveValue, multiline: field['multiline'] == true),
       'number'           => _NumberValue(value: effectiveValue, unit: field['unit'] as String?),
       'date'             => _DateValue(value: effectiveValue),
-      'yesno'            => _YesNoValue(value: effectiveValue),
+      'boolean' || 'yesno' => _YesNoValue(value: effectiveValue),
       'select'           => _SelectValue(value: effectiveValue, options: field['options'] as List? ?? [], operatorOptions: operatorOptions),
       'photo' || 'media' => _PhotoGallery(photos: _toPhotoList(effectiveValue)),
       'location'         => effectiveValue is String && effectiveValue.trim().startsWith('http')
@@ -575,7 +575,8 @@ class _YesNoValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (value == null) return const _PendingSlot();
-    final yes = value == true || value == 'true' || value == 1;
+    final v = value.toString().trim().toLowerCase();
+    final yes = const {'true', 'si', 'sí', 'yes', '1'}.contains(v);
 
     return Row(
       children: [

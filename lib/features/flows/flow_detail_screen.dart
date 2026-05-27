@@ -4974,6 +4974,12 @@ class _ActionDialogState extends State<_ActionDialog> {
     }
   }
 
+  static bool _hasOnComplete(Map<String, dynamic> f) {
+    final raw = f['trigger_sources'];
+    if (raw is List) return raw.contains('on_complete');
+    return false;
+  }
+
   Future<void> _loadFlows() async {
     if (widget.tenantWorkerId.isEmpty) return;
     setState(() => _loadingFlows = true);
@@ -5684,30 +5690,59 @@ class _ActionDialogState extends State<_ActionDialog> {
                           color: AppColors.ctTeal, strokeWidth: 2),
                     ),
                   )
-                else if (_availableFlows.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.ctBorder),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'No hay flujos disponibles para este worker',
-                      style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                    ),
-                  )
                 else
-                  AppDropdown<String?>(
-                    hint: 'Selecciona un flujo',
-                    value: _selectedFlowSlug,
-                    items: _availableFlows.map((f) {
-                      final slug = f['slug'] as String? ?? '';
-                      final name = f['name'] as String? ?? slug;
-                      return AppDropdownItem<String?>(value: slug, label: name);
-                    }).toList(),
-                    onChanged: (v) => setState(() => _selectedFlowSlug = v),
-                  ),
+                  Builder(builder: (_) {
+                    final chainable = _availableFlows.where(_hasOnComplete).toList();
+                    final selectedIsInvalid = _selectedFlowSlug != null &&
+                        !chainable.any((f) => f['slug'] == _selectedFlowSlug);
+                    final items = <AppDropdownItem<String?>>[
+                      ...chainable.map((f) {
+                        final slug = f['slug'] as String? ?? '';
+                        final name = f['name'] as String? ?? slug;
+                        return AppDropdownItem<String?>(value: slug, label: name);
+                      }),
+                      if (selectedIsInvalid)
+                        AppDropdownItem<String?>(
+                          value: _selectedFlowSlug,
+                          label: '${_availableFlows.firstWhere(
+                                (f) => f['slug'] == _selectedFlowSlug,
+                                orElse: () => {'name': _selectedFlowSlug!},
+                              )['name'] ?? _selectedFlowSlug} (sin permiso de encadenamiento)',
+                        ),
+                    ];
+                    if (items.isEmpty) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.ctBorder),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'No hay flows configurados para encadenamiento',
+                          style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+                        ),
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AppDropdown<String?>(
+                          hint: 'Selecciona un flujo',
+                          value: _selectedFlowSlug,
+                          items: items,
+                          onChanged: (v) => setState(() => _selectedFlowSlug = v),
+                        ),
+                        if (selectedIsInvalid)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'El flujo seleccionado no tiene "on_complete" en trigger_sources.',
+                              style: AppTextStyles.caption.copyWith(color: AppColors.ctDanger),
+                            ),
+                          ),
+                      ],
+                    );
+                  }),
                 const SizedBox(height: 8),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -5953,16 +5988,58 @@ class _ActionDialogState extends State<_ActionDialog> {
                     ),
                   )
                 else
-                  AppDropdown<String?>(
-                    hint: 'Selecciona un flujo',
-                    value: _selectedFlowSlug,
-                    items: _availableFlows.map((f) {
-                      final slug = f['slug'] as String? ?? '';
-                      final name = f['name'] as String? ?? slug;
-                      return AppDropdownItem<String?>(value: slug, label: name);
-                    }).toList(),
-                    onChanged: (v) => setState(() => _selectedFlowSlug = v),
-                  ),
+                  Builder(builder: (_) {
+                    final chainable = _availableFlows.where(_hasOnComplete).toList();
+                    final selectedIsInvalid = _selectedFlowSlug != null &&
+                        !chainable.any((f) => f['slug'] == _selectedFlowSlug);
+                    final items = <AppDropdownItem<String?>>[
+                      ...chainable.map((f) {
+                        final slug = f['slug'] as String? ?? '';
+                        final name = f['name'] as String? ?? slug;
+                        return AppDropdownItem<String?>(value: slug, label: name);
+                      }),
+                      if (selectedIsInvalid)
+                        AppDropdownItem<String?>(
+                          value: _selectedFlowSlug,
+                          label: '${_availableFlows.firstWhere(
+                                (f) => f['slug'] == _selectedFlowSlug,
+                                orElse: () => {'name': _selectedFlowSlug!},
+                              )['name'] ?? _selectedFlowSlug} (sin permiso de encadenamiento)',
+                        ),
+                    ];
+                    if (items.isEmpty) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.ctBorder),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'No hay flows configurados para encadenamiento',
+                          style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+                        ),
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AppDropdown<String?>(
+                          hint: 'Selecciona un flujo',
+                          value: _selectedFlowSlug,
+                          items: items,
+                          onChanged: (v) => setState(() => _selectedFlowSlug = v),
+                        ),
+                        if (selectedIsInvalid)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'El flujo seleccionado no tiene "on_complete" en trigger_sources.',
+                              style: AppTextStyles.caption.copyWith(color: AppColors.ctDanger),
+                            ),
+                          ),
+                      ],
+                    );
+                  }),
                 const SizedBox(height: 12),
                 Text(
                   'Campo de conteo',
