@@ -175,7 +175,7 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
       if (widget.onChannelSelected != null) {
         widget.onChannelSelected!(result);
       } else {
-        context.go('/channels/$result');
+        context.go('/workers');
       }
     }
   }
@@ -186,7 +186,10 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
     if (widget.onChannelSelected != null) {
       widget.onChannelSelected!(id);
     } else {
-      context.go('/channels/$id');
+      final wId = channel['tenant_worker_id'] as String? ?? '';
+      if (wId.isNotEmpty) {
+        context.go('/workers/$wId');
+      }
     }
   }
 

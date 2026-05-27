@@ -2303,7 +2303,7 @@ class _UsageRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: flowSlug.isNotEmpty ? () => context.go('/flows/$flowSlug') : null,
+      onTap: null, // Flow detail lives under /workers/:id — no workerId available here
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
