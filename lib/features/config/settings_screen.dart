@@ -1533,7 +1533,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
   }
 
   String? _validatePhone(String? value) {
-    if (value == null || value.trim().isEmpty) return 'El teléfono es obligatorio';
+    if (value == null || value.trim().isEmpty) return null; // phone is optional
     final cleaned = value.replaceAll(RegExp(r'[\s\-\(\)]'), '');
     if (RegExp(r'^\d{10}$').hasMatch(cleaned) ||
         RegExp(r'^52\d{10}$').hasMatch(cleaned) ||
@@ -1573,12 +1573,16 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
     }
     setState(() { _sending = true; _error = null; _phoneError = null; });
     try {
-      await IamApi.inviteUser({
-        'nombre':    nombre,
-        'telefono':  _normalizePhone(_telefonoCtrl.text.trim()),
-        'email':     email,
-        'role_id':   _roleId,
-      });
+      final phoneRaw = _telefonoCtrl.text.trim();
+      final payload = <String, dynamic>{
+        'nombre':  nombre,
+        'email':   email,
+        'role_id': _roleId,
+      };
+      if (phoneRaw.isNotEmpty) {
+        payload['telefono'] = _normalizePhone(phoneRaw);
+      }
+      await IamApi.inviteUser(payload);
       if (!mounted) return;
       widget.onInvited();
       Navigator.pop(context);
@@ -1634,7 +1638,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Teléfono',
+                      'Teléfono (opcional)',
                       style: AppTextStyles.formLabel,
                     ),
                     const SizedBox(height: 6),

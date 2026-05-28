@@ -239,6 +239,33 @@ class OperatorsApi {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
+  static Future<Map<String, dynamic>> linkToUser({
+    required String operatorId,
+    String? tenantUserId,
+    String? phone,
+  }) async {
+    assert(tenantUserId != null || phone != null,
+        'Se requiere tenantUserId o phone');
+    final body = <String, dynamic>{};
+    if (tenantUserId != null) body['tenant_user_id'] = tenantUserId;
+    if (phone != null) body['phone'] = phone;
+    final res = await ApiClient.instance.post(
+      '/operators/$operatorId/link-to-user',
+      data: body,
+    );
+    return res.data is Map
+        ? Map<String, dynamic>.from(res.data as Map)
+        : {};
+  }
+
+  static Future<void> unlinkFromUser({
+    required String operatorId,
+  }) async {
+    await ApiClient.instance.post(
+      '/operators/$operatorId/unlink-from-user',
+    );
+  }
+
   static String templateUrl({String nationality = 'MX'}) {
     return '${ApiClient.baseUrl}/operators/export/template?nationality=$nationality';
   }
