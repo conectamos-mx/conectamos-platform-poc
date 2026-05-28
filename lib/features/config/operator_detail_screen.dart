@@ -15,7 +15,9 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/identity_config.dart';
 import '../../shared/widgets/app_action_button.dart';
+import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/app_detail_header.dart';
 import 'widgets/operator_form_dialog.dart';
 
@@ -279,6 +281,8 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
     final canManage = hasPermission(ref, 'operators', 'manage');
     final status = op['status'] as String?;
 
+    final isLinked = op['linked_tenant_user_id'] != null;
+
     return Scaffold(
       backgroundColor: AppColors.ctBg,
       appBar: AppDetailHeader(
@@ -296,6 +300,12 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
             : const Icon(Icons.person_rounded, size: 22, color: AppColors.ctText2),
         statusLabel: _statusStyle(status).label,
         statusActive: status == 'active',
+        chips: [
+          AppBadge(
+            label: isLinked ? 'Vinculado' : 'Sin usuario',
+            variant: isLinked ? AppBadgeVariant.teal : AppBadgeVariant.neutral,
+          ),
+        ],
         actions: [
           if (canManage) ...[
             AppActionButton(
@@ -326,7 +336,7 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
             child: TabBarView(
               controller: _tabCtrl,
               children: [
-                _DatosTab(op: op),
+                _DatosTab(op: op, onReload: _load),
                 _FlujosTab(op: op, canManage: canManage),
                 const _PermisosTab(),
                 _HistorialTab(operatorId: widget.operatorId),
@@ -371,8 +381,9 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
 // ── Tab DATOS ──────────────────────────────────────────────────────────────────
 
 class _DatosTab extends ConsumerStatefulWidget {
-  const _DatosTab({required this.op});
+  const _DatosTab({required this.op, required this.onReload});
   final Map<String, dynamic> op;
+  final VoidCallback onReload;
 
   @override
   ConsumerState<_DatosTab> createState() => _DatosTabState();
@@ -563,7 +574,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
           const _SectionTitle('Información personal'),
           const SizedBox(height: 12),
           _FieldRow(label: 'Nombre completo', value: name),
-          if (email.isNotEmpty) _FieldRow(label: 'Email', value: email),
+          _FieldRow(label: 'Correo', value: email.isNotEmpty ? email : '—'),
           if (nationality.isNotEmpty)
             _FieldRow(label: 'Nacionalidad', value: nationality),
           if (identityNumber.isNotEmpty)
@@ -592,6 +603,71 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
             ),
             const SizedBox(height: 12),
           ],
+          // ── Vínculo con plataforma ──────────────────────────────────
+          const SizedBox(height: 16),
+          const _SectionTitle('Vínculo con plataforma'),
+          const SizedBox(height: 12),
+          Builder(builder: (context) {
+            final linkedUserId = op['linked_tenant_user_id'] as String?;
+            final linkedUserName = op['linked_tenant_user_nombre'] as String?;
+
+            if (linkedUserId != null) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _FieldRow(
+                    label: 'Usuario vinculado',
+                    value: linkedUserName ?? linkedUserId,
+                  ),
+                  const SizedBox(height: 10),
+                  if (canManage)
+                    AppButton(
+                      label: 'Desvincular',
+                      variant: AppButtonVariant.danger,
+                      size: AppButtonSize.sm,
+                      onPressed: () async {
+                        final ok = await AppConfirmDialog.show(
+                          context: context,
+                          title: 'Desvincular operador',
+                          body: 'El operador perderá acceso al panel. Puedes volver a vincularlo cuando quieras.',
+                          confirmLabel: 'Sí, desvincular',
+                          variant: AppConfirmDialogVariant.danger,
+                        );
+                        if (ok != true) return;
+                        try {
+                          await OperatorsApi.unlinkFromUser(
+                            operatorId: op['id'] as String,
+                          );
+                          widget.onReload();
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text('Error al desvincular: $e'),
+                            backgroundColor: AppColors.ctDanger,
+                          ));
+                        }
+                      },
+                    ),
+                ],
+              );
+            }
+
+            return AppButton(
+              label: 'Vincular usuario de plataforma',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.sm,
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (_) => _LinkUserDialog(
+                    operatorId: op['id'] as String,
+                    onSuccess: widget.onReload,
+                  ),
+                );
+              },
+            );
+          }),
+
           if (phoneSecondary.isNotEmpty) ...[
             const SizedBox(height: 8),
             const _SectionTitle('Teléfonos secundarios'),
@@ -1536,6 +1612,194 @@ class _FieldRow extends StatelessWidget {
           Text(value,
               style: AppTextStyles.body.copyWith(fontSize: 14)),
         ],
+      ),
+    );
+  }
+}
+
+// ── _LinkUserDialog ─────────────────────────────────────────────────────────
+
+class _LinkUserDialog extends StatefulWidget {
+  const _LinkUserDialog({
+    required this.operatorId,
+    required this.onSuccess,
+  });
+  final String operatorId;
+  final VoidCallback onSuccess;
+
+  @override
+  State<_LinkUserDialog> createState() => _LinkUserDialogState();
+}
+
+class _LinkUserDialogState extends State<_LinkUserDialog> {
+  final _phoneCtrl = TextEditingController();
+  bool _loading = false;
+  String? _fieldError;
+
+  bool get _isValid {
+    final cleaned = _phoneCtrl.text.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    if (!cleaned.startsWith('+')) return false;
+    final digits = cleaned.substring(1);
+    return digits.length >= 10 &&
+        digits.length <= 15 &&
+        RegExp(r'^\d+$').hasMatch(digits);
+  }
+
+  @override
+  void dispose() {
+    _phoneCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_isValid || _loading) return;
+    setState(() {
+      _loading = true;
+      _fieldError = null;
+    });
+
+    final cleaned = _phoneCtrl.text.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+
+    try {
+      await OperatorsApi.linkToUser(
+        operatorId: widget.operatorId,
+        phone: cleaned,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      widget.onSuccess();
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final status = e.response?.statusCode;
+      final data = e.response?.data;
+      final detail = data is Map ? data['detail'] : null;
+      final code = detail is Map ? detail['code'] as String? : null;
+
+      String? inline;
+      if (status == 404 || code == 'USER_NOT_FOUND_BY_PHONE') {
+        inline = 'No encontramos un usuario con ese teléfono';
+      } else if (code == 'TENANT_USER_ALREADY_LINKED') {
+        inline = 'Este usuario ya está vinculado a otro operador';
+      } else if (code == 'OPERATOR_ALREADY_LINKED') {
+        inline = 'Este operador ya está vinculado a otro usuario';
+      }
+
+      if (inline != null) {
+        setState(() {
+          _loading = false;
+          _fieldError = inline;
+        });
+      } else {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Error al vincular. Intenta de nuevo.'),
+          backgroundColor: AppColors.ctDanger,
+        ));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Error al vincular. Intenta de nuevo.'),
+        backgroundColor: AppColors.ctDanger,
+      ));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.ctSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppColors.ctBorder),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Vincular usuario de plataforma',
+                style: AppTextStyles.body
+                    .copyWith(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Ingresa el teléfono con el que el usuario inició sesión',
+                style:
+                    AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _phoneCtrl,
+                autofocus: true,
+                keyboardType: TextInputType.phone,
+                style: AppTextStyles.body,
+                onChanged: (_) => setState(() => _fieldError = null),
+                decoration: InputDecoration(
+                  labelText: 'Teléfono',
+                  labelStyle: AppTextStyles.formLabel,
+                  hintText: '+52 55 1234 5678',
+                  hintStyle:
+                      AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                  errorText: _fieldError,
+                  errorStyle: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.ctDanger),
+                  filled: true,
+                  fillColor: AppColors.ctSurface2,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.ctBorder2),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                      color: _fieldError != null
+                          ? AppColors.ctDanger
+                          : AppColors.ctBorder2,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                      color: _fieldError != null
+                          ? AppColors.ctDanger
+                          : AppColors.ctTeal,
+                      width: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  AppButton(
+                    label: 'Cancelar',
+                    variant: AppButtonVariant.ghost,
+                    size: AppButtonSize.sm,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  const SizedBox(width: 10),
+                  AppButton(
+                    label: _loading ? 'Vinculando...' : 'Vincular',
+                    variant: AppButtonVariant.teal,
+                    size: AppButtonSize.sm,
+                    isDisabled: !_isValid || _loading,
+                    isLoading: _loading,
+                    onPressed: _isValid ? _submit : () {},
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
