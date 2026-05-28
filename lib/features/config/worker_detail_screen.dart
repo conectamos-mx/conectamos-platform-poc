@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -17,6 +18,8 @@ import '../../shared/widgets/app_search_bar.dart';
 import '../../shared/widgets/app_stacked_metric_card.dart';
 import 'channel_detail_screen.dart';
 import 'channels_screen.dart';
+import '../../shared/widgets/app_text_field.dart';
+import '../../shared/widgets/app_wizard_shell.dart';
 import '../flows/flow_detail_screen.dart';
 
 // ── Helpers de archivo ────────────────────────────────────────────────────────
@@ -1430,7 +1433,16 @@ class _WorkerFlowsTabState extends ConsumerState<_WorkerFlowsTab> {
                 variant: AppButtonVariant.teal,
                 size: AppButtonSize.sm,
                 onPressed: () {
-                  // Open wizard from WorkflowsScreen — navigate to tab then open
+                  final tenantId = ref.read(activeTenantIdProvider);
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (_) => _NewFlowDialog(
+                      tenantId: tenantId,
+                      workerId: widget.workerId,
+                      onCreated: (_) => _load(),
+                    ),
+                  );
                 },
               ),
             ],
@@ -1856,6 +1868,390 @@ class _WorkerFlowCardState extends State<_WorkerFlowCard> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── _NewFlowDialog ───────────────────────────────────────────────────────────
+
+const _kFlowAccentMap = {
+  'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a',
+  'æ': 'ae', 'ç': 'c',
+  'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
+  'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i',
+  'ð': 'd', 'ñ': 'n',
+  'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o', 'ø': 'o',
+  'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u',
+  'ý': 'y', 'ÿ': 'y', 'þ': 'th', 'ß': 'ss',
+};
+
+String _flowSlugify(String input) {
+  final lower = input.toLowerCase();
+  final buf = StringBuffer();
+  for (final rune in lower.runes) {
+    final ch = String.fromCharCode(rune);
+    buf.write(_kFlowAccentMap[ch] ?? ch);
+  }
+  return buf
+      .toString()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+}
+
+class _NewFlowDialog extends StatefulWidget {
+  const _NewFlowDialog({
+    required this.tenantId,
+    required this.workerId,
+    required this.onCreated,
+  });
+  final String tenantId;
+  final String workerId;
+  final void Function(String flowId) onCreated;
+
+  @override
+  State<_NewFlowDialog> createState() => _NewFlowDialogState();
+}
+
+class _NewFlowDialogState extends State<_NewFlowDialog> {
+  final _nameCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  String? _slugError;
+
+  List<Map<String, dynamic>> _availableRoles = [];
+  final List<String> _selectedRoleIds = [];
+  final List<String> _selectedTriggers = [];
+  bool _loadingRoles = false;
+
+  static const _triggerOptions = [
+    ('conversational', 'Conversacional', 'El operador inicia el flujo por chat'),
+    ('ingest',         'API / Ingesta',  'Se activa por carga de datos externa'),
+    ('scheduled',      'Programado',     'Se ejecuta en horario autom\u00e1tico'),
+    ('on_complete',    'Al completar otro flujo', 'Se abre como acci\u00f3n de cierre'),
+  ];
+
+  String get _slug => _flowSlugify(_nameCtrl.text.trim());
+  bool get _slugValid => _slug.length >= 3;
+  bool get _canAdvance => _nameCtrl.text.trim().isNotEmpty && _slugValid;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl.addListener(_onNameChanged);
+    _loadRoles();
+  }
+
+  void _onNameChanged() {
+    if (_slugError != null) {
+      setState(() => _slugError = null);
+    } else {
+      setState(() {});
+    }
+  }
+
+  Future<void> _loadRoles() async {
+    setState(() => _loadingRoles = true);
+    try {
+      final roles = await OperatorRolesApi.listRoles(tenantId: widget.tenantId);
+      if (mounted) {
+        setState(() => _availableRoles = List<Map<String, dynamic>>.from(roles));
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loadingRoles = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.removeListener(_onNameChanged);
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    try {
+      final result = await FlowsApi.createFlow(
+        tenantWorkerId: widget.workerId,
+        name: _nameCtrl.text.trim(),
+        slug: _slug,
+        description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+        allowedRoleIds: _selectedRoleIds.isEmpty ? null : _selectedRoleIds,
+        triggerSources: _selectedTriggers.isEmpty ? null : _selectedTriggers,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      widget.onCreated(result['id'] as String);
+    } on DioException catch (e) {
+      if (!mounted) return;
+      if (e.response?.statusCode == 409) {
+        setState(() => _slugError = 'Ya existe un flujo con este nombre');
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppWizardShell(
+      sidebarTitle: 'Nuevo flujo',
+      confirmLabel: 'Crear flujo',
+      canAdvance: _canAdvance,
+      onCancel: () => Navigator.of(context).pop(),
+      onConfirm: _submit,
+      steps: [
+        AppWizardStep(title: 'Identidad', builder: (_) => _buildStep1()),
+        AppWizardStep(title: 'Acceso', builder: (_) => _buildStep2()),
+        AppWizardStep(title: 'Confirmar', builder: (_) => _buildStep3()),
+      ],
+    );
+  }
+
+  Widget _buildStep1() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppTextField(
+          controller: _nameCtrl,
+          label: 'Nombre del flujo',
+          hint: 'Ej: Entrega de paquete',
+        ),
+        if (_nameCtrl.text.trim().isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(
+                _slugValid ? Icons.check_circle_outline : Icons.error_outline,
+                size: 14,
+                color: _slugError != null
+                    ? AppColors.ctDanger
+                    : _slugValid
+                        ? AppColors.ctOk
+                        : AppColors.ctText3,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _slugError ?? 'slug: $_slug',
+                style: AppTextStyles.bodySmall.copyWith(
+                  fontFamily: 'Geist',
+                  color: _slugError != null
+                      ? AppColors.ctDanger
+                      : _slugValid
+                          ? AppColors.ctOk
+                          : AppColors.ctText3,
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 16),
+        AppTextField(
+          controller: _descCtrl,
+          label: 'Descripci\u00f3n (opcional)',
+          hint: 'Describe el prop\u00f3sito de este flujo...',
+          maxLines: 3,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStep2() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Roles con acceso',
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text(
+          'Selecciona qu\u00e9 roles pueden iniciar este flujo. Si no seleccionas ninguno, todos los roles tendr\u00e1n acceso.',
+          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+        ),
+        const SizedBox(height: 12),
+        if (_loadingRoles)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(child: SizedBox(
+              width: 18, height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctTeal),
+            )),
+          )
+        else if (_availableRoles.isEmpty)
+          Text('No hay roles disponibles. Podr\u00e1s asignarlos despu\u00e9s.',
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3))
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _availableRoles.map((role) {
+              final id = role['id'] as String? ?? '';
+              final name = role['label'] as String? ?? role['name'] as String? ?? id;
+              final selected = _selectedRoleIds.contains(id);
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    if (selected) {
+                      _selectedRoleIds.remove(id);
+                    } else {
+                      _selectedRoleIds.add(id);
+                    }
+                  });
+                },
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppColors.ctTeal.withValues(alpha: 0.1)
+                          : AppColors.ctSurface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: selected ? AppColors.ctTeal : AppColors.ctBorder,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (selected) ...[
+                          const Icon(Icons.check_rounded, size: 14, color: AppColors.ctTeal),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(name,
+                            style: AppTextStyles.body.copyWith(
+                              fontSize: 12,
+                              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                              color: selected ? AppColors.ctTealDark : AppColors.ctText2,
+                            )),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        const SizedBox(height: 24),
+        Text('Or\u00edgenes de ejecuci\u00f3n',
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text('\u00bfDesde d\u00f3nde puede iniciarse este flujo?',
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
+        const SizedBox(height: 12),
+        ..._triggerOptions.map((opt) {
+          final selected = _selectedTriggers.contains(opt.$1);
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                if (selected) {
+                  _selectedTriggers.remove(opt.$1);
+                } else {
+                  _selectedTriggers.add(opt.$1);
+                }
+              });
+            },
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? AppColors.ctTeal.withValues(alpha: 0.06)
+                      : AppColors.ctSurface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: selected ? AppColors.ctTeal : AppColors.ctBorder,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      selected ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
+                      size: 18,
+                      color: selected ? AppColors.ctTeal : AppColors.ctBorder2,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(opt.$2,
+                              style: AppTextStyles.body.copyWith(
+                                fontSize: 13,
+                                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                              )),
+                          Text(opt.$3,
+                              style: AppTextStyles.bodySmall.copyWith(
+                                  fontSize: 11, color: AppColors.ctText2)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildStep3() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Resumen',
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 16),
+        _SummaryRow(label: 'Nombre', value: _nameCtrl.text.trim()),
+        _SummaryRow(label: 'Slug', value: _slug),
+        if (_descCtrl.text.trim().isNotEmpty)
+          _SummaryRow(label: 'Descripci\u00f3n', value: _descCtrl.text.trim()),
+        if (_selectedRoleIds.isNotEmpty)
+          _SummaryRow(
+            label: 'Roles',
+            value: _selectedRoleIds.map((id) {
+              final r = _availableRoles.where((r) => r['id'] == id).firstOrNull;
+              return r?['label'] as String? ?? r?['name'] as String? ?? id;
+            }).join(', '),
+          ),
+        if (_selectedTriggers.isNotEmpty)
+          _SummaryRow(
+            label: 'Triggers',
+            value: _selectedTriggers.map((t) {
+              final opt = _triggerOptions.where((o) => o.$1 == t).firstOrNull;
+              return opt?.$2 ?? t;
+            }).join(', '),
+          ),
+      ],
+    );
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  const _SummaryRow({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(label,
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
+          ),
+          Expanded(
+            child: Text(value, style: AppTextStyles.body.copyWith(fontSize: 13)),
+          ),
+        ],
       ),
     );
   }
