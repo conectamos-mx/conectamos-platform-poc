@@ -657,10 +657,13 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
               variant: AppButtonVariant.ghost,
               size: AppButtonSize.sm,
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Próximamente: vincular desde aquí'),
-                  backgroundColor: AppColors.ctTeal,
-                ));
+                showDialog(
+                  context: context,
+                  builder: (_) => _LinkUserDialog(
+                    operatorId: op['id'] as String,
+                    onSuccess: widget.onReload,
+                  ),
+                );
               },
             );
           }),
@@ -1609,6 +1612,191 @@ class _FieldRow extends StatelessWidget {
           Text(value,
               style: AppTextStyles.body.copyWith(fontSize: 14)),
         ],
+      ),
+    );
+  }
+}
+
+// ── _LinkUserDialog ─────────────────────────────────────────────────────────
+
+class _LinkUserDialog extends StatefulWidget {
+  const _LinkUserDialog({
+    required this.operatorId,
+    required this.onSuccess,
+  });
+  final String operatorId;
+  final VoidCallback onSuccess;
+
+  @override
+  State<_LinkUserDialog> createState() => _LinkUserDialogState();
+}
+
+class _LinkUserDialogState extends State<_LinkUserDialog> {
+  final _phoneCtrl = TextEditingController();
+  bool _loading = false;
+  String? _fieldError;
+
+  bool get _isValid {
+    final cleaned = _phoneCtrl.text.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    if (!cleaned.startsWith('+')) return false;
+    final digits = cleaned.substring(1);
+    return digits.length >= 10 &&
+        digits.length <= 15 &&
+        RegExp(r'^\d+$').hasMatch(digits);
+  }
+
+  @override
+  void dispose() {
+    _phoneCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_isValid || _loading) return;
+    setState(() {
+      _loading = true;
+      _fieldError = null;
+    });
+
+    final cleaned = _phoneCtrl.text.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+
+    try {
+      await OperatorsApi.linkToUser(
+        operatorId: widget.operatorId,
+        phone: cleaned,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      widget.onSuccess();
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final status = e.response?.statusCode;
+      final data = e.response?.data;
+      final code = data is Map ? data['code'] as String? : null;
+
+      String? inline;
+      if (status == 404) {
+        inline = 'No encontramos un usuario con ese teléfono';
+      } else if (status == 400 && code == 'TENANT_USER_ALREADY_LINKED') {
+        inline = 'Este usuario ya está vinculado a otro operador';
+      }
+
+      if (inline != null) {
+        setState(() {
+          _loading = false;
+          _fieldError = inline;
+        });
+      } else {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Error al vincular. Intenta de nuevo.'),
+          backgroundColor: AppColors.ctDanger,
+        ));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Error al vincular. Intenta de nuevo.'),
+        backgroundColor: AppColors.ctDanger,
+      ));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.ctSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppColors.ctBorder),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Vincular usuario de plataforma',
+                style: AppTextStyles.body
+                    .copyWith(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Ingresa el teléfono con el que el usuario inició sesión',
+                style:
+                    AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _phoneCtrl,
+                autofocus: true,
+                keyboardType: TextInputType.phone,
+                style: AppTextStyles.body,
+                onChanged: (_) => setState(() => _fieldError = null),
+                decoration: InputDecoration(
+                  labelText: 'Teléfono',
+                  labelStyle: AppTextStyles.formLabel,
+                  hintText: '+52 55 1234 5678',
+                  hintStyle:
+                      AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                  errorText: _fieldError,
+                  errorStyle: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.ctDanger),
+                  filled: true,
+                  fillColor: AppColors.ctSurface2,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.ctBorder2),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                      color: _fieldError != null
+                          ? AppColors.ctDanger
+                          : AppColors.ctBorder2,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                      color: _fieldError != null
+                          ? AppColors.ctDanger
+                          : AppColors.ctTeal,
+                      width: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  AppButton(
+                    label: 'Cancelar',
+                    variant: AppButtonVariant.ghost,
+                    size: AppButtonSize.sm,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  const SizedBox(width: 10),
+                  AppButton(
+                    label: _loading ? 'Vinculando...' : 'Vincular',
+                    variant: AppButtonVariant.teal,
+                    size: AppButtonSize.sm,
+                    isDisabled: !_isValid || _loading,
+                    isLoading: _loading,
+                    onPressed: _isValid ? _submit : () {},
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

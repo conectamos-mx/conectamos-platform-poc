@@ -239,14 +239,23 @@ class OperatorsApi {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
-  static Future<void> linkToUser({
+  static Future<Map<String, dynamic>> linkToUser({
     required String operatorId,
-    required String tenantUserId,
+    String? tenantUserId,
+    String? phone,
   }) async {
-    await ApiClient.instance.post(
+    assert(tenantUserId != null || phone != null,
+        'Se requiere tenantUserId o phone');
+    final body = <String, dynamic>{};
+    if (tenantUserId != null) body['tenant_user_id'] = tenantUserId;
+    if (phone != null) body['phone'] = phone;
+    final res = await ApiClient.instance.post(
       '/operators/$operatorId/link-to-user',
-      data: {'tenant_user_id': tenantUserId},
+      data: body,
     );
+    return res.data is Map
+        ? Map<String, dynamic>.from(res.data as Map)
+        : {};
   }
 
   static Future<void> unlinkFromUser({
