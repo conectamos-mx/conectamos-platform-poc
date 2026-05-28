@@ -6,7 +6,13 @@ import '../../core/api/operators_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_action_button.dart';
+import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_chip.dart';
+import '../../shared/widgets/app_dropdown.dart';
+import '../../shared/widgets/app_kpi_card.dart';
+import '../../shared/widgets/app_search_bar.dart';
 import '../../shared/widgets/screen_header.dart';
 import 'widgets/import_operators_dialog.dart';
 import 'widgets/operator_form_dialog.dart';
@@ -44,32 +50,38 @@ String _formatLastEvent(String? iso) {
   }
 }
 
-({String label, Color bg, Color fg}) _statusStyle(String? status) {
+({String label, AppBadgeVariant variant}) _statusBadgeInfo(String? status) {
   switch (status) {
     case 'active':
-      return (
-        label: 'Activo',
-        bg: AppColors.ctOkBg,
-        fg: AppColors.ctOkText
-      );
+      return (label: 'Activo', variant: AppBadgeVariant.ok);
     case 'incident':
-      return (
-        label: 'Incidencia',
-        bg: AppColors.ctRedBg,
-        fg: AppColors.ctRedText
-      );
+      return (label: 'Incidencia', variant: AppBadgeVariant.danger);
     case 'suspended':
-      return (
-        label: 'Suspendido',
-        bg: AppColors.ctSurface2,
-        fg: AppColors.ctText2
-      );
+      return (label: 'Suspendido', variant: AppBadgeVariant.neutral);
     default:
-      return (
-        label: 'Sin inicio',
-        bg: AppColors.ctSurface2,
-        fg: AppColors.ctText2
-      );
+      return (label: 'Sin inicio', variant: AppBadgeVariant.neutral);
+  }
+}
+
+AppBadgeVariant _telegramBadgeVariant(String status) {
+  switch (status) {
+    case 'linked':
+      return AppBadgeVariant.teal;
+    case 'pending':
+      return AppBadgeVariant.warn;
+    default: // expired
+      return AppBadgeVariant.warn;
+  }
+}
+
+String _telegramBadgeLabel(String status) {
+  switch (status) {
+    case 'linked':
+      return 'Telegram vinculado';
+    case 'pending':
+      return 'Vinculacion pendiente';
+    default:
+      return 'Invitacion expirada';
   }
 }
 
@@ -223,7 +235,6 @@ class _OperatorsBody extends StatefulWidget {
 class _OperatorsBodyState extends State<_OperatorsBody> {
   String _search = '';
   String _filterStatus = 'Todos';
-  String _filterFlow = 'Todos';
   String _filterRole = 'Todos';
 
   static const _statusOptions = [
@@ -234,12 +245,21 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
     'Suspendido',
   ];
 
-  static const _flowOptions = [
-    'Todos',
-    'Flujo 1 · Turno',
-    'Flujo 2 · Registros',
-    'Flujo 3 · Incidencias',
-  ];
+  // ── KPI helpers ──
+
+  int get _kpiActivos =>
+      widget.operators.where((o) => o['db_status'] == 'active').length;
+
+  int get _kpiSinInicio =>
+      widget.operators.where((o) => o['last_inbound_at'] == null).length;
+
+  int get _kpiIncidencia =>
+      widget.operators.where((o) => o['computed_status'] == 'incident').length;
+
+  int get _kpiTelegramPendiente =>
+      widget.operators.where((o) => o['telegram_link_status'] == 'pending').length;
+
+  // ── Filtrado ──
 
   List<Map<String, dynamic>> get _filtered {
     return widget.operators.where((op) {
@@ -252,15 +272,9 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
           phone.contains(q);
 
       final status = op['status'] as String?;
-      final st = _statusStyle(status);
+      final st = _statusBadgeInfo(status);
       final matchStatus =
           _filterStatus == 'Todos' || st.label == _filterStatus;
-
-      final flows = (op['flows'] as List? ?? [])
-          .whereType<Map>()
-          .toList();
-      final matchFlow = _filterFlow == 'Todos' ||
-          flows.any((f) => _filterFlow.startsWith(f['name'] as String? ?? ''));
 
       bool matchRole = true;
       if (_filterRole != 'Todos') {
@@ -278,7 +292,7 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
         }
       }
 
-      return matchSearch && matchStatus && matchFlow && matchRole;
+      return matchSearch && matchStatus && matchRole;
     }).toList();
   }
 
@@ -292,39 +306,74 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // KPI cards
+        Row(
+          children: [
+            Expanded(
+              child: AppKpiCard(
+                label: 'ACTIVOS',
+                value: _kpiActivos.toString(),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: AppKpiCard(
+                label: 'SIN INICIO',
+                value: _kpiSinInicio.toString(),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: AppKpiCard(
+                label: 'INCIDENCIA',
+                value: _kpiIncidencia.toString(),
+                accentColor: _kpiIncidencia > 0 ? AppColors.ctRedText : null,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: AppKpiCard(
+                label: 'TELEGRAM PENDIENTE',
+                value: _kpiTelegramPendiente.toString(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+
         // Filtros
         Row(
           children: [
             Expanded(
-              child: _SearchField(
+              child: AppSearchBar(
+                hint: 'Buscar por nombre o telefono...',
                 onChanged: (v) => setState(() => _search = v),
               ),
             ),
-            const SizedBox(width: 10),
-            _FilterDropdown(
-              width: 180,
-              value: _filterStatus,
-              options: _statusOptions,
-              onChanged: (v) => setState(() => _filterStatus = v),
-            ),
-            const SizedBox(width: 10),
-            _FilterDropdown(
-              width: 200,
-              value: _filterFlow,
-              options: _flowOptions,
-              onChanged: (v) => setState(() => _filterFlow = v),
-            ),
-            const SizedBox(width: 10),
-            _FilterDropdown(
+            const SizedBox(width: 12),
+            ..._statusOptions.map((opt) => Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: AppChip(
+                label: opt,
+                isActive: _filterStatus == opt,
+                onTap: () => setState(() => _filterStatus = opt),
+              ),
+            )),
+            const SizedBox(width: 6),
+            SizedBox(
               width: 170,
-              value: _filterRole,
-              options: [
-                'Todos',
-                ...widget.roles
-                    .map((r) => r['label'] as String? ?? '')
-                    .where((s) => s.isNotEmpty),
-              ],
-              onChanged: (v) => setState(() => _filterRole = v),
+              child: AppDropdown<String>(
+                value: _filterRole,
+                hint: 'Rol',
+                items: [
+                  const AppDropdownItem(value: 'Todos', label: 'Todos los roles'),
+                  ...widget.roles
+                      .map((r) => r['label'] as String? ?? '')
+                      .where((s) => s.isNotEmpty)
+                      .map((s) => AppDropdownItem(value: s, label: s)),
+                ],
+                onChanged: (v) => setState(() => _filterRole = v ?? 'Todos'),
+              ),
             ),
           ],
         ),
@@ -359,7 +408,7 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
                     Expanded(
                         flex: 2,
                         child:
-                            Text('TELÉFONO', style: _headerStyle)),
+                            Text('TELEFONO', style: _headerStyle)),
                     Expanded(
                         flex: 1,
                         child: Text('ESTADO', style: _headerStyle)),
@@ -368,7 +417,7 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
                         child: Text('ROL', style: _headerStyle)),
                     Expanded(
                         flex: 2,
-                        child: Text('ÚLTIMO ACCESO',
+                        child: Text('ULTIMO ACCESO',
                             style: _headerStyle)),
                     Expanded(
                         flex: 2,
@@ -477,12 +526,11 @@ class _OperatorRowState extends State<_OperatorRow> {
     final status = op['status'] as String?;
     final flows = (op['flows'] as List? ?? []).map((f) {
       if (f is Map) return Map<String, dynamic>.from(f);
-      // Backend may return plain UUID strings instead of objects
       return <String, dynamic>{'id': f.toString()};
     }).toList();
     final lastEventAt = op['last_event_at'] as String?;
     final id = op['id'] as String? ?? '';
-    final st = _statusStyle(status);
+    final st = _statusBadgeInfo(status);
     final metadata = op['metadata'] as Map<String, dynamic>? ?? {};
     final profilePictureUrl = op['profile_picture_url'] as String?;
     final email = op['email'] as String?;
@@ -494,16 +542,19 @@ class _OperatorRowState extends State<_OperatorRow> {
       final types = f['channel_types'];
       return types is List && types.contains('telegram');
     });
-    _TelegramBadge? tgBadge;
+    Widget? tgBadge;
     if (hasTelegramFlow && tgStatus != null && tgStatus != 'none') {
       final expired = tgStatus == 'expired' ||
           (tgStatus == 'pending' && _isTelegramExpired(tgExpiresAt));
-      if (tgStatus == 'linked') {
-        tgBadge = const _TelegramBadge(status: 'linked');
-      } else if (expired) {
-        tgBadge = const _TelegramBadge(status: 'expired');
-      } else if (tgStatus == 'pending') {
-        tgBadge = const _TelegramBadge(status: 'pending');
+      final effectiveStatus = expired ? 'expired' : tgStatus;
+      if (effectiveStatus == 'linked' ||
+          effectiveStatus == 'pending' ||
+          effectiveStatus == 'expired') {
+        tgBadge = AppBadge(
+          label: _telegramBadgeLabel(effectiveStatus),
+          variant: _telegramBadgeVariant(effectiveStatus),
+          prefixIcon: const Icon(Icons.telegram, size: 12),
+        );
       }
     }
 
@@ -518,7 +569,7 @@ class _OperatorRowState extends State<_OperatorRow> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Operador: avatar + nombre + verificación (clic → ficha)
+            // Operador: avatar + nombre + badge telegram
             Expanded(
               flex: 3,
               child: GestureDetector(
@@ -568,7 +619,7 @@ class _OperatorRowState extends State<_OperatorRow> {
               ),
             ),
 
-            // Teléfono
+            // Telefono
             Expanded(
               flex: 2,
               child: Text(
@@ -582,10 +633,9 @@ class _OperatorRowState extends State<_OperatorRow> {
               flex: 1,
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: _StatusBadge(
+                child: AppBadge(
                   label: st.label,
-                  bg: st.bg,
-                  textColor: st.fg,
+                  variant: st.variant,
                 ),
               ),
             ),
@@ -612,7 +662,7 @@ class _OperatorRowState extends State<_OperatorRow> {
               }(),
             ),
 
-            // Último acceso
+            // Ultimo acceso
             Expanded(
               flex: 2,
               child: Text(
@@ -628,10 +678,9 @@ class _OperatorRowState extends State<_OperatorRow> {
                   ? Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _ActionButton(
-                          label: 'Editar',
-                          color: AppColors.ctInfo,
-                          onTap: () async {
+                        AppActionButton(
+                          variant: AppActionVariant.edit,
+                          onPressed: () async {
                             await showDialog(
                               context: context,
                               builder: (_) => OperatorFormDialog(
@@ -652,18 +701,16 @@ class _OperatorRowState extends State<_OperatorRow> {
                             );
                           },
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 4),
                         if (status == 'active' || status == 'incident')
-                          _ActionButton(
-                            label: 'Suspender',
-                            color: AppColors.ctDanger,
-                            onTap: () => _patchStatus(context, 'suspended'),
+                          AppActionButton(
+                            variant: AppActionVariant.suspend,
+                            onPressed: () => _patchStatus(context, 'suspended'),
                           )
                         else
-                          _ActionButton(
-                            label: 'Reactivar',
-                            color: AppColors.ctOk,
-                            onTap: () => _patchStatus(context, 'active'),
+                          AppActionButton(
+                            variant: AppActionVariant.reactivate,
+                            onPressed: () => _patchStatus(context, 'active'),
                           ),
                       ],
                     )
@@ -676,163 +723,7 @@ class _OperatorRowState extends State<_OperatorRow> {
   }
 }
 
-// ── Widgets reutilizables (tabla) ─────────────────────────────────────────────
-// OperatorFormDialog → widgets/operator_form_dialog.dart
-
-
-class _SearchField extends StatelessWidget {
-  const _SearchField({required this.onChanged});
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      onChanged: onChanged,
-      style: AppTextStyles.body,
-      decoration: InputDecoration(
-        hintText: 'Buscar por nombre o teléfono...',
-        hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-        prefixIcon: const Icon(
-          Icons.search_rounded,
-          size: 17,
-          color: AppColors.ctText3,
-        ),
-        filled: true,
-        fillColor: AppColors.ctSurface,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.ctBorder2),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.ctBorder2),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide:
-              const BorderSide(color: AppColors.ctTeal, width: 1.5),
-        ),
-      ),
-    );
-  }
-}
-
-class _FilterDropdown extends StatelessWidget {
-  const _FilterDropdown({
-    required this.width,
-    required this.value,
-    required this.options,
-    required this.onChanged,
-  });
-  final double width;
-  final String value;
-  final List<String> options;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: width,
-      height: 40,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: AppColors.ctSurface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.ctBorder2),
-        ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: value,
-            isDense: true,
-            isExpanded: true,
-            style: AppTextStyles.body,
-            icon: const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 16,
-              color: AppColors.ctText3,
-            ),
-            items: options
-                .map((o) =>
-                    DropdownMenuItem(value: o, child: Text(o)))
-                .toList(),
-            onChanged: (v) {
-              if (v != null) onChanged(v);
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({
-    required this.label,
-    required this.bg,
-    required this.textColor,
-  });
-  final String label;
-  final Color bg;
-  final Color textColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: AppTextStyles.badge.copyWith(color: textColor),
-      ),
-    );
-  }
-}
-
-class _TelegramBadge extends StatelessWidget {
-  const _TelegramBadge({required this.status});
-  // status: 'linked' | 'pending' | 'expired'
-  final String status;
-
-  @override
-  Widget build(BuildContext context) {
-    final Color bg;
-    final Color fg;
-    final String label;
-    switch (status) {
-      case 'linked':
-        bg = AppColors.ctTealLight;
-        fg = AppColors.ctTealDark;
-        label = '✓ Telegram vinculado';
-      case 'pending':
-        bg = AppColors.ctWarnBg;
-        fg = AppColors.ctWarnText;
-        label = '⏳ Vinculación pendiente';
-      default: // expired
-        bg = AppColors.ctWarnBg;
-        fg = AppColors.ctWarnText;
-        label = '⚠ Invitación expirada';
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: AppTextStyles.caption.copyWith(
-          fontWeight: FontWeight.w600, color: fg),
-      ),
-    );
-  }
-}
+// ── Widgets de tabla ──────────────────────────────────────────────────────────
 
 Color _parseColor(String hex) {
   try {
@@ -868,55 +759,3 @@ class _RoleBadge extends StatelessWidget {
     );
   }
 }
-
-class _ActionButton extends StatefulWidget {
-  const _ActionButton({
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  State<_ActionButton> createState() => _ActionButtonState();
-}
-
-class _ActionButtonState extends State<_ActionButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 100),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-          decoration: BoxDecoration(
-            color: _hovered
-                ? widget.color.withValues(alpha: 0.08)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: _hovered
-                  ? widget.color.withValues(alpha: 0.4)
-                  : AppColors.ctBorder,
-            ),
-          ),
-          child: Text(
-            widget.label,
-            style: AppTextStyles.bodySmall.copyWith(
-              fontWeight: FontWeight.w500, color: widget.color),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
