@@ -1672,13 +1672,16 @@ class _LinkUserDialogState extends State<_LinkUserDialog> {
       if (!mounted) return;
       final status = e.response?.statusCode;
       final data = e.response?.data;
-      final code = data is Map ? data['code'] as String? : null;
+      final detail = data is Map ? data['detail'] : null;
+      final code = detail is Map ? detail['code'] as String? : null;
 
       String? inline;
-      if (status == 404) {
+      if (status == 404 || code == 'USER_NOT_FOUND_BY_PHONE') {
         inline = 'No encontramos un usuario con ese teléfono';
-      } else if (status == 400 && code == 'TENANT_USER_ALREADY_LINKED') {
+      } else if (code == 'TENANT_USER_ALREADY_LINKED') {
         inline = 'Este usuario ya está vinculado a otro operador';
+      } else if (code == 'OPERATOR_ALREADY_LINKED') {
+        inline = 'Este operador ya está vinculado a otro usuario';
       }
 
       if (inline != null) {
