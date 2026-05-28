@@ -15,7 +15,9 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/identity_config.dart';
 import '../../shared/widgets/app_action_button.dart';
+import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/app_detail_header.dart';
 import 'widgets/operator_form_dialog.dart';
 
@@ -279,6 +281,8 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
     final canManage = hasPermission(ref, 'operators', 'manage');
     final status = op['status'] as String?;
 
+    final isLinked = op['linked_tenant_user_id'] != null;
+
     return Scaffold(
       backgroundColor: AppColors.ctBg,
       appBar: AppDetailHeader(
@@ -296,6 +300,12 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
             : const Icon(Icons.person_rounded, size: 22, color: AppColors.ctText2),
         statusLabel: _statusStyle(status).label,
         statusActive: status == 'active',
+        chips: [
+          AppBadge(
+            label: isLinked ? 'Vinculado' : 'Sin usuario',
+            variant: isLinked ? AppBadgeVariant.teal : AppBadgeVariant.neutral,
+          ),
+        ],
         actions: [
           if (canManage) ...[
             AppActionButton(
@@ -326,7 +336,7 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
             child: TabBarView(
               controller: _tabCtrl,
               children: [
-                _DatosTab(op: op),
+                _DatosTab(op: op, onReload: _load),
                 _FlujosTab(op: op, canManage: canManage),
                 const _PermisosTab(),
                 _HistorialTab(operatorId: widget.operatorId),
@@ -371,8 +381,9 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
 // ── Tab DATOS ──────────────────────────────────────────────────────────────────
 
 class _DatosTab extends ConsumerStatefulWidget {
-  const _DatosTab({required this.op});
+  const _DatosTab({required this.op, required this.onReload});
   final Map<String, dynamic> op;
+  final VoidCallback onReload;
 
   @override
   ConsumerState<_DatosTab> createState() => _DatosTabState();
@@ -563,7 +574,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
           const _SectionTitle('Información personal'),
           const SizedBox(height: 12),
           _FieldRow(label: 'Nombre completo', value: name),
-          if (email.isNotEmpty) _FieldRow(label: 'Email', value: email),
+          _FieldRow(label: 'Correo', value: email.isNotEmpty ? email : '—'),
           if (nationality.isNotEmpty)
             _FieldRow(label: 'Nacionalidad', value: nationality),
           if (identityNumber.isNotEmpty)
@@ -592,6 +603,68 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
             ),
             const SizedBox(height: 12),
           ],
+          // ── Vínculo con plataforma ──────────────────────────────────
+          const SizedBox(height: 16),
+          const _SectionTitle('Vínculo con plataforma'),
+          const SizedBox(height: 12),
+          Builder(builder: (context) {
+            final linkedUserId = op['linked_tenant_user_id'] as String?;
+            final linkedUserName = op['linked_tenant_user_nombre'] as String?;
+
+            if (linkedUserId != null) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _FieldRow(
+                    label: 'Usuario vinculado',
+                    value: linkedUserName ?? linkedUserId,
+                  ),
+                  const SizedBox(height: 10),
+                  if (canManage)
+                    AppButton(
+                      label: 'Desvincular',
+                      variant: AppButtonVariant.danger,
+                      size: AppButtonSize.sm,
+                      onPressed: () async {
+                        final ok = await AppConfirmDialog.show(
+                          context: context,
+                          title: 'Desvincular operador',
+                          body: 'El operador perderá acceso al panel. Puedes volver a vincularlo cuando quieras.',
+                          confirmLabel: 'Sí, desvincular',
+                          variant: AppConfirmDialogVariant.danger,
+                        );
+                        if (ok != true) return;
+                        try {
+                          await OperatorsApi.unlinkFromUser(
+                            operatorId: op['id'] as String,
+                          );
+                          widget.onReload();
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text('Error al desvincular: $e'),
+                            backgroundColor: AppColors.ctDanger,
+                          ));
+                        }
+                      },
+                    ),
+                ],
+              );
+            }
+
+            return AppButton(
+              label: 'Vincular usuario de plataforma',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.sm,
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('Próximamente: vincular desde aquí'),
+                  backgroundColor: AppColors.ctTeal,
+                ));
+              },
+            );
+          }),
+
           if (phoneSecondary.isNotEmpty) ...[
             const SizedBox(height: 8),
             const _SectionTitle('Teléfonos secundarios'),
