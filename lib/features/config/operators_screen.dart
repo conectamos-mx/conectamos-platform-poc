@@ -11,7 +11,6 @@ import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_chip.dart';
 import '../../shared/widgets/app_dropdown.dart';
-import '../../shared/widgets/app_kpi_card.dart';
 import '../../shared/widgets/app_search_bar.dart';
 import '../../shared/widgets/screen_header.dart';
 import 'widgets/import_operators_dialog.dart';
@@ -239,19 +238,15 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
     'Inactivo',
   ];
 
-  // ── KPI helpers ──
-
-  int get _kpiActivos =>
-      widget.operators.where((o) => o['db_status'] == 'active').length;
-
-  int get _kpiSinInicio =>
-      widget.operators.where((o) => o['last_inbound_at'] == null).length;
-
-  int get _kpiIncidencia =>
-      widget.operators.where((o) => o['computed_status'] == 'incident').length;
-
-  int get _kpiTelegramPendiente =>
-      widget.operators.where((o) => o['telegram_link_status'] == 'pending').length;
+  // TODO(DT): cleanup stats data source si nadie más lo consume
+  // int get _kpiActivos =>
+  //     widget.operators.where((o) => o['db_status'] == 'active').length;
+  // int get _kpiSinInicio =>
+  //     widget.operators.where((o) => o['last_inbound_at'] == null).length;
+  // int get _kpiIncidencia =>
+  //     widget.operators.where((o) => o['computed_status'] == 'incident').length;
+  // int get _kpiTelegramPendiente =>
+  //     widget.operators.where((o) => o['telegram_link_status'] == 'pending').length;
 
   // ── Filtrado ──
 
@@ -300,41 +295,6 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // KPI cards
-        Row(
-          children: [
-            Expanded(
-              child: AppKpiCard(
-                label: 'ACTIVOS',
-                value: _kpiActivos.toString(),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: AppKpiCard(
-                label: 'SIN INICIO',
-                value: _kpiSinInicio.toString(),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: AppKpiCard(
-                label: 'INCIDENCIA',
-                value: _kpiIncidencia.toString(),
-                accentColor: _kpiIncidencia > 0 ? AppColors.ctRedText : null,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: AppKpiCard(
-                label: 'TELEGRAM PENDIENTE',
-                value: _kpiTelegramPendiente.toString(),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-
         // Filtros
         Row(
           children: [
