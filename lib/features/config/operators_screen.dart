@@ -12,6 +12,7 @@ import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_chip.dart';
 import '../../shared/widgets/app_dropdown.dart';
 import '../../shared/widgets/app_search_bar.dart';
+import '../../shared/widgets/app_tag_chip.dart';
 import '../../shared/widgets/screen_header.dart';
 import 'widgets/import_operators_dialog.dart';
 import 'widgets/operator_form_dialog.dart';
@@ -291,6 +292,10 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
   @override
   Widget build(BuildContext context) {
     final rows = _filtered;
+    final rolesById = {
+      for (final r in widget.roles)
+        if (r['id'] is String) r['id'] as String: r,
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -400,6 +405,7 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
                       _OperatorRow(
                         op: entry.value,
                         roles: widget.roles,
+                        rolesById: rolesById,
                         onRefresh: widget.onRefresh,
                         canManage: widget.canManage,
                         onOperatorMetadataUpdated:
@@ -434,12 +440,14 @@ class _OperatorRow extends StatefulWidget {
   const _OperatorRow({
     required this.op,
     required this.roles,
+    required this.rolesById,
     required this.onRefresh,
     required this.canManage,
     this.onOperatorMetadataUpdated,
   });
   final Map<String, dynamic> op;
   final List<Map<String, dynamic>> roles;
+  final Map<String, Map<String, dynamic>> rolesById;
   final VoidCallback onRefresh;
   final bool canManage;
   final void Function(String id, Map<String, dynamic> metadata)?
@@ -597,23 +605,10 @@ class _OperatorRowState extends State<_OperatorRow> {
             // Rol
             Expanded(
               flex: 2,
-              child: () {
-                final roleIds =
-                    (op['role_ids'] as List?)?.cast<String>() ?? [];
-                if (roleIds.isEmpty) return const SizedBox.shrink();
-                final matched = widget.roles.where(
-                    (r) => r['id'] == roleIds.first).toList();
-                if (matched.isNotEmpty) {
-                  return _RoleBadge(role: matched.first);
-                }
-                return Text(
-                  roleIds.first.length > 8
-                      ? roleIds.first.substring(0, 8)
-                      : roleIds.first,
-                  style: AppFonts.geist(
-                      fontSize: 11, color: AppColors.ctText2),
-                );
-              }(),
+              child: _OperatorRolesCell(
+                op: op,
+                rolesById: widget.rolesById,
+              ),
             ),
 
             // Ultimo acceso
@@ -681,37 +676,55 @@ class _OperatorRowState extends State<_OperatorRow> {
 
 // ── Widgets de tabla ──────────────────────────────────────────────────────────
 
-Color _parseColor(String hex) {
-  try {
-    return Color(int.parse(hex.replaceFirst('#', '0xFF')));
-  } catch (_) {
-    return const Color(0xFF59E0CC);
-  }
-}
-
-class _RoleBadge extends StatelessWidget {
-  const _RoleBadge({required this.role});
-  final Map<String, dynamic> role;
+class _OperatorRolesCell extends StatelessWidget {
+  const _OperatorRolesCell({
+    required this.op,
+    required this.rolesById,
+  });
+  final Map<String, dynamic> op;
+  final Map<String, Map<String, dynamic>> rolesById;
 
   @override
   Widget build(BuildContext context) {
-    final label = role['label'] as String? ?? '—';
-    final color = _parseColor(role['color'] as String? ?? '#59E0CC');
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        label,
-        style: AppFonts.geist(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: color),
-        overflow: TextOverflow.ellipsis,
-      ),
+    final roleIds = (op['role_ids'] as List?)?.cast<String>() ?? [];
+    final matched = roleIds
+        .where((id) => rolesById.containsKey(id))
+        .map((id) => rolesById[id]!)
+        .toList()
+      ..sort((a, b) => (a['label'] as String? ?? '')
+          .toLowerCase()
+          .compareTo((b['label'] as String? ?? '').toLowerCase()));
+
+    if (matched.isEmpty) {
+      return Text('—', style: AppFonts.geist(fontSize: 11, color: AppColors.ctText2));
+    }
+
+    final visible = matched.take(2).toList();
+    final overflow = matched.length - 2;
+
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: [
+        for (final role in visible)
+          AppTagChip(
+            label: role['label'] as String? ?? '—',
+            colorHex: role['color'] as String?,
+          ),
+        if (overflow > 0)
+          Tooltip(
+            message: matched
+                .skip(2)
+                .map((r) => r['label'] as String? ?? '—')
+                .join('\n'),
+            decoration: BoxDecoration(
+              color: AppColors.ctNavy,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            textStyle: AppTextStyles.bodySmall.copyWith(color: Colors.white),
+            child: AppTagChip(label: '+$overflow'),
+          ),
+      ],
     );
   }
 }
