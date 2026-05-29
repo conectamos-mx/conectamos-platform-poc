@@ -74,8 +74,8 @@ Si querés custom domain, crear en `Settings → Variables`:
 
 | Variable | Valor ejemplo |
 |---|---|
-| `CUSTOM_DOMAIN_PROD` | `platform.conectamos.mx` |
-| `CUSTOM_DOMAIN_DEV` | `platform-dev.conectamos.mx` |
+| `CUSTOM_DOMAIN_PROD` | `platform.conectamos.ai` |
+| `CUSTOM_DOMAIN_DEV` | `platform-dev.conectamos.ai` |
 
 Si no se setean, CloudFront usa su dominio por defecto (`*.cloudfront.net`).
 
@@ -87,7 +87,7 @@ y espera que el certificado quede en estado `ISSUED` (~2 min).
 
 Luego agrega el CNAME de la distribución:
 ```
-platform.conectamos.mx  CNAME  <cloudfront_domain>  DNS-only
+platform.conectamos.ai  CNAME  <cloudfront_domain>  DNS-only
 ```
 
 ---
@@ -103,7 +103,7 @@ platform.conectamos.mx  CNAME  <cloudfront_domain>  DNS-only
 
 ## Notas
 
-- `API_BASE_URL` está hardcodeado en el workflow (`https://platform-api.conectamos.mx`) — no es sensible, se compila en el bundle Flutter y es visible públicamente.
+- `API_BASE_URL` se inyecta vía secrets `PLATFORM_API_URL` / `PLATFORM_API_URL_DEV` en el workflow — se compila en el bundle Flutter y es visible públicamente.
 - `index.html` se sube con `Cache-Control: no-cache` — los assets (JS/CSS/fonts) con `max-age=31536000` ya que Flutter los hashea.
 - `prevent_destroy = true` en bucket y distribución para evitar pérdida accidental de datos.
 - Cuenta conectamos-ai es temporal — mover a prod/dev cuando esas cuentas estén bootstrappeadas.
