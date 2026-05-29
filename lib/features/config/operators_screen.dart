@@ -6,6 +6,7 @@ import '../../core/api/operators_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/phone_normalizer.dart';
 import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
@@ -585,7 +586,7 @@ class _OperatorRowState extends State<_OperatorRow> {
             Expanded(
               flex: 2,
               child: Text(
-                phone,
+                PhoneNormalizer.formatForDisplay(op['phone'] as String?),
                 style: AppTextStyles.body,
               ),
             ),
