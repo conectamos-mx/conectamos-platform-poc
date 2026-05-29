@@ -608,9 +608,24 @@ AppActionButton(
   onPressed: _delete,
   isLoading: _deleting,
 )
+
+// Con tooltip personalizado (sobrescribe el default del variant)
+AppActionButton(
+  variant: AppActionVariant.suspend,
+  tooltipOverride: 'Desactivar',
+  onPressed: () => _patchStatus('inactive'),
+)
 ```
 
 **Variantes:** `edit`, `suspend`, `reactivate`, `delete`
+
+| Prop | Tipo | Default | Descripción |
+|------|------|---------|-------------|
+| `variant` | `AppActionVariant` | requerido | Semántica visual (ícono, color, tooltip default) |
+| `onPressed` | `VoidCallback` | requerido | Callback al hacer clic |
+| `tooltipOverride` | `String?` | `null` | Tooltip personalizado que sobrescribe el default del variant. Útil cuando la acción semántica difiere del variant visual (ej: usar variant `suspend` con tooltip 'Desactivar'). |
+| `isLoading` | `bool` | `false` | Muestra spinner en lugar del ícono |
+| `isDisabled` | `bool` | `false` | Desactiva interacción y reduce opacidad |
 
 ---
 
