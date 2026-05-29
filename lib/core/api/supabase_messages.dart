@@ -11,7 +11,7 @@ class SupabaseMessages {
     var query = _client
         .from('wa_messages')
         .select(
-            'id, wa_message_id, chat_id, from_phone, from_name, raw_body, message_type, received_at, direction, wa_status, channel_id, context_message_id, context_from, reaction_emoji, reaction_message_id');
+            'id, wa_message_id, chat_id, from_phone, from_name, raw_body, message_type, received_at, direction, wa_status, channel_id, context_message_id, context_from, reaction_emoji, reaction_message_id, media_url');
 
     if (tenantId != null && tenantId.isNotEmpty) {
       query = query.eq('tenant_id', tenantId);
@@ -72,7 +72,7 @@ class SupabaseMessages {
     var query = _client
         .from('wa_messages')
         .select(
-            'id, wa_message_id, chat_id, from_phone, from_name, raw_body, message_type, received_at, direction, wa_status, channel_id, context_message_id, context_from, reaction_emoji, reaction_message_id')
+            'id, wa_message_id, chat_id, from_phone, from_name, raw_body, message_type, received_at, direction, wa_status, channel_id, context_message_id, context_from, reaction_emoji, reaction_message_id, media_url')
         .eq('chat_id', chatId);
 
     if (tenantId != null && tenantId.isNotEmpty) {

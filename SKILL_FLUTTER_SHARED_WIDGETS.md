@@ -968,3 +968,206 @@ unselectedLabelStyle: const TextStyle(fontFamily: 'Geist', fontSize: 12),
 labelStyle: AppTextStyles.formLabel,
 unselectedLabelStyle: AppTextStyles.navItem,
 ```
+
+---
+
+### 2.17 AppDropZone · `lib/shared/widgets/app_drop_zone.dart`
+
+Widget para recibir archivos arrastrados desde el OS o seleccionados
+via file picker. Usa `desktop_drop` (ya dependencia del proyecto —
+mismo patrón que `conversations_screen.dart`).
+
+```dart
+AppDropZone(
+  allowedExtensions: ['xlsx', 'csv'],
+  onFilePicked: (Uint8List bytes, String filename) {
+    setState(() {
+      _fileBytes = bytes;
+      _filename = filename;
+    });
+  },
+)
+
+// Con loading state
+AppDropZone(
+  allowedExtensions: ['xlsx', 'csv'],
+  onFilePicked: _handleFile,
+  isLoading: _isValidating,
+  label: 'Arrastra tu archivo aquí o',
+  sublabel: 'Formatos: .XLSX, .CSV',
+)
+```
+
+**Props:**
+
+| Prop | Tipo | Default | Descripcion |
+|---|---|---|---|
+| `allowedExtensions` | `List<String>` | requerido | Sin punto: `['xlsx', 'csv']` |
+| `onFilePicked` | `void Function(Uint8List, String)` | requerido | Bytes + nombre |
+| `label` | `String?` | `'Arrastra tu archivo aquí o'` | Texto principal |
+| `sublabel` | `String?` | extensiones como texto | Texto secundario |
+| `isLoading` | `bool` | `false` | Overlay loading + deshabilita interaccion |
+
+**Comportamiento:**
+- Drag hover: borde teal + fondo teal 6% opacity
+- Extension invalida: snackbar de error, no llama `onFilePicked`
+- Archivo seleccionado: nombre + check teal + boton X para limpiar
+- Tap: abre FilePicker como fallback
+
+**PROHIBIDO usar en su lugar:**
+- `FilePicker` directo sin zona visual de drop
+- `DragTarget` de Flutter (no recibe drops del OS en web)
+
+---
+
+### 2.18 AppTemplateDownload · `lib/shared/widgets/app_template_download.dart`
+
+Boton para descargar plantillas o exports autenticados via `ApiClient`.
+No abre tab del browser — usa `dart:html` Blob + AnchorElement.
+
+```dart
+AppTemplateDownload(
+  endpoint: '/operators/export/template',
+  filename: 'plantilla_operadores.xlsx',
+)
+
+// Con query params
+AppTemplateDownload(
+  endpoint: '/operators/export/template',
+  filename: 'plantilla_operadores.xlsx',
+  queryParams: {'nationality': 'MX'},
+  label: 'Descargar plantilla',
+)
+```
+
+**Props:**
+
+| Prop | Tipo | Default | Descripcion |
+|---|---|---|---|
+| `endpoint` | `String` | requerido | Ruta relativa del endpoint |
+| `filename` | `String` | requerido | Nombre del archivo descargado |
+| `queryParams` | `Map<String, String>?` | null | Query params opcionales |
+| `label` | `String?` | `'Descargar plantilla'` | Label del boton |
+
+**Comportamiento:**
+- Renderiza como `AppButton(variant: ghost, size: sm)` con icono download
+- `isLoading: true` durante la descarga
+- Error: snackbar con mensaje generico
+
+**PROHIBIDO usar en su lugar:**
+- `url_launcher` / `launchUrl` para endpoints autenticados (no incluye JWT)
+
+---
+
+### 2.19 AppImportPreviewTable · `lib/shared/widgets/app_import_preview_table.dart`
+
+Tabla generica para preview de datos pre-import con estado por fila.
+Agnostica de dominio.
+
+**Clases de soporte (mismo archivo):**
+```dart
+class ImportColumn { final String header; final String key; }
+class ImportRow {
+  final int row;
+  final Map<String, dynamic> data;
+  final List<ImportRowError> errors; // vacio = valido
+}
+class ImportRowError { final String field; final String message; }
+```
+
+```dart
+AppImportPreviewTable(
+  columns: [
+    ImportColumn(header: 'Fila', key: 'row'),
+    ImportColumn(header: 'Nombre', key: 'name'),
+    ImportColumn(header: 'Telefono', key: 'phone'),
+  ],
+  rows: _previewRows,
+  maxHeight: 400,
+)
+```
+
+**Props:**
+
+| Prop | Tipo | Default | Descripcion |
+|---|---|---|---|
+| `columns` | `List<ImportColumn>` | requerido | Definicion de columnas |
+| `rows` | `List<ImportRow>` | requerido | Filas con datos y errores |
+| `maxHeight` | `double?` | 400 | Altura maxima antes de scroll |
+
+**Comportamiento:**
+- Validas: fondo blanco, icono check teal
+- Con error: fondo `ctDanger @ 4%`, icono X rojo, tooltip con primer
+  error. Multiples errores: `"field: message +N mas"`
+- Resumen al final: `"X validas · Y con errores"` con colores semanticos
+
+**PROHIBIDO usar en su lugar:**
+- `DataTable` de Flutter base en dialogs de import
+- Tabla ad-hoc sin row-level status diferenciado
+
+---
+
+### 2.20 AppAlertBanner · `lib/shared/widgets/app_alert_banner.dart`
+
+Banner contextual de aviso/alerta/error. Renderizable dentro de pantallas de detalle o sobre cuerpos principales. Persistente (no transitorio como SnackBar).
+
+```dart
+import '../../shared/widgets/app_alert_banner.dart';
+
+// Banner de error/incidencia
+AppAlertBanner(
+  variant: AppAlertBannerVariant.danger,
+  title: 'Incidencia activa',
+  message: 'Este operador tiene una escalacion abierta.',
+  actions: [
+    AppButton(label: 'Ver detalle', variant: AppButtonVariant.ghost, size: AppButtonSize.sm, onPressed: _goDetail),
+  ],
+)
+
+// Banner de advertencia
+AppAlertBanner(
+  variant: AppAlertBannerVariant.warning,
+  title: 'Invitacion expirada',
+  message: 'Reenvia el link para que el operador pueda acceder.',
+  actions: [
+    AppButton(label: 'Reenviar', variant: AppButtonVariant.teal, size: AppButtonSize.sm, onPressed: _resend),
+  ],
+)
+
+// Banner informativo
+AppAlertBanner(
+  variant: AppAlertBannerVariant.info,
+  title: 'Invitacion enviada',
+  message: 'El operador aun no completa la vinculacion.',
+)
+
+// Con icono custom
+AppAlertBanner(
+  variant: AppAlertBannerVariant.warning,
+  title: 'Sincronizacion pendiente',
+  prefixIcon: const Icon(Icons.sync_problem, size: 22, color: AppColors.ctWarnText),
+)
+```
+
+**Variantes:**
+
+| Variante | bg / texto | Icono default | Cuando usar |
+|---|---|---|---|
+| `danger` | ctRedBg / ctRedText | `error_outline` | Incidencias, errores criticos, bloqueos |
+| `warning` | ctWarnBg / ctWarnText | `warning_amber_rounded` | Expiraciones, advertencias, atencion requerida |
+| `info` | ctInfoBg / ctInfoText | `info_outlined` | Informativos, procesos en curso, estados pendientes |
+
+**Props:**
+
+| Prop | Tipo | Default | Descripcion |
+|---|---|---|---|
+| `variant` | `AppAlertBannerVariant` | requerido | Estilo visual del banner |
+| `title` | `String` | requerido | Titulo en negrita |
+| `message` | `String?` | null | Mensaje secundario debajo del titulo |
+| `actions` | `List<Widget>?` | null | Botones a la derecha (usar AppButton) |
+| `prefixIcon` | `Widget?` | null | Icono custom (override del default) |
+
+**PROHIBIDO usar en su lugar:**
+- `Container` con `BoxDecoration` ad-hoc para banners de aviso
+- `SnackBar` — es transitorio, no persistente en pantalla
+- `AlertDialog` — es modal, no inline en el body

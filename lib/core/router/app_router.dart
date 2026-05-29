@@ -10,7 +10,6 @@ import '../../features/auth/forgot_password_screen.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/auth/reset_password_screen.dart';
 import '../../features/broadcasts/broadcast_screen.dart';
-import '../../features/config/channels_screen.dart';
 import '../../features/config/connections_screen.dart';
 import '../../features/config/operator_detail_screen.dart';
 import '../../features/config/operator_roles_screen.dart';
@@ -19,7 +18,6 @@ import '../../features/config/settings_screen.dart';
 import '../../features/settings/operator_fields_screen.dart';
 import '../../features/config/ai_workers_screen.dart';
 import '../../features/config/worker_detail_screen.dart';
-import '../../features/config/workflows_screen.dart';
 import '../../features/assignments/assignments_screen.dart';
 import '../../features/assignments/assignment_detail_screen.dart';
 import '../../features/catalogs/catalog_detail_screen.dart';
@@ -290,15 +288,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ]),
         ],
-      ),
-      // Standalone routes — accessible without shell (deep links)
-      GoRoute(
-        path: '/flows',
-        pageBuilder: (c, s) => const NoTransitionPage(child: WorkflowsScreen()),
-      ),
-      GoRoute(
-        path: '/channels',
-        pageBuilder: (c, s) => const NoTransitionPage(child: ChannelsScreen()),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

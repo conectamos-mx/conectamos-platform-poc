@@ -249,7 +249,10 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
                 if (widget.onFlowSelected != null) {
                   widget.onFlowSelected!(id);
                 } else {
-                  context.go('/flows/$id');
+                  final wId = entry.value['tenant_worker_id'] as String? ?? '';
+                  if (wId.isNotEmpty) {
+                    context.go('/workers/$wId?selectedFlow=$id');
+                  }
                 }
               },
               canManage: canManage,
@@ -316,6 +319,7 @@ class _FlowCardState extends State<_FlowCard> {
         : <Map<String, dynamic>>[];
 
     // Worker info
+    final activeExCount = f['active_executions_count'] as int? ?? 0;
     final workerName  = f['worker_name'] as String?;
     final workerColor = f['worker_color'] as String?;
     final workerType  = f['worker_type'] as String? ?? f['catalog_worker_type'] as String? ?? 'custom';
@@ -381,6 +385,22 @@ class _FlowCardState extends State<_FlowCard> {
                               color: workerColor,
                             ),
                           _TypeBadge(typeEntry: typeEntry),
+                          if (activeExCount > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.ctWarnBg,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '$activeExCount activa${activeExCount == 1 ? '' : 's'}',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.ctWarnText,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ],

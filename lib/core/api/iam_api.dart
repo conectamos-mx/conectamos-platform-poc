@@ -85,4 +85,25 @@ class IamApi {
       },
     );
   }
+
+  static Future<Map<String, dynamic>> linkOperator({
+    required String tenantUserId,
+    required String phone,
+  }) async {
+    final res = await ApiClient.instance.post(
+      '/iam/users/$tenantUserId/link-operator',
+      data: {'phone': phone},
+    );
+    return res.data is Map
+        ? Map<String, dynamic>.from(res.data as Map)
+        : {};
+  }
+
+  static Future<void> unlinkOperator({
+    required String tenantUserId,
+  }) async {
+    await ApiClient.instance.post(
+      '/iam/users/$tenantUserId/unlink-operator',
+    );
+  }
 }

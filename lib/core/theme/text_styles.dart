@@ -124,6 +124,15 @@ abstract final class AppTextStyles {
     letterSpacing: -0.01,
   );
 
+  // ── Chips / filter labels ─────────────────────────────────────────────────
+  // Geist 500 · 12px · −0.01em (DS: Chip label)
+  static const TextStyle chipLabel = TextStyle(
+    fontFamily: 'Geist',
+    fontSize: 12,
+    fontWeight: FontWeight.w500,
+    letterSpacing: -0.01,
+  );
+
   // ── Tenant / chips ────────────────────────────────────────────────────────
   static const TextStyle tenantLabel = TextStyle(
     fontFamily: 'Geist',
@@ -147,7 +156,6 @@ abstract final class AppTextStyles {
     fontFamily: 'Geist',
     fontSize: 13,
     fontWeight: FontWeight.w700,
-    color: AppColors.ctNavy,
     letterSpacing: -0.01,
   );
 

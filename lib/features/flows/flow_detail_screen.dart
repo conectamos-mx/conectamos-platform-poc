@@ -566,16 +566,26 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
       await FlowsApi.deleteFlow(flowId: widget.flowId);
       if (!mounted) return;
       setState(() => _showDeleteModal = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Flujo "${_flow?['name'] ?? ''}" eliminado.'),
+        backgroundColor: AppColors.ctOk,
+      ));
       widget.onBack();
+    } on FlowDeleteBlockedException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _deleting = false;
+        _showDeleteModal = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(e.message), backgroundColor: AppColors.ctDanger,
+      ));
+      _load();
     } catch (e) {
       if (!mounted) return;
       setState(() => _deleting = false);
-      final isDio = e is DioException;
-      final msg = isDio && e.response?.statusCode == 409
-          ? 'Este flujo tiene ejecuciones activas y no puede eliminarse'
-          : _dioError(e);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(msg), backgroundColor: AppColors.ctDanger,
+        content: Text(_dioError(e)), backgroundColor: AppColors.ctDanger,
       ));
     }
   }
@@ -621,7 +631,9 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
 
   Widget _buildDeleteModal() {
     final flowName = _flow?['name'] as String? ?? 'este flujo';
-    final canConfirm = _deleteConfirmCtrl.text.trim() == flowName;
+    final activeCount = _flow?['active_executions_count'] as int? ?? 0;
+    final hasActive = activeCount > 0;
+    final canConfirm = !hasActive && _deleteConfirmCtrl.text.trim() == flowName;
     final referencingFlows = _computeReferencingFlows();
 
     return Positioned.fill(
@@ -698,52 +710,89 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
                       ],
                     ),
                     const SizedBox(height: 20),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppColors.ctBg,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Qué ocurrirá:',
-                              style: AppTextStyles.bodySmall.copyWith(
-                                  fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 10),
-                          _ImpactRow(
-                            icon: Icons.check_circle_outline,
-                            color: AppColors.ctOk,
-                            text: 'Las ejecuciones existentes no se verán afectadas '
-                                '(mantienen la estructura del flujo guardada).',
-                          ),
-                          const SizedBox(height: 8),
-                          _ImpactRow(
-                            icon: Icons.block_outlined,
-                            color: AppColors.ctDanger,
-                            text: 'No se podrán iniciar nuevas ejecuciones de este flujo.',
-                          ),
-                          const SizedBox(height: 8),
-                          _ImpactRow(
-                            icon: Icons.warning_amber_rounded,
-                            color: AppColors.ctWarn,
-                            text: 'Las ejecuciones activas en curso serán bloqueadas '
-                                'si el flujo tiene ejecuciones activas.',
-                          ),
-                          if (referencingFlows.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            _ImpactRow(
-                              icon: Icons.link_off_rounded,
-                              color: AppColors.ctDanger,
-                              text: 'Los siguientes flujos referencian este flujo y '
-                                  'fallarán silenciosamente: '
-                                  '${referencingFlows.join(", ")}.',
+                    if (hasActive)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.ctRedBg,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.ctDanger.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.error_outline, size: 18, color: AppColors.ctDanger),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'No se puede eliminar: hay $activeCount ejecuci${activeCount == 1 ? 'ón activa' : 'ones activas'} en curso.',
+                                    style: AppTextStyles.bodySmall.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.ctRedText,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Espera a que finalicen o márcalas como abandonadas antes de eliminar este flujo.',
+                                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
-                        ],
+                        ),
                       ),
-                    ),
+                    if (!hasActive)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.ctBg,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Qué ocurrirá:',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                    fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 10),
+                            _ImpactRow(
+                              icon: Icons.check_circle_outline,
+                              color: AppColors.ctOk,
+                              text: 'Las ejecuciones históricas se conservan intactas '
+                                  '(datos para reportes y auditoría).',
+                            ),
+                            const SizedBox(height: 8),
+                            _ImpactRow(
+                              icon: Icons.block_outlined,
+                              color: AppColors.ctDanger,
+                              text: 'No se podrán iniciar nuevas ejecuciones de este flujo.',
+                            ),
+                            const SizedBox(height: 8),
+                            _ImpactRow(
+                              icon: Icons.info_outline,
+                              color: AppColors.ctText2,
+                              text: 'El flujo dejará de aparecer en la lista.',
+                            ),
+                            if (referencingFlows.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              _ImpactRow(
+                                icon: Icons.link_off_rounded,
+                                color: AppColors.ctDanger,
+                                text: 'Los siguientes flujos referencian este flujo y '
+                                    'fallarán silenciosamente: '
+                                    '${referencingFlows.join(", ")}.',
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     const SizedBox(height: 20),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -782,24 +831,42 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
                               ],
                             ),
                           ),
-                          _MetricRow(
-                            label: 'Ejecuciones',
-                            value: (_flow?['execution_count'] as int? ?? 0)
-                                .toString(),
-                          ),
+                          if (hasActive)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.ctRedBg,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '$activeCount activa${activeCount == 1 ? '' : 's'}',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.ctRedText,
+                                ),
+                              ),
+                            )
+                          else
+                            Text(
+                              'Sin ejecuciones activas',
+                              style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+                            ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      'Escribe "$flowName" para confirmar:',
+                      hasActive
+                          ? 'No puedes eliminar este flujo mientras tenga ejecuciones activas.'
+                          : 'Escribe "$flowName" para confirmar:',
                       style: AppTextStyles.bodySmall
                           .copyWith(color: AppColors.ctText2),
                     ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _deleteConfirmCtrl,
-                      autofocus: true,
+                      autofocus: !hasActive,
+                      enabled: !hasActive,
                       style: AppTextStyles.body,
                       decoration: InputDecoration(
                         hintText: flowName,
@@ -821,6 +888,11 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
                           borderRadius: BorderRadius.circular(8),
                           borderSide: const BorderSide(
                               color: AppColors.ctDanger, width: 1.5),
+                        ),
+                        disabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide:
+                              const BorderSide(color: AppColors.ctBorder),
                         ),
                       ),
                       onChanged: (_) => setState(() {}),
@@ -1155,6 +1227,11 @@ class _FlowSidePanelState extends State<_FlowSidePanel> {
                       _MetricRow(
                         label: 'Ejecuciones totales',
                         value: (widget.flow['execution_count'] as int? ?? 0).toString(),
+                      ),
+                      const SizedBox(height: 6),
+                      _MetricRow(
+                        label: 'Ejecuciones activas',
+                        value: (widget.flow['active_executions_count'] as int? ?? 0).toString(),
                       ),
                       const SizedBox(height: 6),
                       _MetricRow(
@@ -3944,23 +4021,6 @@ class _AlCerrarTabState extends State<_AlCerrarTab> {
 
 // ── _ActionCard ───────────────────────────────────────────────────────────────
 
-IconData _actionIcon(String? type) {
-  switch (type) {
-    case 'open_flow_n_times':
-      return Icons.account_tree_outlined;
-    case 'webhook_out':
-      return Icons.webhook_outlined;
-    case 'emit_event':
-      return Icons.notifications_outlined;
-    case 'google_sheets_append_row':
-      return Icons.table_chart_outlined;
-    case 'notify_group':
-      return Icons.campaign_outlined;
-    default:
-      return Icons.account_tree_outlined;
-  }
-}
-
 String _actionLabel(String? type) {
   switch (type) {
     case 'open_flow':
@@ -5081,6 +5141,12 @@ class _ActionDialogState extends State<_ActionDialog> {
     }
   }
 
+  static bool _hasOnComplete(Map<String, dynamic> f) {
+    final raw = f['trigger_sources'];
+    if (raw is List) return raw.contains('on_complete');
+    return false;
+  }
+
   Future<void> _loadFlows() async {
     if (widget.tenantWorkerId.isEmpty) return;
     setState(() => _loadingFlows = true);
@@ -5844,30 +5910,59 @@ class _ActionDialogState extends State<_ActionDialog> {
                           color: AppColors.ctTeal, strokeWidth: 2),
                     ),
                   )
-                else if (_availableFlows.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.ctBorder),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'No hay flujos disponibles para este worker',
-                      style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                    ),
-                  )
                 else
-                  AppDropdown<String?>(
-                    hint: 'Selecciona un flujo',
-                    value: _selectedFlowSlug,
-                    items: _availableFlows.map((f) {
-                      final slug = f['slug'] as String? ?? '';
-                      final name = f['name'] as String? ?? slug;
-                      return AppDropdownItem<String?>(value: slug, label: name);
-                    }).toList(),
-                    onChanged: (v) => setState(() => _selectedFlowSlug = v),
-                  ),
+                  Builder(builder: (_) {
+                    final chainable = _availableFlows.where(_hasOnComplete).toList();
+                    final selectedIsInvalid = _selectedFlowSlug != null &&
+                        !chainable.any((f) => f['slug'] == _selectedFlowSlug);
+                    final items = <AppDropdownItem<String?>>[
+                      ...chainable.map((f) {
+                        final slug = f['slug'] as String? ?? '';
+                        final name = f['name'] as String? ?? slug;
+                        return AppDropdownItem<String?>(value: slug, label: name);
+                      }),
+                      if (selectedIsInvalid)
+                        AppDropdownItem<String?>(
+                          value: _selectedFlowSlug,
+                          label: '${_availableFlows.firstWhere(
+                                (f) => f['slug'] == _selectedFlowSlug,
+                                orElse: () => {'name': _selectedFlowSlug!},
+                              )['name'] ?? _selectedFlowSlug} (sin permiso de encadenamiento)',
+                        ),
+                    ];
+                    if (items.isEmpty) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.ctBorder),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'No hay flows configurados para encadenamiento',
+                          style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+                        ),
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AppDropdown<String?>(
+                          hint: 'Selecciona un flujo',
+                          value: _selectedFlowSlug,
+                          items: items,
+                          onChanged: (v) => setState(() => _selectedFlowSlug = v),
+                        ),
+                        if (selectedIsInvalid)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'El flujo seleccionado no tiene "on_complete" en trigger_sources.',
+                              style: AppTextStyles.caption.copyWith(color: AppColors.ctDanger),
+                            ),
+                          ),
+                      ],
+                    );
+                  }),
                 const SizedBox(height: 8),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -6113,16 +6208,58 @@ class _ActionDialogState extends State<_ActionDialog> {
                     ),
                   )
                 else
-                  AppDropdown<String?>(
-                    hint: 'Selecciona un flujo',
-                    value: _selectedFlowSlug,
-                    items: _availableFlows.map((f) {
-                      final slug = f['slug'] as String? ?? '';
-                      final name = f['name'] as String? ?? slug;
-                      return AppDropdownItem<String?>(value: slug, label: name);
-                    }).toList(),
-                    onChanged: (v) => setState(() => _selectedFlowSlug = v),
-                  ),
+                  Builder(builder: (_) {
+                    final chainable = _availableFlows.where(_hasOnComplete).toList();
+                    final selectedIsInvalid = _selectedFlowSlug != null &&
+                        !chainable.any((f) => f['slug'] == _selectedFlowSlug);
+                    final items = <AppDropdownItem<String?>>[
+                      ...chainable.map((f) {
+                        final slug = f['slug'] as String? ?? '';
+                        final name = f['name'] as String? ?? slug;
+                        return AppDropdownItem<String?>(value: slug, label: name);
+                      }),
+                      if (selectedIsInvalid)
+                        AppDropdownItem<String?>(
+                          value: _selectedFlowSlug,
+                          label: '${_availableFlows.firstWhere(
+                                (f) => f['slug'] == _selectedFlowSlug,
+                                orElse: () => {'name': _selectedFlowSlug!},
+                              )['name'] ?? _selectedFlowSlug} (sin permiso de encadenamiento)',
+                        ),
+                    ];
+                    if (items.isEmpty) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.ctBorder),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'No hay flows configurados para encadenamiento',
+                          style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+                        ),
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AppDropdown<String?>(
+                          hint: 'Selecciona un flujo',
+                          value: _selectedFlowSlug,
+                          items: items,
+                          onChanged: (v) => setState(() => _selectedFlowSlug = v),
+                        ),
+                        if (selectedIsInvalid)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'El flujo seleccionado no tiene "on_complete" en trigger_sources.',
+                              style: AppTextStyles.caption.copyWith(color: AppColors.ctDanger),
+                            ),
+                          ),
+                      ],
+                    );
+                  }),
                 const SizedBox(height: 12),
                 Text(
                   'Campo de conteo',

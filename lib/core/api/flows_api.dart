@@ -98,9 +98,24 @@ class FlowsApi {
   static Future<void> deleteFlow({
     required String flowId,
   }) async {
-    await ApiClient.instance.delete(
-      '/flows/$flowId',
-    );
+    try {
+      await ApiClient.instance.delete(
+        '/flows/$flowId',
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        final data = e.response?.data;
+        final detail = data is Map ? data['detail'] : null;
+        if (detail is Map) {
+          throw FlowDeleteBlockedException(
+            code: detail['code'] as String? ?? 'flow_has_active_executions',
+            message: detail['message'] as String? ?? 'Este flujo tiene ejecuciones activas.',
+            activeCount: detail['active_count'] as int? ?? 0,
+          );
+        }
+      }
+      rethrow;
+    }
   }
 
   // ── Integrations ────────────────────────────────────────────────────────────
@@ -349,23 +364,13 @@ class FlowsApi {
   }
 
   static Future<List<Map<String, dynamic>>> getPreconditionTypes() async {
-    try {
-      final response = await ApiClient.instance.get(
-        '/flows/precondition-types',
-      );
-      final raw = response.data;
-      final list = raw is Map ? (raw['types'] ?? []) : raw;
-      return List<Map<String, dynamic>>.from(
-          (list as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
-    } on DioException catch (e) {
-      print('[getPreconditionTypes] DioException: ${e.message}');
-      print('[getPreconditionTypes] status: ${e.response?.statusCode}');
-      print('[getPreconditionTypes] body: ${e.response?.data}');
-      rethrow;
-    } catch (e) {
-      print('[getPreconditionTypes] error: $e');
-      rethrow;
-    }
+    final response = await ApiClient.instance.get(
+      '/flows/precondition-types',
+    );
+    final raw = response.data;
+    final list = raw is Map ? (raw['types'] ?? []) : raw;
+    return List<Map<String, dynamic>>.from(
+        (list as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
   }
 
   static Future<Map<String, dynamic>> getDashboardCharts(
@@ -390,4 +395,18 @@ class FlowsApi {
     }
     return byWidgetId;
   }
+}
+
+class FlowDeleteBlockedException implements Exception {
+  FlowDeleteBlockedException({
+    required this.code,
+    required this.message,
+    required this.activeCount,
+  });
+  final String code;
+  final String message;
+  final int activeCount;
+
+  @override
+  String toString() => message;
 }
