@@ -18,7 +18,9 @@ import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_confirm_dialog.dart';
+import '../../shared/widgets/app_alert_banner.dart';
 import '../../shared/widgets/app_detail_header.dart';
+import '../../shared/widgets/app_dropdown.dart';
 import 'widgets/operator_form_dialog.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -72,7 +74,7 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 4, vsync: this);
+    _tabCtrl = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -106,14 +108,14 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
         ? 'No podrá recibir nuevas conversaciones hasta ser reactivado.'
         : 'Volverá a recibir conversaciones nuevas.';
 
-    final ok = await showDialog<bool>(
+    final ok = await AppConfirmDialog.show(
       context: context,
-      builder: (ctx) => _ConfirmDialog(
-        title: '¿$label a $name?',
-        body: consequence,
-        confirmLabel: label,
-        confirmColor: isSuspend ? AppColors.ctDanger : AppColors.ctOk,
-      ),
+      title: '¿$label a $name?',
+      body: consequence,
+      confirmLabel: label,
+      variant: isSuspend
+          ? AppConfirmDialogVariant.danger
+          : AppConfirmDialogVariant.normal,
     );
     if (ok != true || !mounted) return;
 
@@ -133,14 +135,12 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
   Future<void> _delete() async {
     final name = _op?['display_name'] as String? ?? 'este operador';
 
-    final step1 = await showDialog<bool>(
+    final step1 = await AppConfirmDialog.show(
       context: context,
-      builder: (ctx) => _ConfirmDialog(
-        title: '¿Eliminar a $name?',
-        body: 'Esta acción no se puede deshacer.',
-        confirmLabel: 'Eliminar permanentemente',
-        confirmColor: AppColors.ctDanger,
-      ),
+      title: '¿Eliminar a $name?',
+      body: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar permanentemente',
+      variant: AppConfirmDialogVariant.danger,
     );
     if (step1 != true || !mounted) return;
 
@@ -332,13 +332,15 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
       ),
       body: Column(
         children: [
+          // ── Banners contextuales ──
+          _BannersSection(op: op),
+
           Expanded(
             child: TabBarView(
               controller: _tabCtrl,
               children: [
                 _DatosTab(op: op, onReload: _load),
                 _FlujosTab(op: op, canManage: canManage),
-                const _PermisosTab(),
                 _HistorialTab(operatorId: widget.operatorId),
               ],
             ),
@@ -370,12 +372,200 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
             tabs: const [
               Tab(text: 'Datos'),
               Tab(text: 'Flujos'),
-              Tab(text: 'Permisos'),
               Tab(text: 'Historial'),
             ],
           ),
         ),
       );
+}
+
+// ── Banners contextuales ────────────────────────────────────────────────────
+
+class _BannersSection extends StatefulWidget {
+  const _BannersSection({required this.op});
+  final Map<String, dynamic> op;
+
+  @override
+  State<_BannersSection> createState() => _BannersSectionState();
+}
+
+class _BannersSectionState extends State<_BannersSection> {
+  bool _resending = false;
+
+  String _fmtExpiry(DateTime dt) {
+    final d = dt.day.toString().padLeft(2, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final h = dt.hour.toString().padLeft(2, '0');
+    final min = dt.minute.toString().padLeft(2, '0');
+    return '$d/$m/${dt.year} $h:$min';
+  }
+
+  String? _firstTelegramChannelId() {
+    // Check top-level channels first
+    final channels = widget.op['channels'] as List?;
+    if (channels != null) {
+      for (final ch in channels) {
+        if (ch is Map && ch['channel_type'] == 'telegram') {
+          return ch['channel_id'] as String? ?? ch['id'] as String?;
+        }
+      }
+    }
+    // Fallback: check flow.channels (new shape)
+    final flows = widget.op['flows'] as List?;
+    if (flows == null) return null;
+    for (final f in flows) {
+      if (f is Map) {
+        final flowChannels = f['channels'] as List?;
+        if (flowChannels != null) {
+          for (final ch in flowChannels) {
+            if (ch is Map && ch['channel_type'] == 'telegram') {
+              return ch['channel_id'] as String?;
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<void> _resendTelegramInvite() async {
+    final channelId = _firstTelegramChannelId();
+    if (channelId == null) return;
+    final operatorId = widget.op['id'] as String? ?? '';
+    if (operatorId.isEmpty) return;
+
+    setState(() => _resending = true);
+    try {
+      await OperatorsApi.sendTelegramInvite(
+        operatorId: operatorId,
+        channelId: channelId,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Invitacion reenviada'),
+          backgroundColor: AppColors.ctOk,
+        ));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Error al reenviar la invitacion'),
+          backgroundColor: AppColors.ctDanger,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _resending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final banners = <Widget>[];
+
+    // Banner incidencia
+    final computedStatus = widget.op['computed_status'] as String?;
+    if (computedStatus == 'incident') {
+      banners.add(AppAlertBanner(
+        variant: AppAlertBannerVariant.danger,
+        title: 'Incidencia activa',
+        message: 'Este operador tiene una escalacion abierta.',
+        actions: [
+          AppButton(
+            label: 'Abrir torre de control',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.sm,
+            onPressed: () => context.go('/escalaciones'),
+          ),
+        ],
+      ));
+    }
+
+    // Banner Telegram
+    final tgLinkStatus = widget.op['telegram_link_status'] as String?;
+    if (tgLinkStatus == 'pending') {
+      final meta = widget.op['metadata'] as Map<String, dynamic>? ?? {};
+      final expiresAtRaw = meta['telegram_link_expires_at'] as String?;
+      final expiresAt = expiresAtRaw != null
+          ? DateTime.tryParse(expiresAtRaw)
+          : null;
+      final isExpired = expiresAt != null && expiresAt.isBefore(DateTime.now());
+
+      final hasTgChannel = _firstTelegramChannelId() != null;
+
+      if (!isExpired && expiresAt != null) {
+        // Pending vigente
+        banners.add(AppAlertBanner(
+          variant: AppAlertBannerVariant.info,
+          title: 'Invitacion de Telegram enviada',
+          message:
+              'El operador aun no completa la vinculacion. Expira el ${_fmtExpiry(expiresAt.toLocal())}.',
+          actions: [
+            hasTgChannel
+                ? AppButton(
+                    label: 'Reenviar invitacion',
+                    variant: AppButtonVariant.ghost,
+                    size: AppButtonSize.sm,
+                    isLoading: _resending,
+                    onPressed: _resending ? () {} : _resendTelegramInvite,
+                  )
+                : Tooltip(
+                    message: 'Sin canal Telegram configurado',
+                    child: AppButton(
+                      label: 'Reenviar invitacion',
+                      variant: AppButtonVariant.ghost,
+                      size: AppButtonSize.sm,
+                      isDisabled: true,
+                      onPressed: () {},
+                    ),
+                  ),
+          ],
+        ));
+      } else {
+        // Pending expirada o sin expires_at
+        banners.add(AppAlertBanner(
+          variant: AppAlertBannerVariant.warning,
+          title: 'Invitacion de Telegram expirada',
+          message:
+              'El operador no podra recibir mensajes por Telegram hasta que reenvies el link.',
+          actions: [
+            hasTgChannel
+                ? AppButton(
+                    label: 'Reenviar invitacion',
+                    variant: AppButtonVariant.teal,
+                    size: AppButtonSize.sm,
+                    prefixIcon: const Icon(Icons.send, size: 14),
+                    isLoading: _resending,
+                    onPressed: _resending ? () {} : _resendTelegramInvite,
+                  )
+                : Tooltip(
+                    message: 'Sin canal Telegram configurado',
+                    child: AppButton(
+                      label: 'Reenviar invitacion',
+                      variant: AppButtonVariant.teal,
+                      size: AppButtonSize.sm,
+                      isDisabled: true,
+                      onPressed: () {},
+                    ),
+                  ),
+          ],
+        ));
+      }
+    }
+
+    if (banners.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      child: Column(
+        children: [
+          for (int i = 0; i < banners.length; i++) ...[
+            if (i > 0) const SizedBox(height: 10),
+            banners[i],
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 // ── Tab DATOS ──────────────────────────────────────────────────────────────────
@@ -399,6 +589,11 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
   List<Map<String, dynamic>> _availableRoles = [];
   bool _savingRole = false;
 
+  // Telegram invite
+  List<Map<String, dynamic>>? _availableTgChannels;
+  String? _selectedTgChannelId;
+  bool _sendingTgInvite = false;
+
   @override
   void initState() {
     super.initState();
@@ -415,7 +610,56 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadTypes();
       _loadRoles();
+      _loadTelegramChannels();
     });
+  }
+
+  Future<void> _loadTelegramChannels() async {
+    final operatorId = widget.op['id'] as String? ?? '';
+    if (operatorId.isEmpty) return;
+    try {
+      final channels = await OperatorsApi.getAvailableTelegramChannels(operatorId);
+      if (mounted) setState(() => _availableTgChannels = channels);
+    } catch (_) {
+      if (mounted) setState(() => _availableTgChannels = []);
+    }
+  }
+
+  Future<void> _sendTelegramInvite(String channelId) async {
+    final operatorId = widget.op['id'] as String? ?? '';
+    if (operatorId.isEmpty) return;
+    setState(() => _sendingTgInvite = true);
+    try {
+      await OperatorsApi.sendTelegramInvite(
+        operatorId: operatorId,
+        channelId: channelId,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Invitacion enviada'),
+          backgroundColor: AppColors.ctOk,
+        ));
+        widget.onReload();
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final status = e.response?.statusCode;
+      final msg = status == 409
+          ? 'Este operador ya tiene Telegram vinculado.'
+          : 'Error al enviar la invitacion';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor: AppColors.ctDanger,
+      ));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Error al enviar la invitacion'),
+        backgroundColor: AppColors.ctDanger,
+      ));
+    } finally {
+      if (mounted) setState(() => _sendingTgInvite = false);
+    }
   }
 
   Future<void> _loadTypes() async {
@@ -580,6 +824,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
           if (identityNumber.isNotEmpty)
             _FieldRow(label: idLabel, value: identityNumber),
           _FieldRow(label: 'Teléfono WhatsApp', value: phone),
+          // ── Telegram ──────────────────────────────────────────────
           if (tgChatId != null && tgChatId.isNotEmpty) ...[
             const _FieldLabel('Telegram Chat ID'),
             const SizedBox(height: 4),
@@ -603,6 +848,92 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
             ),
             const SizedBox(height: 12),
           ],
+          // Telegram invite — only when status is 'none' (not linked, not pending)
+          Builder(builder: (context) {
+            final tgLinkStatus = op['telegram_link_status'] as String? ??
+                (meta['telegram_link_status'] as String? ?? 'none');
+            // linked → pill shown above; pending → banner shown above body
+            if (tgLinkStatus != 'none') return const SizedBox.shrink();
+
+            if (_availableTgChannels == null) {
+              return const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: SizedBox(
+                  height: 24,
+                  child: Center(
+                    child: SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctTeal),
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            final channels = _availableTgChannels!;
+            if (channels.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Sin canal Telegram disponible. Conecta uno desde Mis Workers.',
+                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+                ),
+              );
+            }
+
+            if (channels.length == 1) {
+              final chId = channels[0]['channel_id'] as String? ?? '';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: AppButton(
+                  label: 'Enviar invitacion Telegram',
+                  variant: AppButtonVariant.teal,
+                  size: AppButtonSize.sm,
+                  prefixIcon: const Icon(Icons.send, size: 14),
+                  isLoading: _sendingTgInvite,
+                  onPressed: _sendingTgInvite ? () {} : () => _sendTelegramInvite(chId),
+                ),
+              );
+            }
+
+            // Multiple channels — dropdown + button
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 280,
+                    child: AppDropdown<String>(
+                      value: _selectedTgChannelId,
+                      hint: 'Seleccionar canal Telegram',
+                      items: channels.map((ch) {
+                        final id = ch['channel_id'] as String? ?? '';
+                        final bot = ch['bot_username'] as String? ?? '';
+                        final worker = ch['worker_name'] as String? ?? '';
+                        final label = worker.isNotEmpty
+                            ? '$bot ($worker)'
+                            : bot.isNotEmpty ? bot : id;
+                        return AppDropdownItem(value: id, label: label);
+                      }).toList(),
+                      onChanged: (v) => setState(() => _selectedTgChannelId = v),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  AppButton(
+                    label: 'Enviar invitacion',
+                    variant: AppButtonVariant.teal,
+                    size: AppButtonSize.sm,
+                    prefixIcon: const Icon(Icons.send, size: 14),
+                    isLoading: _sendingTgInvite,
+                    isDisabled: _selectedTgChannelId == null,
+                    onPressed: _selectedTgChannelId != null && !_sendingTgInvite
+                        ? () => _sendTelegramInvite(_selectedTgChannelId!)
+                        : () {},
+                  ),
+                ],
+              ),
+            );
+          }),
           // ── Vínculo con plataforma ──────────────────────────────────
           const SizedBox(height: 16),
           const _SectionTitle('Vínculo con plataforma'),
@@ -952,11 +1283,6 @@ class _FlujosTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final meta = op['metadata'] as Map<String, dynamic>? ?? {};
-    final tgChatId = meta['telegram_chat_id'] as String?;
-    final hasTgLinked = tgChatId != null && tgChatId.isNotEmpty;
-    final operatorId = op['id'] as String? ?? '';
-
     final flows = (op['flows'] as List? ?? []).map((f) {
       if (f is Map) return Map<String, dynamic>.from(f);
       return <String, dynamic>{'id': f.toString()};
@@ -982,72 +1308,45 @@ class _FlujosTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: flows
-            .map((f) => _FlowCard(
-                  flow: f,
-                  operatorId: operatorId,
-                  hasTgLinked: hasTgLinked,
-                ))
+            .map((f) => _FlowCard(flow: f))
             .toList(),
       ),
     );
   }
 }
 
-class _FlowCard extends StatefulWidget {
-  const _FlowCard({
-    required this.flow,
-    required this.operatorId,
-    required this.hasTgLinked,
-  });
+class _FlowCard extends StatelessWidget {
+  const _FlowCard({required this.flow});
   final Map<String, dynamic> flow;
-  final String operatorId;
-  final bool hasTgLinked;
 
-  @override
-  State<_FlowCard> createState() => _FlowCardState();
-}
-
-class _FlowCardState extends State<_FlowCard> {
-  bool _sending = false;
-
-  Future<void> _sendInvite() async {
-    setState(() => _sending = true);
-    final channelId =
-        widget.flow['channel_id'] as String? ??
-        widget.flow['id'] as String? ?? '';
-    try {
-      await OperatorsApi.sendTelegramInvite(
-        operatorId: widget.operatorId,
-        channelId: channelId,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Invitación enviada'),
-          backgroundColor: AppColors.ctOk,
-        ));
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Error al enviar la invitación'),
-          backgroundColor: AppColors.ctDanger,
-        ));
-      }
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
+  static ({IconData icon, Color color, String label}) _channelVisual(String type) {
+    return switch (type) {
+      'telegram' => (icon: Icons.telegram, color: AppColors.ctTg, label: 'Telegram'),
+      'whatsapp' => (icon: Icons.chat_bubble_outline, color: AppColors.ctWa, label: 'WhatsApp'),
+      'sms' => (icon: Icons.sms_outlined, color: AppColors.ctText2, label: 'SMS'),
+      _ => (icon: Icons.router_rounded, color: AppColors.ctText3, label: type),
+    };
   }
 
   @override
   Widget build(BuildContext context) {
-    final flow = widget.flow;
-    final name =
-        flow['name'] as String? ?? flow['id'] as String? ?? '—';
-    final channelTypes = flow['channel_types'];
-    final isTelegram =
-        channelTypes is List && channelTypes.contains('telegram');
-    final isWa =
-        channelTypes is List && channelTypes.contains('whatsapp');
+    final name = flow['name'] as String? ?? flow['id'] as String? ?? '—';
+    final workerName = flow['worker_name'] as String?;
+
+    // Extract channel types from flow['channels'] (new shape)
+    final flowChannels = (flow['channels'] as List? ?? [])
+        .whereType<Map>()
+        .toList();
+    final channelTypes = flowChannels
+        .map((ch) => ch['channel_type'] as String? ?? '')
+        .where((t) => t.isNotEmpty)
+        .toSet()
+        .toList();
+
+    // Primary channel for icon (first one)
+    final primary = channelTypes.isNotEmpty
+        ? _channelVisual(channelTypes.first)
+        : _channelVisual('');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1059,23 +1358,15 @@ class _FlowCardState extends State<_FlowCard> {
       ),
       child: Row(
         children: [
-          // Canal icon
+          // Primary channel icon
           Container(
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: isTelegram
-                  ? AppColors.ctTgBubble
-                  : AppColors.ctOkBg,
+              color: primary.color.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              isTelegram ? Icons.telegram : Icons.chat_bubble_outline,
-              size: 16,
-              color: isTelegram
-                  ? AppColors.ctTg
-                  : AppColors.ctOk,
-            ),
+            child: Icon(primary.icon, size: 16, color: primary.color),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1085,99 +1376,35 @@ class _FlowCardState extends State<_FlowCard> {
                 Text(name,
                     style: AppTextStyles.body.copyWith(fontSize: 14, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 2),
-                Text(
-                  isTelegram
-                      ? 'Telegram'
-                      : isWa
-                          ? 'WhatsApp'
-                          : 'Canal',
-                  style: AppTextStyles.navItem,
+                Row(
+                  children: [
+                    if (workerName != null && workerName.isNotEmpty) ...[
+                      Text(workerName, style: AppTextStyles.navItem),
+                      if (channelTypes.isNotEmpty) ...[
+                        Text(' · ', style: AppTextStyles.navItem),
+                      ],
+                    ],
+                    // Channel type labels
+                    ...channelTypes.map((t) {
+                      final v = _channelVisual(t);
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(v.icon, size: 12, color: v.color),
+                            const SizedBox(width: 3),
+                            Text(v.label, style: AppTextStyles.navItem),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
                 ),
               ],
             ),
           ),
-          // Telegram link badge / invite button
-          if (isTelegram && !widget.hasTgLinked) ...[
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppColors.ctRedBg,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text('Sin vincular',
-                  style: AppTextStyles.badge.copyWith(color: AppColors.ctRedText)),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              height: 28,
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  backgroundColor: AppColors.ctTgBubble,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6)),
-                ),
-                onPressed: _sending ? null : _sendInvite,
-                child: _sending
-                    ? const SizedBox(
-                        width: 12,
-                        height: 12,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : Text('Enviar invitación',
-                        style: AppTextStyles.badge.copyWith(
-                          color: AppColors.ctTg,
-                        )),
-              ),
-            ),
-          ] else if (isTelegram && widget.hasTgLinked) ...[
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppColors.ctOkBg,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.check_circle, size: 12, color: AppColors.ctOk),
-                  const SizedBox(width: 4),
-                  Text('Vinculado',
-                      style: AppTextStyles.badge.copyWith(color: AppColors.ctOkText)),
-                ],
-              ),
-            ),
-          ],
         ],
-      ),
-    );
-  }
-}
-
-// ── Tab PERMISOS ───────────────────────────────────────────────────────────────
-
-class _PermisosTab extends StatelessWidget {
-  const _PermisosTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.lock_outline, size: 56, color: AppColors.ctText3),
-            const SizedBox(height: 16),
-            Text(
-              'La asignación de permisos individuales por operador '
-              'estará disponible próximamente',
-              textAlign: TextAlign.center,
-              style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist', color: AppColors.ctText2),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1533,44 +1760,6 @@ class _CustomFieldReadRow extends StatelessWidget {
 }
 
 // ── Shared widgets ─────────────────────────────────────────────────────────────
-
-class _ConfirmDialog extends StatelessWidget {
-  const _ConfirmDialog({
-    required this.title,
-    required this.body,
-    required this.confirmLabel,
-    required this.confirmColor,
-  });
-  final String title;
-  final String body;
-  final String confirmLabel;
-  final Color confirmColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.ctSurface,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      title: Text(title,
-          style: AppTextStyles.pageTitle.copyWith(fontFamily: 'Geist', fontSize: 16)),
-      content: Text(body,
-          style: AppTextStyles.body.copyWith(fontSize: 14, color: AppColors.ctText2)),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: Text('Cancelar',
-              style: AppTextStyles.btnSecondary.copyWith(color: AppColors.ctText2)),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: Text(confirmLabel,
-              style: AppTextStyles.btnPrimary.copyWith(color: confirmColor)),
-        ),
-      ],
-    );
-  }
-}
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.text);

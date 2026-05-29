@@ -23,26 +23,6 @@ import 'phone_secondary_widget.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-bool _isTelegramExpired(String? expiresAt) {
-  if (expiresAt == null) return false;
-  try {
-    return DateTime.now().toUtc()
-        .isAfter(DateTime.parse(expiresAt).toUtc());
-  } catch (_) {
-    return false;
-  }
-}
-
-String _formatTelegramExpiry(String iso) {
-  try {
-    final dt = DateTime.parse(iso).toLocal();
-    return '${dt.day}/${dt.month}/${dt.year} '
-        '${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
-  } catch (_) {
-    return iso;
-  }
-}
-
 Color _avatarColor(String name) {
   const palette = [
     AppColors.ctTeal,
@@ -136,14 +116,8 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
   Map<String, String> _fieldErrors = {};
   bool _secondaryExpanded = false;
 
-  // Telegram invite
-  bool _sendingInvite = false;
-  List<String> _inviteResults = [];
-
   // Telegram linking state
   String _telegramLinkStatus = 'none';
-  String? _telegramLinkExpiresAt;
-  String? _telegramChannelId;
 
   // Realtime subscription
   RealtimeChannel? _realtimeChannel;
@@ -198,8 +172,6 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
     final meta = widget.initialMetadata ?? {};
     _telegramLinkStatus =
         (meta['telegram_link_status'] as String?) ?? 'none';
-    _telegramLinkExpiresAt =
-        meta['telegram_link_expires_at'] as String?;
     _nationalityIso = widget.initialNationality ??
         (meta['nationality'] as String? ?? '');
     _identityNumber = widget.initialIdentityNumber ??
@@ -261,16 +233,13 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
 
     final newChatId = meta['telegram_chat_id'] as String?;
     final newStatus = (meta['telegram_link_status'] as String?) ?? 'none';
-    final newExpiresAt = meta['telegram_link_expires_at'] as String?;
 
     setState(() {
       if (newChatId != null && newChatId.isNotEmpty) {
         _telegramCtrl.text = newChatId;
         _telegramLinkStatus = 'linked';
-        _telegramLinkExpiresAt = null;
       } else {
         _telegramLinkStatus = newStatus;
-        _telegramLinkExpiresAt = newExpiresAt;
       }
     });
 
@@ -1024,63 +993,6 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
     }
   }
 
-  // ── Telegram invite — DO NOT MODIFY LOGIC ────────────────────────────────
-
-  Future<void> _sendInvite() async {
-    if (_sendingInvite || widget.operatorId == null) return;
-    if (_telegramChannelId == null) {
-      setState(() => _inviteResults = [
-            '⚠ No se encontraron canales Telegram en los flujos seleccionados.'
-          ]);
-      return;
-    }
-    setState(() {
-      _sendingInvite = true;
-      _inviteResults = [];
-    });
-    try {
-      final result = await OperatorsApi.sendTelegramInvite(
-        operatorId: widget.operatorId!,
-        channelId: _telegramChannelId!,
-        phone: _phoneE164.isNotEmpty ? _phoneE164 : _phoneLocalNumber,
-      );
-      final expiresAt = result['expires_at'] as String?;
-      if (mounted) {
-        setState(() {
-          _sendingInvite = false;
-          _telegramLinkStatus = 'pending';
-          if (expiresAt != null) _telegramLinkExpiresAt = expiresAt;
-          _inviteResults = ['✓ Invitación enviada'];
-        });
-      }
-    } on DioException catch (e) {
-      final statusCode = e.response?.statusCode;
-      final String errorMsg;
-      if (statusCode == 409) {
-        errorMsg =
-            'Este operador ya tiene Telegram vinculado. '
-            'Borra el Chat ID actual y guarda para poder reenviar.';
-      } else {
-        errorMsg = 'No se pudo enviar la invitación. Intenta de nuevo.';
-      }
-      if (mounted) {
-        setState(() {
-          _sendingInvite = false;
-          _inviteResults = ['✗ $errorMsg'];
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _sendingInvite = false;
-          _inviteResults = [
-            '✗ No se pudo enviar la invitación. Intenta de nuevo.'
-          ];
-        });
-      }
-    }
-  }
-
   // ── Dispose ───────────────────────────────────────────────────────────────
 
   @override
@@ -1547,73 +1459,6 @@ class _OperatorFormDialogState extends ConsumerState<OperatorFormDialog> {
                         placeholder: 'Ej: 123456789',
                         keyboardType: TextInputType.number,
                       ),
-                    ],
-
-                    // Vincular vía Telegram button
-                    if (_telegramChannelId != null &&
-                        _telegramLinkStatus != 'linked' &&
-                        widget.isEdit) ...[
-                      const SizedBox(height: 12),
-                      Builder(builder: (ctx) {
-                        final isExpired =
-                            _telegramLinkStatus == 'expired' ||
-                                (_telegramLinkStatus == 'pending' &&
-                                    _isTelegramExpired(
-                                        _telegramLinkExpiresAt));
-                        final isPendingActive =
-                            _telegramLinkStatus == 'pending' &&
-                                !isExpired &&
-                                _telegramLinkExpiresAt != null;
-                        final btnLabel =
-                            _telegramLinkStatus == 'none'
-                                ? 'Vincular vía Telegram'
-                                : 'Reenviar invitación';
-                        return Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                          children: [
-                            if (isExpired)
-                              Padding(
-                                padding:
-                                    const EdgeInsets.only(bottom: 6),
-                                child: Text(
-                                  'Invitación expirada',
-                                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
-                                ),
-                              )
-                            else if (isPendingActive)
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                    bottom: 6),
-                                child: Text(
-                                  'Invitación enviada · expira ${_formatTelegramExpiry(_telegramLinkExpiresAt!)}',
-                                  style: AppTextStyles.bodySmall,
-                                ),
-                              ),
-                            AppButton(
-                              label: btnLabel,
-                              onPressed: _sendInvite,
-                              variant: AppButtonVariant.outline,
-                              size: AppButtonSize.sm,
-                              isLoading: _sendingInvite,
-                              prefixIcon: const Icon(Icons.telegram, size: 16),
-                            ),
-                          ],
-                        );
-                      }),
-                      if (_inviteResults.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        ..._inviteResults.map(
-                          (r) => Padding(
-                            padding:
-                                const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              r,
-                              style: AppTextStyles.bodySmall,
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
 
                     // ── SECCIÓN 6: Campos personalizados ─────────────────

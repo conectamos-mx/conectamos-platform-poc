@@ -189,15 +189,13 @@ class OperatorsApi {
         : {};
   }
 
-  /// GET /flows/telegram-channels?flow_ids=uuid1,uuid2
-  /// Returns channels list: [{ "channel_id": "uuid", "bot_username": "..." }]
-  static Future<List<Map<String, dynamic>>> getTelegramChannels({
-    required List<String> flowIds,
-  }) async {
-    if (flowIds.isEmpty) return [];
+  /// GET /operators/{id}/available-telegram-channels
+  /// Returns: {"channels": [{"channel_id": "uuid", "bot_username": "...", "worker_name": "..."}, ...]}
+  static Future<List<Map<String, dynamic>>> getAvailableTelegramChannels(
+    String operatorId,
+  ) async {
     final response = await ApiClient.instance.get(
-      '/flows/telegram-channels',
-      queryParameters: {'flow_ids': flowIds.join(',')},
+      '/operators/$operatorId/available-telegram-channels',
     );
     final data = response.data;
     if (data is Map && data['channels'] is List) {

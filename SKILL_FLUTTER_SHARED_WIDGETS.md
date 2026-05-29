@@ -1104,3 +1104,70 @@ AppImportPreviewTable(
 **PROHIBIDO usar en su lugar:**
 - `DataTable` de Flutter base en dialogs de import
 - Tabla ad-hoc sin row-level status diferenciado
+
+---
+
+### 2.20 AppAlertBanner · `lib/shared/widgets/app_alert_banner.dart`
+
+Banner contextual de aviso/alerta/error. Renderizable dentro de pantallas de detalle o sobre cuerpos principales. Persistente (no transitorio como SnackBar).
+
+```dart
+import '../../shared/widgets/app_alert_banner.dart';
+
+// Banner de error/incidencia
+AppAlertBanner(
+  variant: AppAlertBannerVariant.danger,
+  title: 'Incidencia activa',
+  message: 'Este operador tiene una escalacion abierta.',
+  actions: [
+    AppButton(label: 'Ver detalle', variant: AppButtonVariant.ghost, size: AppButtonSize.sm, onPressed: _goDetail),
+  ],
+)
+
+// Banner de advertencia
+AppAlertBanner(
+  variant: AppAlertBannerVariant.warning,
+  title: 'Invitacion expirada',
+  message: 'Reenvia el link para que el operador pueda acceder.',
+  actions: [
+    AppButton(label: 'Reenviar', variant: AppButtonVariant.teal, size: AppButtonSize.sm, onPressed: _resend),
+  ],
+)
+
+// Banner informativo
+AppAlertBanner(
+  variant: AppAlertBannerVariant.info,
+  title: 'Invitacion enviada',
+  message: 'El operador aun no completa la vinculacion.',
+)
+
+// Con icono custom
+AppAlertBanner(
+  variant: AppAlertBannerVariant.warning,
+  title: 'Sincronizacion pendiente',
+  prefixIcon: const Icon(Icons.sync_problem, size: 22, color: AppColors.ctWarnText),
+)
+```
+
+**Variantes:**
+
+| Variante | bg / texto | Icono default | Cuando usar |
+|---|---|---|---|
+| `danger` | ctRedBg / ctRedText | `error_outline` | Incidencias, errores criticos, bloqueos |
+| `warning` | ctWarnBg / ctWarnText | `warning_amber_rounded` | Expiraciones, advertencias, atencion requerida |
+| `info` | ctInfoBg / ctInfoText | `info_outlined` | Informativos, procesos en curso, estados pendientes |
+
+**Props:**
+
+| Prop | Tipo | Default | Descripcion |
+|---|---|---|---|
+| `variant` | `AppAlertBannerVariant` | requerido | Estilo visual del banner |
+| `title` | `String` | requerido | Titulo en negrita |
+| `message` | `String?` | null | Mensaje secundario debajo del titulo |
+| `actions` | `List<Widget>?` | null | Botones a la derecha (usar AppButton) |
+| `prefixIcon` | `Widget?` | null | Icono custom (override del default) |
+
+**PROHIBIDO usar en su lugar:**
+- `Container` con `BoxDecoration` ad-hoc para banners de aviso
+- `SnackBar` — es transitorio, no persistente en pantalla
+- `AlertDialog` — es modal, no inline en el body
