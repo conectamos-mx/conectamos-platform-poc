@@ -1186,3 +1186,62 @@ AppAlertBanner(
 - `Container` con `BoxDecoration` ad-hoc para banners de aviso
 - `SnackBar` — es transitorio, no persistente en pantalla
 - `AlertDialog` — es modal, no inline en el body
+
+---
+
+### 2.21 AppDashboardTable · `lib/shared/widgets/app_dashboard_table.dart`
+
+Tabla de datos para dashboards operativos. Reemplaza `DataTable` de Flutter.
+Encapsula: accent bar, header con download, columnas proporcionales (`FlexColumnWidth`),
+badges de estatus, celdas vacias estandarizadas.
+
+```dart
+import '../../shared/widgets/app_dashboard_table.dart';
+
+AppDashboardTable(
+  title: 'Entregas con receta',
+  subtitle: 'Recetas capturadas en el periodo',
+  accentColor: AppColors.ctTeal,
+  columns: [
+    AppDashboardColumn(label: 'Fecha', flex: 2),
+    AppDashboardColumn(label: 'Operador', flex: 4),
+    AppDashboardColumn(label: 'CRUM', flex: 2),
+    AppDashboardColumn(label: 'Estatus', flex: 2, alignment: TextAlign.right),
+  ],
+  rows: registros.map((r) => [
+    AppDashboardTable.dateCell(r.fecha),
+    AppDashboardTable.textCell(r.operador, primary: true),
+    r.crum != null
+      ? AppDashboardTable.textCell(r.crum!)
+      : AppDashboardTable.emptyCell(),
+    AppDashboardTable.statusCell(r.estatus),
+  ]).toList(),
+  onDownload: () => _exportExcel(),
+)
+```
+
+**Props:**
+
+| Prop | Tipo | Default | Descripcion |
+|---|---|---|---|
+| `title` | `String` | requerido | Titulo de la tabla (se muestra uppercase) |
+| `subtitle` | `String?` | null | Subtitulo debajo del titulo |
+| `accentColor` | `Color` | `AppColors.ctTeal` | Color de la barra superior de 3px |
+| `columns` | `List<AppDashboardColumn>` | requerido | Definicion de columnas (label, flex, alignment) |
+| `rows` | `List<List<Widget>>` | requerido | Filas — cada celda es un Widget |
+| `onDownload` | `VoidCallback?` | null | Callback del boton Descargar (oculto si null) |
+| `emptyMessage` | `String` | `'Sin datos en el periodo'` | Mensaje cuando rows esta vacio |
+
+**Helpers de celda estaticos:**
+
+| Helper | Descripcion |
+|---|---|
+| `dateCell(String)` | Fecha en fuente mono (`GeistMono`) |
+| `textCell(String, {primary})` | Texto principal (w500) o secundario (ctText2) |
+| `emptyCell({label})` | Celda vacia — muestra `'—'` en ctText3 |
+| `inProgressCell()` | `'En turno'` en italica ctText3 |
+| `statusCell(String?)` | AppBadge: completed=ok, pending=warn, failed=danger |
+
+**PROHIBIDO usar en su lugar:**
+- `DataTable` de Flutter en features de dashboard — usar `AppDashboardTable` siempre
+- Tablas ad-hoc con `Row` + `Expanded` para datos tabulares de dashboard
