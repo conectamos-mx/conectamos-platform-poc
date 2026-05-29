@@ -9,7 +9,7 @@ locals {
   is_production    = terraform.workspace == "platform-frontend"
   workspace_suffix = local.is_production ? "-prod" : "-dev"
   bucket_name      = "conectamos-platform${local.workspace_suffix}"
-  custom_domain    = local.is_production ? "platform.conectamos.mx" : "platform-dev.conectamos.mx"
+  custom_domain    = local.is_production ? "platform.conectamos.ai" : "platform-dev.conectamos.ai"
 }
 
 # =============================================================================

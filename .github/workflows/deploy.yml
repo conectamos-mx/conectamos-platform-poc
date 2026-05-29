@@ -132,7 +132,7 @@ jobs:
       status: ${{ needs.deploy.result == 'success' && 'success' || 'failure' }}
       environment: ${{ (github.ref_name == 'main' || github.event.inputs.environment == 'production') && 'Production' || 'Development' }}
       service_name: "conectamos-platform"
-      service_url: ${{ needs.deploy.result == 'success' && ((github.ref_name == 'main' || github.event.inputs.environment == 'production') && 'https://platform.conectamos.mx' || 'https://platform-dev.conectamos.mx') || 'N/A' }}
+      service_url: ${{ needs.deploy.result == 'success' && ((github.ref_name == 'main' || github.event.inputs.environment == 'production') && 'https://platform.conectamos.ai' || 'https://platform-dev.conectamos.ai') || 'N/A' }}
       commit_sha: ${{ github.sha }}
       actor: ${{ github.actor }}
       run_id: ${{ github.run_id }}
