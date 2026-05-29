@@ -54,12 +54,8 @@ String _formatLastEvent(String? iso) {
   switch (status) {
     case 'active':
       return (label: 'Activo', variant: AppBadgeVariant.ok);
-    case 'incident':
-      return (label: 'Incidencia', variant: AppBadgeVariant.danger);
-    case 'suspended':
-      return (label: 'Suspendido', variant: AppBadgeVariant.neutral);
     default:
-      return (label: 'Sin inicio', variant: AppBadgeVariant.neutral);
+      return (label: 'Inactivo', variant: AppBadgeVariant.neutral);
   }
 }
 
@@ -240,9 +236,7 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
   static const _statusOptions = [
     'Todos',
     'Activo',
-    'Incidencia',
-    'Sin inicio',
-    'Suspendido',
+    'Inactivo',
   ];
 
   // ── KPI helpers ──
@@ -702,14 +696,16 @@ class _OperatorRowState extends State<_OperatorRow> {
                           },
                         ),
                         const SizedBox(width: 4),
-                        if (status == 'active' || status == 'incident')
+                        if (status == 'active')
                           AppActionButton(
                             variant: AppActionVariant.suspend,
-                            onPressed: () => _patchStatus(context, 'suspended'),
+                            tooltipOverride: 'Desactivar',
+                            onPressed: () => _patchStatus(context, 'inactive'),
                           )
                         else
                           AppActionButton(
                             variant: AppActionVariant.reactivate,
+                            tooltipOverride: 'Activar',
                             onPressed: () => _patchStatus(context, 'active'),
                           ),
                       ],

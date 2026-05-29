@@ -13,6 +13,7 @@ import 'package:intl/intl.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_dashboard_table.dart';
 import '../../shared/widgets/app_kpi_card.dart';
 import 'dashboard_providers.dart';
 
@@ -1258,6 +1259,13 @@ class _DataTableWidget extends ConsumerWidget {
     }
   }
 
+  Color _resolveAccentColor() {
+    final t = title.toLowerCase();
+    if (t.contains('receta') || t.contains('entrega')) return AppColors.ctTeal;
+    if (t.contains('turno')) return const Color(0xFF378ADD);
+    return AppColors.ctTeal;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final key = (
@@ -1272,100 +1280,84 @@ class _DataTableWidget extends ConsumerWidget {
     final displayTitle = title.isNotEmpty ? title : (config['title'] as String? ?? widgetId);
     final subtitle = config['subtitle'] as String?;
 
-    return _DashCard(
-      title: displayTitle.toUpperCase(),
-      subtitle: subtitle,
-      child: asyncData.when(
-        loading: () => const SizedBox(
-          height: 80,
-          child: Center(
-            child: CircularProgressIndicator(color: AppColors.ctTeal, strokeWidth: 2),
-          ),
+    return asyncData.when(
+      loading: () => const SizedBox(
+        height: 80,
+        child: Center(
+          child: CircularProgressIndicator(color: AppColors.ctTeal, strokeWidth: 2),
         ),
-        error: (e, _) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Center(
-            child: Text(
-              e.toString(),
-              style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctDanger),
-            ),
-          ),
-        ),
-        data: (data) {
-          final columns = (data['columns'] as List<dynamic>? ?? [])
-              .cast<Map<String, dynamic>>();
-          final rows = (data['rows'] as List<dynamic>? ?? [])
-              .cast<Map<String, dynamic>>();
-
-          if (columns.isEmpty || rows.isEmpty) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: Text(
-                  'Sin resultados',
-                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
-                ),
-              ),
-            );
-          }
-
-          final completedAtIdx =
-              columns.indexWhere((c) => (c['field'] as String?) == 'completed_at');
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Align(
-                alignment: Alignment.topRight,
-                child: AppButton(
-                  label: 'Descargar Excel',
-                  variant: AppButtonVariant.outline,
-                  size: AppButtonSize.sm,
-                  prefixIcon: const Icon(Icons.download_rounded, size: 14, color: AppColors.ctInk700),
-                  onPressed: () => _downloadXlsx(columns, rows, displayTitle),
-                ),
-              ),
-              const SizedBox(height: 8),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 480),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      headingRowHeight: 36,
-                      dataRowMinHeight: 32,
-                      dataRowMaxHeight: 32,
-                      columnSpacing: 16,
-                      headingTextStyle: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w700, color: AppColors.ctText),
-                      dataTextStyle: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText),
-                      columns: columns.map((col) {
-                        final label =
-                            col['label'] as String? ?? col['key'] as String? ?? '';
-                        return DataColumn(label: Text(label));
-                      }).toList(),
-                      rows: rows.map((row) {
-                        final isOpen = completedAtIdx >= 0 &&
-                            row[columns[completedAtIdx]['key'] as String? ?? ''] == null;
-                        return DataRow(
-                          color: isOpen
-                              ? MaterialStateProperty.all(
-                                  Colors.amber.withOpacity(0.12))
-                              : null,
-                          cells: columns.map((col) {
-                            final colKey = col['key'] as String? ?? '';
-                            return DataCell(Text(_fmtCell(row[colKey])));
-                          }).toList(),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
       ),
+      error: (e, _) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: Text(
+            e.toString(),
+            style: AppTextStyles.bodySmall.copyWith(fontSize: 12, color: AppColors.ctDanger),
+          ),
+        ),
+      ),
+      data: (data) {
+        final apiColumns = (data['columns'] as List<dynamic>? ?? [])
+            .cast<Map<String, dynamic>>();
+        final apiRows = (data['rows'] as List<dynamic>? ?? [])
+            .cast<Map<String, dynamic>>();
+
+        final tableColumns = apiColumns.map((col) {
+          final label = col['label'] as String? ?? col['key'] as String? ?? '';
+          final flex = (col['flex'] as num?)?.toInt() ?? 1;
+          final alignRaw = col['alignment'] as String?;
+          final isStatus = label.toLowerCase() == 'estatus';
+          final alignment = (alignRaw == 'right' || isStatus)
+              ? TextAlign.right
+              : TextAlign.left;
+          return AppDashboardColumn(label: label, flex: flex, alignment: alignment);
+        }).toList();
+
+        final tableRows = apiRows.map((row) {
+          return apiColumns.map((col) {
+            final colKey = col['key'] as String? ?? '';
+            final colField = col['field'] as String? ?? '';
+            final value = row[colKey];
+            final formatted = _fmtCell(value);
+
+            // Status column
+            if (colField == 'status' || colKey == 'status') {
+              return AppDashboardTable.statusCell(value as String?);
+            }
+
+            // Null / empty handling
+            if (value == null || formatted.isEmpty) {
+              if (colField == 'completed_at' || colKey == 'completed_at') {
+                return AppDashboardTable.inProgressCell();
+              }
+              return AppDashboardTable.emptyCell();
+            }
+
+            // Date columns
+            if (formatted.contains('/') && formatted.contains(':')) {
+              return AppDashboardTable.dateCell(formatted);
+            }
+
+            // Primary text (name-like fields)
+            final isPrimary = colField == 'operator_name' ||
+                colField == 'name' ||
+                colKey == 'operator_name' ||
+                colKey == 'name';
+            return AppDashboardTable.textCell(formatted, primary: isPrimary);
+          }).toList();
+        }).toList();
+
+        return AppDashboardTable(
+          title: displayTitle,
+          subtitle: subtitle,
+          accentColor: _resolveAccentColor(),
+          columns: tableColumns,
+          rows: tableRows,
+          onDownload: (apiColumns.isNotEmpty && apiRows.isNotEmpty)
+              ? () => _downloadXlsx(apiColumns, apiRows, displayTitle)
+              : null,
+        );
+      },
     );
   }
 }

@@ -4584,14 +4584,21 @@ class _ActionDialogState extends State<_ActionDialog> {
   final List<(TextEditingController, TextEditingController)> _columnMappingRows = [];
   // Parallel list: selected flowField key per row (null = custom text mode)
   final List<String?> _columnMappingKeys = [];
+  // Headers mode for google_sheets
+  bool _hasHeaders = false;
+  List<String> _sheetHeaders = [];
+  bool _loadingHeaders = false;
+  String? _headersError;
 
   // notify_group
   List<Map<String, dynamic>> _groups = [];
   bool _loadingGroups = false;
   String? _selectedGroupId;
   final _messageTemplateCtrl = TextEditingController();
-  final _waTemplateNameCtrl = TextEditingController();
-  final _waTemplateVarsCtrl = TextEditingController();
+  bool _workerGenerates = false;
+  bool _useWaTemplate = false;
+  String? _selectedWaTemplateId;
+  List<Map<String, dynamic>> _waTemplateMappingRows = [];
 
   // condition
   String? _conditionField;
@@ -4746,12 +4753,18 @@ class _ActionDialogState extends State<_ActionDialog> {
       if (_type == 'notify_group') {
         _selectedGroupId = a['group_id'] as String?;
         _messageTemplateCtrl.text = a['message_template'] as String? ?? '';
-        _waTemplateNameCtrl.text = a['wa_template_name'] as String? ?? '';
-        final waVars = a['wa_template_variables'];
-        if (waVars is List) {
-          _waTemplateVarsCtrl.text = waVars.join(', ');
-        } else if (waVars is String) {
-          _waTemplateVarsCtrl.text = waVars;
+        _workerGenerates = a['worker_generates'] as bool? ?? false;
+
+        // Cargar configuración de plantilla WA
+        _selectedWaTemplateId = a['wa_template_id'] as String?;
+        if (_selectedWaTemplateId != null && _selectedWaTemplateId!.isNotEmpty) {
+          _useWaTemplate = true;
+          final mapping = a['wa_variable_mapping'] as List?;
+          if (mapping != null) {
+            _waTemplateMappingRows = mapping
+                .map((e) => Map<String, dynamic>.from(e as Map))
+                .toList();
+          }
         }
       }
       if (_type == 'google_sheets_append_row' || _type == 'google_sheets_update_row') {
@@ -4759,6 +4772,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         _spreadsheetIdCtrl.text = cfg['spreadsheet_id'] as String? ?? '';
         _sheetNameCtrl.text = cfg['sheet_name'] as String? ?? 'Sheet1';
         _selectedSheetForAction = cfg['sheet_name'] as String?;
+        _hasHeaders = cfg['has_headers'] as bool? ?? false;
         final mapping = cfg['column_mapping'] as Map? ?? {};
         final fieldKeyRe = RegExp(r'^\{\{fields\.([\w.]+)\}\}$');
         for (final e in mapping.entries) {
@@ -4801,6 +4815,12 @@ class _ActionDialogState extends State<_ActionDialog> {
     _loadCatalogSchemas();
     if (_type == 'google_sheets_append_row' || _type == 'google_sheets_update_row') {
       _checkGoogleOAuthForAction();
+      // Si tiene headers habilitado al editar, cargar automáticamente
+      if (_hasHeaders && _spreadsheetIdCtrl.text.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _fetchSheetHeaders();
+        });
+      }
     }
     _sheetUrlCtrl.addListener(_onSheetUrlChangedForAction);
   }
@@ -4970,6 +4990,43 @@ class _ActionDialogState extends State<_ActionDialog> {
           ),
         ),
       ],
+      const SizedBox(height: 12),
+      Row(
+        children: [
+          Checkbox(
+            value: _hasHeaders,
+            onChanged: (val) {
+              setState(() {
+                _hasHeaders = val ?? false;
+                if (_hasHeaders) {
+                  _fetchSheetHeaders();
+                } else {
+                  _sheetHeaders = [];
+                  _headersError = null;
+                }
+              });
+            },
+            activeColor: AppColors.ctTeal,
+          ),
+          const SizedBox(width: 8),
+          Text('¿La primera fila tiene nombres de columnas (headers)?',
+              style: AppTextStyles.body),
+        ],
+      ),
+      if (_loadingHeaders) ...[
+        const SizedBox(height: 6),
+        const LinearProgressIndicator(color: AppColors.ctTeal),
+      ],
+      if (_headersError != null) ...[
+        const SizedBox(height: 6),
+        Text(_headersError!,
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger)),
+      ],
+      if (_hasHeaders && _sheetHeaders.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        Text('${_sheetHeaders.length} columnas encontradas',
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
+      ],
     ];
   }
 
@@ -4993,6 +5050,56 @@ class _ActionDialogState extends State<_ActionDialog> {
       if (mounted) setState(() => _googleConnected = false);
     } finally {
       if (mounted) setState(() => _checkingGoogleOAuth = false);
+    }
+  }
+
+  Future<void> _fetchSheetHeaders() async {
+    final url = _sheetUrlCtrl.text.trim();
+    String spreadsheetId = '';
+
+    // Intenta extraer de URL primero
+    if (url.isNotEmpty && url.contains('spreadsheets/d/')) {
+      final extractedId = RegExp(r'/spreadsheets/d/([a-zA-Z0-9-_]+)')
+          .firstMatch(url)?.group(1) ?? '';
+      spreadsheetId = extractedId;
+    }
+
+    // Si no hay ID de URL, usa el spreadsheetIdCtrl (útil al editar)
+    if (spreadsheetId.isEmpty) {
+      spreadsheetId = _spreadsheetIdCtrl.text.trim();
+    }
+
+    if (spreadsheetId.isEmpty) {
+      setState(() {
+        _headersError = 'Ingresa una URL válida de Google Sheets o ID de spreadsheet';
+        _sheetHeaders = [];
+      });
+      return;
+    }
+    final sheetName = _selectedSheetForAction ?? (_sheetNameCtrl.text.trim().isEmpty ? 'Sheet1' : _sheetNameCtrl.text.trim());
+    setState(() {
+      _loadingHeaders = true;
+      _headersError = null;
+    });
+    try {
+      final headers = await ConnectionsApi.getSheetHeaders(
+        spreadsheetId: spreadsheetId,
+        sheetName: sheetName,
+      );
+      if (mounted) {
+        setState(() {
+          _sheetHeaders = headers;
+          _loadingHeaders = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _headersError = 'Error al cargar headers: $e';
+          _sheetHeaders = [];
+          _loadingHeaders = false;
+        });
+      }
     }
   }
 
@@ -5152,6 +5259,52 @@ class _ActionDialogState extends State<_ActionDialog> {
 
     setState(() {
       _proactiveMappingRows = declared.map((v) {
+        final key = v['key'] as String;
+        return <String, dynamic>{
+          'variable': key,
+          'source': existing[key] ?? '',
+          'slot': v['slot'] as int,
+        };
+      }).toList();
+    });
+  }
+
+  void _initWaTemplateMappingFromTemplate(Map<String, dynamic> template) {
+    // Similar a _initProactiveMappingFromTemplate
+    final declared = ((template['variables'] as List<dynamic>?) ?? [])
+        .map((v) => {
+              'slot': (v as Map)['slot'] as int? ?? 0,
+              'key': v['key'] as String? ?? '',
+            })
+        .toList();
+
+    final body = template['body_text'] as String? ?? '';
+    final bodySlots = RegExp(r'\{\{(\d+)\}\}')
+        .allMatches(body)
+        .map((m) => int.tryParse(m.group(1) ?? '') ?? 0)
+        .where((s) => s > 0)
+        .toSet();
+
+    final declaredSlots = declared.map((v) => v['slot'] as int).toSet();
+    final missing = bodySlots.difference(declaredSlots);
+    for (final slot in missing.toList()..sort()) {
+      declared.add({'slot': slot, 'key': 'variable_$slot'});
+    }
+
+    declared.sort((a, b) =>
+        (a['slot'] as int).compareTo(b['slot'] as int));
+
+    final existing = Map<String, String>.fromEntries(
+      _waTemplateMappingRows
+          .map((e) => MapEntry(
+                e['variable'] as String? ?? '',
+                e['source'] as String? ?? '',
+              ))
+          .where((e) => e.key.isNotEmpty),
+    );
+
+    setState(() {
+      _waTemplateMappingRows = declared.map((v) {
         final key = v['key'] as String;
         return <String, dynamic>{
           'variable': key,
@@ -5402,17 +5555,22 @@ class _ActionDialogState extends State<_ActionDialog> {
         if (_messageTemplateCtrl.text.trim().isEmpty) return;
         updated['group_id'] = _selectedGroupId!;
         updated['message_template'] = _messageTemplateCtrl.text.trim();
+        updated['worker_generates'] = _workerGenerates;
         // Store the display name for subtitle rendering
         final matchedGroup = _groups.where((g) => g['id'] == _selectedGroupId).firstOrNull;
         if (matchedGroup != null) {
           updated['_group_display_name'] = matchedGroup['display_name'] as String? ?? '';
         }
-        if (_waTemplateNameCtrl.text.trim().isNotEmpty) {
-          updated['wa_template_name'] = _waTemplateNameCtrl.text.trim();
-        }
-        if (_waTemplateVarsCtrl.text.trim().isNotEmpty) {
-          updated['wa_template_variables'] =
-              _waTemplateVarsCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+        // Plantilla WhatsApp (nuevo formato)
+        if (_useWaTemplate && _selectedWaTemplateId != null) {
+          updated['wa_template_id'] = _selectedWaTemplateId;
+          updated['wa_variable_mapping'] = _waTemplateMappingRows
+              .where((r) => (r['variable'] as String? ?? '').isNotEmpty)
+              .map((r) => {'variable': r['variable'], 'source': r['source']})
+              .toList();
+        } else {
+          updated.remove('wa_template_id');
+          updated.remove('wa_variable_mapping');
         }
         updated.remove('target_flow_slug');
         updated.remove('carry_fields');
@@ -5444,6 +5602,7 @@ class _ActionDialogState extends State<_ActionDialog> {
           'column_mapping': {
             for (final r in validRows) r.$1.text.trim(): r.$2.text.trim(),
           },
+          'has_headers': _hasHeaders,
         };
         updated.remove('target_flow_slug');
 
@@ -5476,6 +5635,7 @@ class _ActionDialogState extends State<_ActionDialog> {
           },
           'lookup_column': _lookupColumnCtrl.text.trim(),
           'lookup_value_field_key': _lookupValueFieldKey ?? '',
+          'has_headers': _hasHeaders,
         };
         updated.remove('target_flow_slug');
         updated.remove('carry_ancestors');
@@ -6226,6 +6386,35 @@ class _ActionDialogState extends State<_ActionDialog> {
                           setState(() => _selectedGroupId = v),
                     ),
                   ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _workerGenerates,
+                      onChanged: (val) {
+                        setState(() {
+                          _workerGenerates = val ?? false;
+                        });
+                      },
+                      activeColor: AppColors.ctTeal,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('El AI Worker genera el mensaje dinámicamente',
+                              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Si está activado, Claude genera el mensaje. Si está desactivado, se usa la plantilla estática.',
+                            style: AppTextStyles.bodySmall.copyWith(fontSize: 11, color: AppColors.ctText2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 12),
                 Text(
                   'Plantilla del mensaje',
@@ -6255,28 +6444,252 @@ class _ActionDialogState extends State<_ActionDialog> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                 ),
-                const SizedBox(height: 12),
-                _FormField(
-                  label: 'Plantilla WhatsApp — fallback (opcional)',
-                  controller: _waTemplateNameCtrl,
-                  placeholder: 'nombre_de_plantilla_aprobada',
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Se usa si la ventana del grupo está cerrada (>24h).',
-                  style: AppTextStyles.bodySmall.copyWith(fontSize: 11, color: AppColors.ctText2),
-                ),
-                const SizedBox(height: 12),
-                _FormField(
-                  label: 'Variables de plantilla WA (opcional)',
-                  controller: _waTemplateVarsCtrl,
-                  placeholder: '{{fields.nombre}}, {{fields.telefono}}',
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Separadas por coma. Soporta {{fields.X}}.',
-                  style: AppTextStyles.bodySmall.copyWith(fontSize: 11, color: AppColors.ctText2),
-                ),
+                // ── Plantilla WhatsApp (fallback ventana cerrada) ──────────────────
+                Builder(builder: (context) {
+                  // Solo mostrar si el grupo es de WhatsApp
+                  final selectedGroup = _groups.where((g) => g['id'] == _selectedGroupId).firstOrNull;
+                  final isWhatsApp = selectedGroup != null && (selectedGroup['channel_type'] as String?) == 'whatsapp';
+
+                  if (!isWhatsApp) return const SizedBox.shrink();
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 16),
+                      const Divider(color: AppColors.ctBorder, height: 1),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Text(
+                            'Plantilla WhatsApp (fallback ventana cerrada)',
+                            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+                          ),
+                          const Spacer(),
+                          Switch(
+                            value: _useWaTemplate,
+                            onChanged: (v) => setState(() {
+                              _useWaTemplate = v;
+                              if (!v) {
+                                _selectedWaTemplateId = null;
+                                _waTemplateMappingRows = [];
+                              }
+                            }),
+                            activeThumbColor: AppColors.ctTeal,
+                          ),
+                        ],
+                      ),
+                      if (_useWaTemplate) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Se usa si la ventana del grupo está cerrada (>24h).',
+                          style: AppTextStyles.bodySmall.copyWith(fontSize: 11, color: AppColors.ctText2),
+                        ),
+                        const SizedBox(height: 8),
+                        if (_loadingTemplates)
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: AppColors.ctTeal),
+                            ),
+                          )
+                        else if (_waChannelId == null)
+                          Text(
+                            'No se encontró canal WhatsApp activo para este worker',
+                            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
+                          )
+                        else if (_approvedTemplates.isEmpty)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('No hay plantillas aprobadas.',
+                                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)),
+                              const SizedBox(height: 6),
+                              AppButton(
+                                label: 'Crear plantilla',
+                                variant: AppButtonVariant.ghost,
+                                size: AppButtonSize.sm,
+                                onPressed: () {
+                                  if (_waChannelId == null) return;
+                                  showDialog<void>(
+                                    context: context,
+                                    builder: (_) => TemplateCreateDialog(
+                                      channelId: _waChannelId!,
+                                      tenantId: widget.tenantId,
+                                    ),
+                                  ).then((_) {
+                                    if (_waChannelId != null) _loadTemplatesForAction(_waChannelId!);
+                                  });
+                                },
+                              ),
+                            ],
+                          )
+                        else ...[
+                          AppDropdown<String?>(
+                            label: 'Plantilla',
+                            value: _selectedWaTemplateId,
+                            hint: 'Selecciona una plantilla aprobada',
+                            items: [
+                              const AppDropdownItem<String?>(value: null, label: '\u2014 Sin plantilla \u2014'),
+                              ..._approvedTemplates.map((t) {
+                                final id = t['id'] as String? ?? t['name'] as String? ?? '';
+                                final name = t['name'] as String? ?? id;
+                                final lang = t['language'] as String? ?? '';
+                                return AppDropdownItem<String?>(
+                                  value: id,
+                                  label: '$name ($lang)',
+                                );
+                              }),
+                              const AppDropdownItem<String?>(
+                                value: '__create__',
+                                label: '\uFF0B Crear nueva plantilla',
+                              ),
+                            ],
+                            onChanged: (v) {
+                              if (v == '__create__') {
+                                if (_waChannelId == null) return;
+                                showDialog<void>(
+                                  context: context,
+                                  builder: (_) => TemplateCreateDialog(
+                                    channelId: _waChannelId!,
+                                    tenantId: widget.tenantId,
+                                  ),
+                                ).then((_) {
+                                  if (_waChannelId != null) _loadTemplatesForAction(_waChannelId!);
+                                });
+                                return;
+                              }
+                              if (v == null) {
+                                setState(() {
+                                  _selectedWaTemplateId = null;
+                                  _waTemplateMappingRows = [];
+                                });
+                              } else {
+                                setState(() => _selectedWaTemplateId = v);
+                                final t = _approvedTemplates
+                                    .where((t) => (t['id'] as String? ?? t['name'] as String? ?? '') == v)
+                                    .firstOrNull;
+                                if (t != null) _initWaTemplateMappingFromTemplate(t);
+                              }
+                            },
+                          ),
+                          // ── Template preview ──
+                          Builder(builder: (_) {
+                            final sel = _selectedWaTemplateId == null
+                                ? null
+                                : _approvedTemplates
+                                    .where((t) => (t['id'] as String? ?? t['name'] as String? ?? '') == _selectedWaTemplateId)
+                                    .firstOrNull;
+                            if (sel == null) return const SizedBox.shrink();
+                            final body = sel['body_text'] as String?;
+                            if (body == null || body.isEmpty) return const SizedBox.shrink();
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.ctSurface2,
+                                  border: Border.all(color: AppColors.ctBorder),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if ((sel['header_text'] as String?) != null) ...[
+                                      Text(
+                                        sel['header_text'] as String,
+                                        style: AppTextStyles.bodySmall.copyWith(
+                                          color: AppColors.ctText2,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                    ],
+                                    _buildActionTemplateBodyPreview(body),
+                                    if ((sel['footer_text'] as String?) != null) ...[
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        sel['footer_text'] as String,
+                                        style: AppTextStyles.bodySmall.copyWith(
+                                          color: AppColors.ctText3,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                          // ── Mapeo de variables ──
+                          if (_waTemplateMappingRows.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Text('Variables',
+                                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 6),
+                            ...List.generate(_waTemplateMappingRows.length, (i) {
+                              final row = _waTemplateMappingRows[i];
+                              final varKey = row['variable'] as String? ?? '';
+                              final slot = row['slot'] as int? ?? (i + 1);
+                              final varLabel = varKey.startsWith('variable_')
+                                  ? '{{$slot}}'
+                                  : '$varKey  {{$slot}}';
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 12),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.ctSurface,
+                                          border: Border.all(color: AppColors.ctBorder),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(varLabel, style: AppTextStyles.body),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: TextEditingController(
+                                          text: row['source'] as String? ?? '',
+                                        ),
+                                        decoration: InputDecoration(
+                                          hintText: '{{fields.nombre}}',
+                                          hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(6),
+                                            borderSide: const BorderSide(color: AppColors.ctBorder),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(6),
+                                            borderSide: const BorderSide(color: AppColors.ctBorder),
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(
+                                              horizontal: 12, vertical: 10),
+                                        ),
+                                        style: AppTextStyles.body,
+                                        onChanged: (v) {
+                                          _waTemplateMappingRows[i] = {
+                                            ..._waTemplateMappingRows[i],
+                                            'source': v,
+                                          };
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
+                        ],
+                      ],
+                    ],
+                  );
+                }),
               ] else if (_type == 'google_sheets_append_row') ...[
                 ..._buildGoogleSheetsFields(),
                 const SizedBox(height: 16),
@@ -6323,14 +6736,29 @@ class _ActionDialogState extends State<_ActionDialog> {
                       children: [
                         Row(
                           children: [
-                            SizedBox(
-                              width: 70,
-                              child: _ColMappingField(
-                                controller: row.$1,
-                                placeholder: 'A',
-                                onChanged: () => setState(() {}),
+                            if (_hasHeaders && _sheetHeaders.isNotEmpty)
+                              SizedBox(
+                                width: 150,
+                                child: AppDropdown<String?>(
+                                  value: row.$1.text.isEmpty ? null : row.$1.text,
+                                  hint: 'Columna...',
+                                  items: _sheetHeaders
+                                      .map((h) => AppDropdownItem<String?>(value: h, label: h))
+                                      .toList(),
+                                  onChanged: (v) => setState(() {
+                                    row.$1.text = v ?? '';
+                                  }),
+                                ),
+                              )
+                            else
+                              SizedBox(
+                                width: 70,
+                                child: _ColMappingField(
+                                  controller: row.$1,
+                                  placeholder: _hasHeaders ? 'Columna' : 'A',
+                                  onChanged: () => setState(() {}),
+                                ),
                               ),
-                            ),
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 6),
                               child: Text('→',
@@ -6415,7 +6843,18 @@ class _ActionDialogState extends State<_ActionDialog> {
                 Text('Columna de b\u00FAsqueda',
                     style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
                 const SizedBox(height: 6),
-                if (_availableColumns.isNotEmpty)
+                if (_hasHeaders && _sheetHeaders.isNotEmpty)
+                  AppDropdown<String?>(
+                    hint: 'Selecciona columna\u2026',
+                    value: _lookupColumnCtrl.text.isNotEmpty
+                        ? _lookupColumnCtrl.text : null,
+                    items: _sheetHeaders
+                        .map((h) => AppDropdownItem<String?>(value: h, label: h))
+                        .toList(),
+                    onChanged: (v) => setState(() =>
+                        _lookupColumnCtrl.text = v ?? ''),
+                  )
+                else if (_availableColumns.isNotEmpty)
                   AppDropdown<String?>(
                     hint: 'Selecciona columna\u2026',
                     value: _lookupColumnCtrl.text.isNotEmpty
@@ -6435,22 +6874,38 @@ class _ActionDialogState extends State<_ActionDialog> {
                   _FormField(
                     label: '',
                     controller: _lookupColumnCtrl,
-                    placeholder: 'ej. A',
+                    placeholder: _hasHeaders ? 'Nombre de columna' : 'ej. A',
                   ),
                 const SizedBox(height: 12),
                 Text('Campo fuente del valor de b\u00FAsqueda',
                     style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
                 const SizedBox(height: 6),
-                AppDropdown<String?>(
-                  hint: 'Campo del flujo\u2026',
-                  value: _lookupValueFieldKey,
-                  items: widget.flowFields.map((f) {
-                    final key = f['key'] as String? ?? '';
-                    final label = f['label'] as String? ?? key;
-                    return AppDropdownItem<String?>(value: key, label: label);
-                  }).toList(),
-                  onChanged: (v) => setState(() => _lookupValueFieldKey = v),
-                ),
+                Builder(builder: (context) {
+                  final allKeys = _buildAllValidKeys();
+                  final effectiveLookupKey = (_lookupValueFieldKey != null &&
+                      (allKeys.contains(_lookupValueFieldKey) ||
+                       (_loadingCatalogSchemas && _lookupValueFieldKey!.contains('.'))))
+                      ? _lookupValueFieldKey
+                      : null;
+                  return AppDropdown<String?>(
+                    hint: _loadingCatalogSchemas
+                        ? 'Cargando campos\u2026'
+                        : 'Campo del flujo\u2026',
+                    value: effectiveLookupKey,
+                    items: [
+                      ..._buildFieldDropdownItems(),
+                      if (_loadingCatalogSchemas &&
+                          _lookupValueFieldKey != null &&
+                          _lookupValueFieldKey!.contains('.') &&
+                          !allKeys.contains(_lookupValueFieldKey))
+                        AppDropdownItem<String?>(
+                          value: _lookupValueFieldKey,
+                          label: 'Cargando\u2026',
+                        ),
+                    ],
+                    onChanged: (v) => setState(() => _lookupValueFieldKey = v),
+                  );
+                }),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -6493,14 +6948,29 @@ class _ActionDialogState extends State<_ActionDialog> {
                       children: [
                         Row(
                           children: [
-                            SizedBox(
-                              width: 70,
-                              child: _ColMappingField(
-                                controller: row.$1,
-                                placeholder: 'A',
-                                onChanged: () => setState(() {}),
+                            if (_hasHeaders && _sheetHeaders.isNotEmpty)
+                              SizedBox(
+                                width: 150,
+                                child: AppDropdown<String?>(
+                                  value: row.$1.text.isEmpty ? null : row.$1.text,
+                                  hint: 'Columna...',
+                                  items: _sheetHeaders
+                                      .map((h) => AppDropdownItem<String?>(value: h, label: h))
+                                      .toList(),
+                                  onChanged: (v) => setState(() {
+                                    row.$1.text = v ?? '';
+                                  }),
+                                ),
+                              )
+                            else
+                              SizedBox(
+                                width: 70,
+                                child: _ColMappingField(
+                                  controller: row.$1,
+                                  placeholder: _hasHeaders ? 'Columna' : 'A',
+                                  onChanged: () => setState(() {}),
+                                ),
                               ),
-                            ),
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 6),
                               child: Text('\u2192',
@@ -6510,13 +6980,23 @@ class _ActionDialogState extends State<_ActionDialog> {
                               Expanded(
                                 child: AppDropdown<String?>(
                                   value: effectiveKey,
-                                  hint: 'Campo del flujo\u2026',
+                                  hint: _loadingCatalogSchemas
+                                      ? 'Cargando campos\u2026'
+                                      : 'Campo del flujo\u2026',
                                   items: [
                                     const AppDropdownItem<String?>(
                                       value: null,
                                       label: 'Personalizado\u2026',
                                     ),
                                     ..._buildFieldDropdownItems(),
+                                    if (_loadingCatalogSchemas &&
+                                        effectiveKey != null &&
+                                        effectiveKey.contains('.') &&
+                                        !_buildAllValidKeys().contains(effectiveKey))
+                                      AppDropdownItem<String?>(
+                                        value: effectiveKey,
+                                        label: 'Cargando\u2026',
+                                      ),
                                   ],
                                   onChanged: (v) => setState(() {
                                     if (_columnMappingKeys.length > i) {
