@@ -9,12 +9,14 @@ class AppActionButton extends StatefulWidget {
     super.key,
     required this.variant,
     required this.onPressed,
+    this.tooltipOverride,
     this.isLoading = false,
     this.isDisabled = false,
   });
 
   final AppActionVariant variant;
   final VoidCallback onPressed;
+  final String? tooltipOverride;
   final bool isLoading;
   final bool isDisabled;
 
@@ -58,7 +60,7 @@ class _AppActionButtonState extends State<AppActionButton> {
   @override
   Widget build(BuildContext context) {
     final child = Tooltip(
-      message: _tooltip,
+      message: widget.tooltipOverride ?? _tooltip,
       decoration: BoxDecoration(
         color: AppColors.ctNavy,
         borderRadius: BorderRadius.circular(6),
