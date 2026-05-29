@@ -44,7 +44,7 @@ FastAPI backend (Dio)        ──→  fire-and-forget or await in handler
 
 All authenticated requests go through `ApiClient` (Dio, `lib/core/api/api_client.dart`),
 which injects `Authorization: Bearer {supabase_access_token}` via `InterceptorsWrapper`.
-Backend base URL: `https://platform-api.conectamos.mx`.
+Backend base URL: `https://platform-api.conectamos.ai`.
 
 Supabase is used directly for:
 - Auth (email+password)
