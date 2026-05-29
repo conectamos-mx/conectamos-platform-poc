@@ -73,6 +73,46 @@ abstract class PhoneNormalizer {
     return null;
   }
 
+  /// Formats a raw phone string for display with flag emoji, dial code, and
+  /// grouped local digits. Returns '—' for null/empty, raw string for
+  /// unrecognised prefixes.
+  static String formatForDisplay(String? phone) {
+    if (phone == null || phone.isEmpty) return '—';
+    final digits = phone.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return '—';
+
+    final (iso, local) = parsePhone(phone);
+    final prefix = _kDialCodes[iso]?.replaceAll('+', '') ?? '';
+    // If digits don't actually start with the detected prefix, it's a
+    // fallback — return raw string to avoid mis-labelling.
+    if (prefix.isNotEmpty && !digits.startsWith(prefix)) return phone;
+
+    final flag = _isoToFlag(iso);
+    final code = dialCode(iso);
+    final grouped = _groupDigits(local);
+    return '$flag $code $grouped';
+  }
+
+  static String _isoToFlag(String iso) {
+    const base = 0x1F1E6 - 0x41; // regional indicator A minus ASCII A
+    return String.fromCharCodes(
+      iso.toUpperCase().codeUnits.map((c) => c + base),
+    );
+  }
+
+  static String _groupDigits(String digits) {
+    if (digits.length == 10) {
+      return '${digits.substring(0, 2)} ${digits.substring(2, 6)} ${digits.substring(6)}';
+    }
+    final buf = StringBuffer();
+    for (var i = 0; i < digits.length; i += 3) {
+      if (i > 0) buf.write(' ');
+      final end = i + 3 > digits.length ? digits.length : i + 3;
+      buf.write(digits.substring(i, end));
+    }
+    return buf.toString();
+  }
+
   /// Parses a raw phone string into (isoCode, localNumber).
   /// Tries known dial codes longest-first to avoid false prefix matches.
   static (String, String) parsePhone(String phone) {
