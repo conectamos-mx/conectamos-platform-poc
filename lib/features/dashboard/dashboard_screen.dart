@@ -13,6 +13,7 @@ import 'package:intl/intl.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_kpi_card.dart';
 import 'dashboard_providers.dart';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
@@ -395,8 +396,28 @@ class _ConfiguredView extends ConsumerWidget {
     Widget rendererFor(Map<String, dynamic> w) {
       final id = w['id'] as String? ?? '';
       final type = w['widget_type'] as String? ?? '';
+      final isBroken = w['broken'] as bool? ?? false;
+      if (isBroken) {
+        final widgetTitle = w['title'] as String? ?? '';
+        return _DashCard(
+          title: widgetTitle.toUpperCase(),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.warning_amber_rounded,
+                  size: 18, color: AppColors.ctWarn),
+              const SizedBox(width: 8),
+              Text(
+                'Configuración desactualizada',
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+              ),
+            ],
+          ),
+        );
+      }
       if (type == 'data_table') {
         return _DataTableWidget(
+          title: w['title'] as String? ?? '',
           config: (w['config'] as Map<String, dynamic>?) ?? {},
           dashboardSlug: slug,
           widgetId: id,
@@ -511,6 +532,7 @@ class _ConfiguredView extends ConsumerWidget {
             widgets, kpis, charts, activityData, constraints.maxWidth,
             slug: slug, start: start, end: end,
             filterKey: metaFilterKey, filterValue: metaFilterValue);
+        final brokenCount = widgets.where((w) => w['broken'] as bool? ?? false).length;
         return SingleChildScrollView(
           padding: const EdgeInsets.all(22),
           child: Column(
@@ -520,6 +542,29 @@ class _ConfiguredView extends ConsumerWidget {
                 dashboard['name'] as String? ?? 'Dashboard',
                 style: AppTextStyles.kpiValue.copyWith(fontFamily: 'Geist', fontSize: 20),
               ),
+              if (brokenCount > 0) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.ctWarn.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.ctWarn.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded,
+                          size: 16, color: AppColors.ctWarn),
+                      const SizedBox(width: 8),
+                      Text(
+                        '$brokenCount widget${brokenCount > 1 ? 's' : ''} con configuración desactualizada',
+                        style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 20),
               ...rows,
             ],
@@ -643,27 +688,12 @@ class _KpiCardWidget extends StatelessWidget {
     final label =
         kpiData?['label'] as String? ?? config['label'] as String? ?? '';
     final displayValue = value != null ? value.toString() : '—';
-    final color = _accentColor();
 
-    return _DashCard(
-      title: title.toUpperCase(),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            displayValue,
-            style: AppTextStyles.kpiValue.copyWith(fontFamily: 'Geist', fontSize: 40, color: color),
-          ),
-          const SizedBox(width: 10),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(
-              label,
-              style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-            ),
-          ),
-        ],
-      ),
+    return AppKpiCard(
+      label: title.toUpperCase(),
+      value: displayValue,
+      subtitle: label.isNotEmpty ? label : null,
+      accentColor: _accentColor(),
     );
   }
 }
@@ -1094,6 +1124,7 @@ class _OperatorRankingWidget extends StatelessWidget {
 
 class _DataTableWidget extends ConsumerWidget {
   const _DataTableWidget({
+    required this.title,
     required this.config,
     required this.dashboardSlug,
     required this.widgetId,
@@ -1102,6 +1133,7 @@ class _DataTableWidget extends ConsumerWidget {
     this.metadataFilterKey,
     this.metadataFilterValue,
   });
+  final String title;
   final Map<String, dynamic> config;
   final String dashboardSlug;
   final String widgetId;
@@ -1237,11 +1269,11 @@ class _DataTableWidget extends ConsumerWidget {
       filterValue: metadataFilterValue,
     );
     final asyncData = ref.watch(tableDataProvider(key));
-    final title = config['title'] as String? ?? widgetId;
+    final displayTitle = title.isNotEmpty ? title : (config['title'] as String? ?? widgetId);
     final subtitle = config['subtitle'] as String?;
 
     return _DashCard(
-      title: title.toUpperCase(),
+      title: displayTitle.toUpperCase(),
       subtitle: subtitle,
       child: asyncData.when(
         loading: () => const SizedBox(
@@ -1290,12 +1322,12 @@ class _DataTableWidget extends ConsumerWidget {
                   variant: AppButtonVariant.outline,
                   size: AppButtonSize.sm,
                   prefixIcon: const Icon(Icons.download_rounded, size: 14, color: AppColors.ctInk700),
-                  onPressed: () => _downloadXlsx(columns, rows, title),
+                  onPressed: () => _downloadXlsx(columns, rows, displayTitle),
                 ),
               ),
               const SizedBox(height: 8),
-              SizedBox(
-                height: 320,
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 480),
                 child: SingleChildScrollView(
                   scrollDirection: Axis.vertical,
                   child: SingleChildScrollView(
