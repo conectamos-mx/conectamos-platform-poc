@@ -19,6 +19,22 @@ class ConnectionsApi {
     await ApiClient.instance.delete('/integrations/google');
   }
 
+  /// Fetches the header row (first row) from a Google Sheets spreadsheet.
+  /// Returns a list of column names.
+  static Future<List<String>> getSheetHeaders({
+    required String spreadsheetId,
+    required String sheetName,
+  }) async {
+    final resp = await ApiClient.instance.get(
+      '/integrations/google/sheets/headers',
+      queryParameters: {
+        'spreadsheet_id': spreadsheetId,
+        'sheet_name': sheetName,
+      },
+    );
+    return List<String>.from(resp.data['headers'] as List);
+  }
+
   // ── Microsoft OAuth ────────────────────────────────────────────────────────
 
   /// Returns the Microsoft OAuth authorization URL.
