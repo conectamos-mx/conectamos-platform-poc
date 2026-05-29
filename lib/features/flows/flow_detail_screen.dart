@@ -4809,6 +4809,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     }
     _initProactiveMappingRows();
     _loadFlows();
+    _loadCatalogSchemas();
     _loadGroups();
     _loadWaChannel();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadActionTypes());
@@ -5383,17 +5384,21 @@ class _ActionDialogState extends State<_ActionDialog> {
   }
 
   List<AppDropdownItem<String?>> _buildFieldDropdownItems() {
+    debugPrint('[_buildFieldDropdownItems] START - catalogSchemas keys: ${_catalogSchemas.keys.toList()}');
     final items = <AppDropdownItem<String?>>[];
     for (final f in widget.flowFields) {
       final key = f['key'] as String? ?? '';
       final label = f['label'] as String? ?? key;
       final type = f['type'] as String?;
       final slug = f['catalog_slug'] as String?;
+      debugPrint('[_buildFieldDropdownItems] field: $key, type: $type, slug: $slug, hasSchema: ${_catalogSchemas.containsKey(slug ?? '')}');
       if (type == 'asset_ref' && slug != null && _catalogSchemas.containsKey(slug)) {
+        debugPrint('[_buildFieldDropdownItems] expanding asset_ref field: $key with slug: $slug');
         for (final col in _catalogSchemas[slug]!) {
           final colKey = col['key'] as String? ?? '';
           final colLabel = col['label'] as String? ?? colKey;
           if (colKey.isEmpty) continue;
+          debugPrint('[_buildFieldDropdownItems] adding expanded item: $key.data.$colKey -> $label > $colLabel');
           items.add(AppDropdownItem<String?>(
             value: '$key.data.$colKey',
             label: '$label > $colLabel',
@@ -5406,6 +5411,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         ));
       }
     }
+    debugPrint('[_buildFieldDropdownItems] DONE - total items: ${items.length}');
     return items;
   }
 
@@ -6766,36 +6772,71 @@ class _ActionDialogState extends State<_ActionDialog> {
                             ),
                             if (hasFields)
                               Expanded(
-                                child: AppDropdown<String?>(
-                                  value: effectiveKey,
-                                  hint: _loadingCatalogSchemas
-                                      ? 'Cargando campos\u2026'
-                                      : 'Campo del flujo\u2026',
-                                  items: [
-                                    const AppDropdownItem<String?>(
-                                      value: null,
-                                      label: 'Personalizado\u2026',
-                                    ),
-                                    ..._buildFieldDropdownItems(),
-                                    if (_loadingCatalogSchemas &&
-                                        effectiveKey != null &&
-                                        effectiveKey.contains('.') &&
-                                        !_buildAllValidKeys().contains(effectiveKey))
-                                      AppDropdownItem<String?>(
-                                        value: effectiveKey,
-                                        label: 'Cargando\u2026',
+                                child: _DropdownContainer(
+                                  child: DropdownButton<String?>(
+                                    value: effectiveKey,
+                                    isExpanded: true,
+                                    underline: const SizedBox.shrink(),
+                                    dropdownColor: AppColors.ctSurface,
+                                    hint: Text(
+                                      _loadingCatalogSchemas
+                                          ? 'Cargando campos…'
+                                          : 'Campo del flujo…',
+                                      style: const TextStyle(
+                                        fontFamily: 'Geist',
+                                        fontSize: 13,
+                                        color: AppColors.ctText3,
                                       ),
-                                  ],
-                                  onChanged: (v) => setState(() {
-                                    if (_columnMappingKeys.length > i) {
-                                      _columnMappingKeys[i] = v;
-                                    }
-                                    if (v != null) {
-                                      row.$2.text = '{{fields.$v}}';
-                                    } else {
-                                      row.$2.clear();
-                                    }
-                                  }),
+                                    ),
+                                    items: [
+                                      DropdownMenuItem<String?>(
+                                        value: null,
+                                        child: Text(
+                                          'Personalizado…',
+                                          style: const TextStyle(
+                                            fontFamily: 'Geist',
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                      ..._buildFieldDropdownItems().map((item) => DropdownMenuItem<String?>(
+                                        value: item.value,
+                                        child: Text(
+                                          item.label,
+                                          style: const TextStyle(
+                                            fontFamily: 'Geist',
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      )),
+                                      // Temporary item while schemas load for compound keys
+                                      if (_loadingCatalogSchemas &&
+                                          effectiveKey != null &&
+                                          effectiveKey.contains('.') &&
+                                          !_buildAllValidKeys().contains(effectiveKey))
+                                        DropdownMenuItem<String?>(
+                                          value: effectiveKey,
+                                          child: Text(
+                                            'Cargando…',
+                                            style: const TextStyle(
+                                              fontFamily: 'Geist',
+                                              fontSize: 13,
+                                              color: AppColors.ctText3,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                    onChanged: (v) => setState(() {
+                                      if (_columnMappingKeys.length > i) {
+                                        _columnMappingKeys[i] = v;
+                                      }
+                                      if (v != null) {
+                                        row.$2.text = '{{fields.$v}}';
+                                      } else {
+                                        row.$2.clear();
+                                      }
+                                    }),
+                                  ),
                                 ),
                               )
                             else
