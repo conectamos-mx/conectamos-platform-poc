@@ -1245,3 +1245,34 @@ AppDashboardTable(
 **PROHIBIDO usar en su lugar:**
 - `DataTable` de Flutter en features de dashboard — usar `AppDashboardTable` siempre
 - Tablas ad-hoc con `Row` + `Expanded` para datos tabulares de dashboard
+
+---
+
+### 2.22 AppTagChip · `lib/shared/widgets/app_tag_chip.dart`
+
+Chip compacto read-only para mostrar un valor categorico (rol, prioridad, etiqueta) con un color asociado.
+Uso en tablas y listas. NO confundir con AppChip, que es interactivo y se usa para filtros.
+
+```dart
+import '../../shared/widgets/app_tag_chip.dart';
+
+AppTagChip(label: 'Operador Demo', colorHex: '#F97316')
+AppTagChip(label: 'Coordinador', colorHex: '3B82F6')  // sin '#' tambien funciona
+AppTagChip(label: 'Sin color')  // usa teal default
+```
+
+| Prop | Tipo | Default | Descripcion |
+|------|------|---------|-------------|
+| `label` | `String` | requerido | Texto visible del chip |
+| `colorHex` | `String?` | `null` | Color hex con o sin `#`. Si es null o invalido, usa `AppColors.ctTeal` (#59E0CC). |
+
+**Estilo:**
+- padding: horizontal 8, vertical 3
+- borderRadius: 12
+- background: color al 15% opacidad
+- border: 1px color al 40% opacidad
+- texto: AppTextStyles.badge (Geist 600 11px) en color puro
+
+**PROHIBIDO usar en su lugar:**
+- `Container` ad-hoc con `BoxDecoration` para tags de rol o categoria
+- `AppBadge` para representar roles — AppBadge es para estados, AppTagChip para categorias
