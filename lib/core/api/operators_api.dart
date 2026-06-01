@@ -264,6 +264,56 @@ class OperatorsApi {
     );
   }
 
+  /// `GET /operators/lookup?phone=E164`
+  static Future<Map<String, dynamic>> lookupByPhone({
+    required String phone,
+  }) async {
+    final response = await ApiClient.instance.get(
+      '/operators/lookup',
+      queryParameters: {'phone': phone},
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  /// POST /operators (new creation contract with optional tenant-user link)
+  static Future<Map<String, dynamic>> createOperatorV2({
+    required String displayName,
+    required String phone,
+    List<String> roleIds = const [],
+    String? linkToTenantUserId,
+    List<String>? preferredChannelTypes,
+    bool createDespiteSoftDeleted = false,
+  }) async {
+    final response = await ApiClient.instance.post(
+      '/operators',
+      data: {
+        'display_name': displayName,
+        'phone': phone,
+        'role_ids': roleIds,
+        'link_to_tenant_user_id': ?linkToTenantUserId,
+        if (preferredChannelTypes != null && preferredChannelTypes.isNotEmpty)
+          'preferred_channel_types': preferredChannelTypes,
+        if (createDespiteSoftDeleted)
+          'create_despite_soft_deleted': true,
+      },
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  /// POST /operators/:id/restore
+  static Future<Map<String, dynamic>> restoreOperator({
+    required String id,
+    String? linkToTenantUserId,
+  }) async {
+    final response = await ApiClient.instance.post(
+      '/operators/$id/restore',
+      data: {
+        'link_to_tenant_user_id': ?linkToTenantUserId,
+      },
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   static String templateUrl({String nationality = 'MX'}) {
     return '${ApiClient.baseUrl}/operators/export/template?nationality=$nationality';
   }
