@@ -351,6 +351,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
                 _SourceTab(
                   catalog: catalog,
                   canManage: _canManage,
+                  onChanged: _onPatchChanged,
                 ),
                 _ItemsTab(
                   key: ValueKey(catalog['id']),
@@ -826,9 +827,14 @@ class _FieldSchemaCard extends StatelessWidget {
 // ── Tab 1 — FUENTE ────────────────────────────────────────────────────────────
 
 class _SourceTab extends ConsumerStatefulWidget {
-  const _SourceTab({required this.catalog, required this.canManage});
+  const _SourceTab({
+    required this.catalog,
+    required this.canManage,
+    required this.onChanged,
+  });
   final Map<String, dynamic> catalog;
   final bool canManage;
+  final void Function(Map<String, dynamic>) onChanged;
 
   @override
   ConsumerState<_SourceTab> createState() => _SourceTabState();
@@ -840,6 +846,13 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
   bool _reconnecting = false;
   StreamSubscription<html.MessageEvent>? _oauthSub;
   Timer? _oauthTimer;
+
+  // Google Sheets editable fields
+  late TextEditingController _sheetUrlCtrl;
+  List<String> _availableSheets = [];
+  String? _selectedSheet;
+  bool _loadingPreview = false;
+  Timer? _sheetUrlDebounce;
 
   String get _sourceType => widget.catalog['source_type'] as String? ?? '';
   bool get _isOAuth =>
@@ -856,6 +869,11 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
   @override
   void initState() {
     super.initState();
+    _sheetUrlCtrl = TextEditingController(
+      text: widget.catalog['sheet_url'] as String? ?? '',
+    );
+    _selectedSheet = widget.catalog['sheet_name'] as String?;
+    _sheetUrlCtrl.addListener(_onSheetUrlChanged);
     if (_isOAuth) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadOAuthStatus());
     }
@@ -863,9 +881,50 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
 
   @override
   void dispose() {
+    _sheetUrlCtrl.dispose();
+    _sheetUrlDebounce?.cancel();
     _oauthSub?.cancel();
     _oauthTimer?.cancel();
     super.dispose();
+  }
+
+  void _onSheetUrlChanged() {
+    _sheetUrlDebounce?.cancel();
+    final url = _sheetUrlCtrl.text.trim();
+    if (url.contains('spreadsheets/d/')) {
+      _sheetUrlDebounce = Timer(
+        const Duration(milliseconds: 800),
+        () { if (mounted) _loadSheetPreview(); },
+      );
+    }
+  }
+
+  Future<void> _loadSheetPreview({String? sheetName}) async {
+    if (_sheetUrlCtrl.text.trim().isEmpty) return;
+    setState(() => _loadingPreview = true);
+    try {
+      final tenantId = ref.read(activeTenantIdProvider);
+      final result = await CatalogsApi.sheetsPreview(
+        tenantId: tenantId,
+        sheetUrl: _sheetUrlCtrl.text.trim(),
+        sheetName: sheetName ?? _selectedSheet,
+      );
+      setState(() {
+        _availableSheets = List<String>.from(result['sheets'] as List? ?? []);
+        _selectedSheet = result['selected_sheet'] as String?;
+        _loadingPreview = false;
+      });
+      _emitPatch();
+    } catch (_) {
+      setState(() => _loadingPreview = false);
+    }
+  }
+
+  void _emitPatch() {
+    widget.onChanged({
+      'sheet_url': _sheetUrlCtrl.text.trim(),
+      if (_selectedSheet != null) 'sheet_name': _selectedSheet,
+    });
   }
 
   Future<void> _loadOAuthStatus() async {
@@ -1169,17 +1228,69 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (sourceType == 'google_sheets') ...[
-                    _ConfigRow(
-                      label: 'Hoja de cálculo',
-                      value: sheetUrl.isNotEmpty ? sheetUrl : '—',
-                      isUrl: sheetUrl.isNotEmpty,
-                    ),
-                    if ((sourceConfig['sheet_name'] as String? ?? '')
-                        .isNotEmpty)
-                      _ConfigRow(
-                        label: 'Pestaña',
-                        value: sourceConfig['sheet_name'] as String,
+                    if (widget.canManage) ...[
+                      TextField(
+                        controller: _sheetUrlCtrl,
+                        style: AppFonts.geist(
+                            fontSize: 13, color: AppColors.ctText),
+                        decoration: InputDecoration(
+                          labelText: 'URL de la hoja',
+                          labelStyle: AppFonts.geist(
+                              fontSize: 12, color: AppColors.ctText2),
+                          hintText:
+                              'https://docs.google.com/spreadsheets/d/...',
+                          hintStyle: AppFonts.geist(
+                              fontSize: 12, color: AppColors.ctText3),
+                          suffixIcon: _loadingPreview
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppColors.ctTeal),
+                                  ),
+                                )
+                              : null,
+                        ),
                       ),
+                      const SizedBox(height: 12),
+                      if (_availableSheets.isNotEmpty)
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedSheet,
+                          decoration: InputDecoration(
+                            labelText: 'Pestaña',
+                            labelStyle: AppFonts.geist(
+                                fontSize: 12, color: AppColors.ctText2),
+                          ),
+                          style: AppFonts.geist(
+                              fontSize: 13, color: AppColors.ctText),
+                          items: _availableSheets
+                              .map((s) => DropdownMenuItem(
+                                  value: s, child: Text(s)))
+                              .toList(),
+                          onChanged: (v) {
+                            setState(() => _selectedSheet = v);
+                            _emitPatch();
+                          },
+                        )
+                      else if (_selectedSheet != null)
+                        _ReadOnlyField(
+                            label: 'Pestaña', value: _selectedSheet!),
+                    ] else ...[
+                      _ConfigRow(
+                        label: 'Hoja de cálculo',
+                        value: sheetUrl.isNotEmpty ? sheetUrl : '—',
+                        isUrl: sheetUrl.isNotEmpty,
+                      ),
+                      if ((sourceConfig['sheet_name'] as String? ?? '')
+                          .isNotEmpty)
+                        _ConfigRow(
+                          label: 'Pestaña',
+                          value: sourceConfig['sheet_name'] as String,
+                        ),
+                    ],
                   ] else if (sourceType == 'onedrive_excel') ...[
                     _ConfigRow(
                       label: 'Archivo',
