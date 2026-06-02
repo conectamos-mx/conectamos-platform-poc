@@ -31,6 +31,7 @@ import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/operator_avatar.dart';
 import '../../shared/widgets/screen_header.dart';
 import 'widgets/media_preview_dialog.dart';
 
@@ -1380,7 +1381,7 @@ class _AssignOperatorDialogState extends State<_AssignOperatorDialog> {
   @override
   Widget build(BuildContext context) {
     final filtered = widget.operators.where((op) {
-      final name = (op['display_name'] as String? ?? '').toLowerCase();
+      final name = (op['display_name'] ?? op['name'] ?? '').toString().toLowerCase();
       return name.contains(_search.toLowerCase());
     }).toList();
 
@@ -1452,9 +1453,15 @@ class _AssignOperatorDialogState extends State<_AssignOperatorDialog> {
                       itemBuilder: (context, i) {
                         final op   = filtered[i];
                         final id   = op['id']            as String? ?? '';
-                        final name = op['display_name'] as String? ?? id;
+                        final name = (op['display_name'] ?? op['name'] ?? id).toString();
+                        final photoUrl = op['photo_url'] as String?;
                         return ListTile(
                           dense: true,
+                          leading: OperatorAvatar(
+                            name: name,
+                            photoUrl: photoUrl,
+                            size: 36,
+                          ),
                           title: Text(
                             name,
                             style: AppTextStyles.body,
