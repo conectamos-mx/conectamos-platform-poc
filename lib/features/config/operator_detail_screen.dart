@@ -14,6 +14,7 @@ import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/identity_config.dart';
+import '../../core/utils/phone_normalizer.dart';
 import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
@@ -21,6 +22,8 @@ import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/app_alert_banner.dart';
 import '../../shared/widgets/app_detail_header.dart';
 import '../../shared/widgets/app_dropdown.dart';
+import '../../shared/widgets/app_editable_section.dart';
+import 'widgets/phone_field_widget.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -564,16 +567,40 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
   String? _selectedTgChannelId;
   bool _sendingTgInvite = false;
 
+  // ── Section-edit: Información personal ──────────────────────────────────
+  bool _editingPersonal = false;
+  late TextEditingController _nameCtrl;
+  late TextEditingController _emailCtrl;
+  String _phoneE164 = '';
+  String _phoneCountryIso = 'MX';
+  String _phoneLocalNumber = '';
+  String? _personalError;
+
   @override
   void initState() {
     super.initState();
+
+    // Initialize personal section controllers
+    final op = widget.op;
+    _nameCtrl = TextEditingController(
+      text: op['display_name'] as String? ?? op['name'] as String? ?? '',
+    );
+    _emailCtrl = TextEditingController(text: op['email'] as String? ?? '');
+    final rawPhone = op['phone'] as String? ?? '';
+    if (rawPhone.isNotEmpty) {
+      final (iso, local) = PhoneNormalizer.parsePhone(rawPhone);
+      _phoneCountryIso = iso;
+      _phoneLocalNumber = local;
+      _phoneE164 = PhoneNormalizer.formatToE164(local, iso);
+    }
+
     // Seed from persisted preferred_channel_types before API loads
-    final raw = widget.op['preferred_channel_types'];
+    final raw = op['preferred_channel_types'];
     if (raw is List) {
       _orderedTypes = raw.map((e) => e.toString()).toList();
     }
     // Seed role from operator data
-    final rawRoleIds = widget.op['role_ids'];
+    final rawRoleIds = op['role_ids'];
     if (rawRoleIds is List && rawRoleIds.isNotEmpty) {
       _roleId = rawRoleIds.first?.toString();
     }
@@ -582,6 +609,85 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
       _loadRoles();
       _loadTelegramChannels();
     });
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    super.dispose();
+  }
+
+  void _enterEditPersonal() {
+    final op = widget.op;
+    _nameCtrl.text = op['display_name'] as String? ?? op['name'] as String? ?? '';
+    _emailCtrl.text = op['email'] as String? ?? '';
+    final rawPhone = op['phone'] as String? ?? '';
+    if (rawPhone.isNotEmpty) {
+      final (iso, local) = PhoneNormalizer.parsePhone(rawPhone);
+      _phoneCountryIso = iso;
+      _phoneLocalNumber = local;
+      _phoneE164 = PhoneNormalizer.formatToE164(local, iso);
+    }
+    setState(() {
+      _editingPersonal = true;
+      _personalError = null;
+    });
+  }
+
+  void _cancelEditPersonal() {
+    setState(() {
+      _editingPersonal = false;
+      _personalError = null;
+    });
+  }
+
+  Future<void> _savePersonal() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) {
+      setState(() => _personalError = 'Nombre obligatorio');
+      return;
+    }
+    final phone = _phoneE164;
+    if (phone.isEmpty) {
+      setState(() => _personalError = 'Teléfono obligatorio');
+      return;
+    }
+    final email = _emailCtrl.text.trim();
+    final id = widget.op['id'] as String? ?? '';
+
+    try {
+      await OperatorsApi.updateOperator(
+        id: id,
+        displayName: name,
+        phone: phone,
+        roleIds: (widget.op['role_ids'] as List?)?.cast<String>() ?? [],
+        email: email.isNotEmpty ? email : null,
+      );
+      if (!mounted) return;
+      widget.onReload();
+      ref.read(operatorListVersionProvider.notifier).state++;
+      setState(() {
+        _editingPersonal = false;
+        _personalError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      String msg = 'Error al guardar';
+      if (e is DioException) {
+        final data = e.response?.data;
+        if (data is Map) {
+          final detail = data['detail'];
+          if (detail is Map && detail['message'] is String) {
+            msg = detail['message'] as String;
+          } else if (detail is String && detail.isNotEmpty) {
+            msg = detail;
+          }
+        }
+      }
+      setState(() => _personalError = msg);
+      rethrow;
+    }
   }
 
   Future<void> _loadTelegramChannels() async {
@@ -785,15 +891,112 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _SectionTitle('Información personal'),
-          const SizedBox(height: 12),
-          _FieldRow(label: 'Nombre completo', value: name),
-          _FieldRow(label: 'Correo', value: email.isNotEmpty ? email : '—'),
-          if (nationality.isNotEmpty)
-            _FieldRow(label: 'Nacionalidad', value: nationality),
-          if (identityNumber.isNotEmpty)
-            _FieldRow(label: idLabel, value: identityNumber),
-          _FieldRow(label: 'Teléfono WhatsApp', value: phone),
+          // ── Sección: Información personal (section-edit) ──────────
+          AppEditableSection(
+            title: 'Información personal',
+            isEditing: _editingPersonal,
+            canEdit: canManage,
+            onEdit: _enterEditPersonal,
+            onCancel: _cancelEditPersonal,
+            onSave: _savePersonal,
+            canSave: _nameCtrl.text.trim().isNotEmpty && _phoneE164.isNotEmpty,
+            errorText: _personalError,
+            viewChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _FieldRow(label: 'Nombre completo', value: name),
+                _FieldRow(label: 'Teléfono WhatsApp', value: phone),
+                _FieldRow(label: 'Correo', value: email.isNotEmpty ? email : '—'),
+              ],
+            ),
+            editChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _FieldLabel('Nombre completo *'),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: _nameCtrl,
+                  style: AppTextStyles.body,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: AppColors.ctSurface2,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctBorder),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctBorder),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctTeal),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                PhoneFieldWidget(
+                  label: 'Teléfono WhatsApp *',
+                  initialCountryIso: _phoneCountryIso,
+                  initialLocalNumber: _phoneLocalNumber,
+                  onChanged: (e164) => setState(() => _phoneE164 = e164),
+                ),
+                const SizedBox(height: 12),
+                const _FieldLabel('Correo electrónico'),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: _emailCtrl,
+                  style: AppTextStyles.body,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: AppColors.ctSurface2,
+                    hintText: 'correo@ejemplo.com',
+                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctBorder),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctBorder),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctTeal),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Sección: Identidad (read-only, ADR-367) ────────────────
+          if (nationality.isNotEmpty || identityNumber.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            AppEditableSection(
+              title: 'Identidad',
+              isEditing: false,
+              canEdit: false,
+              onSave: () async {},
+              onCancel: () {},
+              viewChild: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (nationality.isNotEmpty)
+                    _FieldRow(label: 'Nacionalidad', value: nationality),
+                  if (identityNumber.isNotEmpty)
+                    _FieldRow(label: idLabel, value: identityNumber),
+                ],
+              ),
+              editChild: const SizedBox.shrink(),
+            ),
+          ],
+
+          const SizedBox(height: 24),
           // ── Telegram ──────────────────────────────────────────────
           if (tgChatId != null && tgChatId.isNotEmpty) ...[
             const _FieldLabel('Telegram Chat ID'),
