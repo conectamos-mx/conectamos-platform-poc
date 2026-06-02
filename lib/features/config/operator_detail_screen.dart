@@ -23,11 +23,13 @@ import '../../shared/widgets/app_alert_banner.dart';
 import '../../shared/widgets/app_detail_header.dart';
 import '../../shared/widgets/app_dropdown.dart';
 import '../../shared/widgets/app_editable_section.dart';
+import '../../shared/widgets/app_multi_select.dart';
+import '../../shared/widgets/app_tag_chip.dart';
 import 'widgets/phone_field_widget.dart';
 
 // ── Section keys ─────────────────────────────────────────────────────────────
 
-enum SectionKey { personal }
+enum SectionKey { personal, roles, preferredChannels }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -559,12 +561,9 @@ class _DatosTab extends ConsumerStatefulWidget {
 class _DatosTabState extends ConsumerState<_DatosTab> {
   List<String> _orderedTypes = [];
   bool _loadingTypes = false;
-  bool _saving = false;
 
-  // Rol
-  String? _roleId;
+  // Roles
   List<Map<String, dynamic>> _availableRoles = [];
-  bool _savingRole = false;
 
   // Telegram invite
   List<Map<String, dynamic>>? _availableTgChannels;
@@ -579,6 +578,16 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
   String _phoneCountryIso = 'MX';
   String _phoneLocalNumber = '';
   String? _personalError;
+
+  // ── Section-edit: Roles ─────────────────────────────────────────────────
+  bool _editingRoles = false;
+  List<String> _selectedRoleIds = [];
+  String? _rolesError;
+
+  // ── Section-edit: Canal preferido ───────────────────────────────────────
+  bool _editingChannels = false;
+  List<String> _editingChannelsOrder = [];
+  String? _channelsError;
 
   @override
   void initState() {
@@ -602,11 +611,6 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     final raw = op['preferred_channel_types'];
     if (raw is List) {
       _orderedTypes = raw.map((e) => e.toString()).toList();
-    }
-    // Seed role from operator data
-    final rawRoleIds = op['role_ids'];
-    if (rawRoleIds is List && rawRoleIds.isNotEmpty) {
-      _roleId = rawRoleIds.first?.toString();
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadTypes();
@@ -687,6 +691,93 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     }
   }
 
+  // ── Section-edit: Roles methods ─────────────────────────────────────────
+
+  void _enterEditRoles() {
+    setState(() {
+      _selectedRoleIds = (widget.op['role_ids'] as List?)?.cast<String>() ?? [];
+      _editingRoles = true;
+      _rolesError = null;
+    });
+  }
+
+  void _cancelEditRoles() {
+    setState(() {
+      _editingRoles = false;
+      _rolesError = null;
+    });
+  }
+
+  Future<void> _saveRoles() async {
+    if (_selectedRoleIds.isEmpty) {
+      setState(() => _rolesError = 'Selecciona al menos un rol');
+      return;
+    }
+    final id = widget.op['id'] as String? ?? '';
+    try {
+      await OperatorsApi.patchRoleIds(id: id, roleIds: _selectedRoleIds);
+    } catch (e) {
+      if (!mounted) return;
+      String msg = 'Error al actualizar roles';
+      if (e is DioException) {
+        final data = e.response?.data;
+        if (data is Map) {
+          final detail = data['detail'];
+          if (detail is Map && detail['message'] is String) {
+            msg = detail['message'] as String;
+          } else if (detail is String && detail.isNotEmpty) {
+            msg = detail;
+          }
+        }
+      }
+      setState(() => _rolesError = msg);
+      rethrow;
+    }
+  }
+
+  // ── Section-edit: Canal preferido methods ──────────────────────────────
+
+  void _enterEditChannels() {
+    setState(() {
+      _editingChannelsOrder = List<String>.from(_orderedTypes);
+      _editingChannels = true;
+      _channelsError = null;
+    });
+  }
+
+  void _cancelEditChannels() {
+    setState(() {
+      _editingChannels = false;
+      _channelsError = null;
+    });
+  }
+
+  Future<void> _saveChannels() async {
+    final id = widget.op['id'] as String? ?? '';
+    try {
+      await OperatorsApi.patchPreferredChannelTypes(
+        id: id,
+        types: _editingChannelsOrder,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      String msg = 'Error al actualizar canal preferido';
+      if (e is DioException) {
+        final data = e.response?.data;
+        if (data is Map) {
+          final detail = data['detail'];
+          if (detail is Map && detail['message'] is String) {
+            msg = detail['message'] as String;
+          } else if (detail is String && detail.isNotEmpty) {
+            msg = detail;
+          }
+        }
+      }
+      setState(() => _channelsError = msg);
+      rethrow;
+    }
+  }
+
   // ── Shared post-save housekeeping ─────────────────────────────────────────
 
   void _afterSectionSaved(SectionKey key) {
@@ -698,6 +789,13 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
         case SectionKey.personal:
           _editingPersonal = false;
           _personalError = null;
+        case SectionKey.roles:
+          _editingRoles = false;
+          _rolesError = null;
+        case SectionKey.preferredChannels:
+          _editingChannels = false;
+          _channelsError = null;
+          _orderedTypes = List<String>.from(_editingChannelsOrder);
       }
     });
   }
@@ -786,43 +884,6 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     return result;
   }
 
-  Future<void> _saveOrder(List<String> newOrder) async {
-    final operatorId = widget.op['id'] as String? ?? '';
-    if (operatorId.isEmpty) return;
-    setState(() {
-      _orderedTypes = newOrder;
-      _saving = true;
-    });
-    try {
-      await OperatorsApi.patchPreferredChannelTypes(
-        id:    operatorId,
-        types: newOrder,
-      );
-      if (!mounted) return;
-      setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content:         Text('Canal preferido actualizado'),
-        backgroundColor: AppColors.ctOk,
-        duration:        Duration(seconds: 2),
-      ));
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _saving = false);
-      String msg = 'Error al actualizar el canal preferido';
-      if (e is DioException) {
-        final body = e.response?.data;
-        if (body is Map) {
-          final detail = body['detail'] ?? body['message'];
-          if (detail != null) msg = detail.toString();
-        }
-      }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content:         Text(msg),
-        backgroundColor: AppColors.ctDanger,
-      ));
-    }
-  }
-
   Future<void> _loadRoles() async {
     if (!mounted) return;
     final tenantId = ref.read(activeTenantIdProvider);
@@ -834,42 +895,6 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     } catch (_) {}
   }
 
-  Future<void> _saveRole(String? roleId) async {
-    final operatorId = widget.op['id'] as String? ?? '';
-    if (operatorId.isEmpty) return;
-    setState(() {
-      _roleId = roleId;
-      _savingRole = true;
-    });
-    try {
-      await OperatorsApi.patchRoleIds(
-        id: operatorId,
-        roleIds: roleId != null ? [roleId] : [],
-      );
-      if (!mounted) return;
-      setState(() => _savingRole = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Rol actualizado'),
-        backgroundColor: AppColors.ctOk,
-        duration: Duration(seconds: 2),
-      ));
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _savingRole = false);
-      String msg = 'Error al actualizar el rol';
-      if (e is DioException) {
-        final body = e.response?.data;
-        if (body is Map) {
-          final detail = body['detail'] ?? body['message'];
-          if (detail != null) msg = detail.toString();
-        }
-      }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(msg),
-        backgroundColor: AppColors.ctDanger,
-      ));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1203,89 +1228,91 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
             }),
           ],
 
-          // ── Canal preferido ─────────────────────────────────────────────
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const _SectionTitle('Canal preferido'),
-              if (_saving) ...[
-                const SizedBox(width: 10),
-                const SizedBox(
-                  width:  14,
-                  height: 14,
-                  child:  CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.ctTeal,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (_loadingTypes)
-            const SizedBox(
-              height: 36,
-              child: Center(
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.ctTeal,
-                ),
-              ),
-            )
-          else if (_orderedTypes.isEmpty)
-            Text(
-              'Sin canales disponibles. Asigna flows al operador primero.',
-              style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-            )
-          else
-            _ChannelTypeOrderList(
-              types:      _orderedTypes,
-              enabled:    canManage && !_saving,
-              onReorder:  canManage ? _saveOrder : null,
-            ),
-
-          // ── Rol de operador ─────────────────────────────────────────────
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const _SectionTitle('Rol'),
-              if (_savingRole) ...[
-                const SizedBox(width: 10),
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppColors.ctTeal),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 10),
-          DropdownButton<String?>(
-            value: _availableRoles.any((r) => r['id'] == _roleId)
-                ? _roleId
-                : null,
-            isExpanded: true,
-            underline: Container(height: 1, color: AppColors.ctBorder),
-            style: AppTextStyles.body,
-            items: [
-              DropdownMenuItem<String?>(
-                value: null,
-                child: Text('Sin rol',
-                    style: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
-              ),
-              ..._availableRoles.map((role) {
-                final id = role['id'] as String? ?? '';
-                final label = role['label'] as String? ??
-                    role['slug'] as String? ??
-                    id;
-                return DropdownMenuItem<String?>(
-                  value: id,
-                  child: Text(label, style: AppTextStyles.body),
-                );
+          // ── Sección: Roles (section-edit) ──────────────────────────────
+          const SizedBox(height: 24),
+          AppEditableSection(
+            title: 'Roles',
+            isEditing: _editingRoles,
+            canEdit: canManage,
+            onEdit: _enterEditRoles,
+            onCancel: _cancelEditRoles,
+            onSave: _saveRoles,
+            onSavedSuccessfully: () => _afterSectionSaved(SectionKey.roles),
+            canSave: _selectedRoleIds.isNotEmpty,
+            errorText: _rolesError,
+            viewChild: Builder(builder: (_) {
+              final roleIds = (op['role_ids'] as List?)?.cast<String>() ?? [];
+              if (roleIds.isEmpty) {
+                return Text('Sin roles asignados',
+                    style: AppTextStyles.body.copyWith(color: AppColors.ctText3));
+              }
+              return Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: roleIds.map((rid) {
+                  final role = _availableRoles.firstWhere(
+                    (r) => r['id'] == rid,
+                    orElse: () => {'label': rid, 'color': '#59E0CC'},
+                  );
+                  return AppTagChip(
+                    label: role['label'] as String? ?? rid,
+                    colorHex: role['color'] as String?,
+                  );
+                }).toList(),
+              );
+            }),
+            editChild: AppMultiSelect<String>(
+              items: _availableRoles
+                  .map((r) => AppMultiSelectItem(
+                        value: r['id'] as String? ?? '',
+                        label: r['label'] as String? ?? '—',
+                      ))
+                  .toList(),
+              selectedValues: _selectedRoleIds,
+              placeholder: 'Seleccionar roles...',
+              searchable: true,
+              onChanged: (vals) => setState(() {
+                _selectedRoleIds = vals;
+                _rolesError = null;
               }),
-            ],
-            onChanged: canManage && !_savingRole ? _saveRole : null,
+            ),
+          ),
+
+          // ── Sección: Canal preferido (section-edit) ────────────────────
+          const SizedBox(height: 24),
+          AppEditableSection(
+            title: 'Canal preferido',
+            isEditing: _editingChannels,
+            canEdit: canManage && _orderedTypes.length > 1,
+            onEdit: _enterEditChannels,
+            onCancel: _cancelEditChannels,
+            onSave: _saveChannels,
+            onSavedSuccessfully: () => _afterSectionSaved(SectionKey.preferredChannels),
+            errorText: _channelsError,
+            viewChild: _loadingTypes
+                ? const SizedBox(
+                    height: 36,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.ctTeal),
+                    ),
+                  )
+                : _orderedTypes.isEmpty
+                    ? Text(
+                        'Sin canales disponibles. Asigna flows al operador primero.',
+                        style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                      )
+                    : _ChannelTypeOrderList(
+                        types: _orderedTypes,
+                        enabled: false,
+                        onReorder: null,
+                      ),
+            editChild: _ChannelTypeOrderList(
+              types: _editingChannelsOrder,
+              enabled: true,
+              onReorder: (newOrder) =>
+                  setState(() => _editingChannelsOrder = newOrder),
+            ),
           ),
 
           const SizedBox(height: 16),
