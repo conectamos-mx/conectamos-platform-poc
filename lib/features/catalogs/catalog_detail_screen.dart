@@ -352,6 +352,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
                   catalog: catalog,
                   canManage: _canManage,
                   onChanged: _onPatchChanged,
+                  onReload: _load,
                 ),
                 _ItemsTab(
                   key: ValueKey(catalog['id']),
@@ -831,10 +832,12 @@ class _SourceTab extends ConsumerStatefulWidget {
     required this.catalog,
     required this.canManage,
     required this.onChanged,
+    this.onReload,
   });
   final Map<String, dynamic> catalog;
   final bool canManage;
   final void Function(Map<String, dynamic>) onChanged;
+  final VoidCallback? onReload;
 
   @override
   ConsumerState<_SourceTab> createState() => _SourceTabState();
@@ -996,6 +999,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
         if (mounted) {
           setState(() => _reconnecting = false);
           _loadOAuthStatus();
+          widget.onReload?.call();
           if (data == successMsg) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text('Conexión renovada correctamente'),
@@ -1016,6 +1020,21 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
   _OAuthState get _oauthState {
     if (!_isOAuth) return _OAuthState.notApplicable;
     if (_loadingOAuth) return _OAuthState.loading;
+
+    // Prioritize integration_status from backend when available
+    final integrationStatus =
+        widget.catalog['integration_status'] as String?;
+    if (integrationStatus != null) {
+      return switch (integrationStatus) {
+        'active' => _OAuthState.connected,
+        'error' || 'reauth_required' => _OAuthState.reauthRequired,
+        'revoked' => _OAuthState.revoked,
+        'paused' => _OAuthState.paused,
+        _ => _OAuthState.disconnected,
+      };
+    }
+
+    // Backward compat: infer from OAuth status when integration_status absent
     final status = _oauthStatus;
     if (status == null) return _OAuthState.unknown;
     if (status['connected'] != true) return _OAuthState.disconnected;
@@ -1092,43 +1111,74 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
 
           // Banner OAuth problema
           if (_isOAuth &&
-              (oauthSt == _OAuthState.expired ||
-                  oauthSt == _OAuthState.disconnected)) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: AppColors.ctRedBg,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: AppColors.ctDanger.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.link_off_rounded,
-                      size: 16, color: AppColors.ctDanger),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      oauthSt == _OAuthState.expired
-                          ? 'El token de acceso ha expirado. Reconecta para continuar sincronizando.'
-                          : 'La cuenta no está conectada. Conecta para habilitar la sincronización.',
-                      style: AppFonts.geist(
-                          fontSize: 12, color: AppColors.ctDanger),
+              oauthSt != _OAuthState.connected &&
+              oauthSt != _OAuthState.loading &&
+              oauthSt != _OAuthState.notApplicable) ...[
+            () {
+              final isWarn = oauthSt == _OAuthState.reauthRequired ||
+                  oauthSt == _OAuthState.expired;
+              final bannerBg =
+                  isWarn ? AppColors.ctWarnBg : AppColors.ctRedBg;
+              final bannerBorder = isWarn
+                  ? AppColors.ctWarn.withValues(alpha: 0.4)
+                  : AppColors.ctDanger.withValues(alpha: 0.3);
+              final bannerFg =
+                  isWarn ? AppColors.ctWarn : AppColors.ctDanger;
+              final bannerIcon = isWarn
+                  ? Icons.warning_amber_rounded
+                  : Icons.link_off_rounded;
+              final bannerText = switch (oauthSt) {
+                _OAuthState.reauthRequired =>
+                  'La conexión con $sourceLabel necesita reconexión. Los sincronizados están fallando hasta que se reconecte.',
+                _OAuthState.expired =>
+                  'El token de acceso ha expirado. Reconecta para continuar sincronizando.',
+                _OAuthState.revoked =>
+                  'La conexión con $sourceLabel fue revocada. Los sincronizados están fallando hasta que se reconecte.',
+                _OAuthState.disconnected =>
+                  'La cuenta no está conectada. Conecta para habilitar la sincronización.',
+                _OAuthState.paused =>
+                  'La integración está pausada. Los sincronizados no se ejecutarán hasta que se reactive.',
+                _ =>
+                  'La conexión con $sourceLabel no está activa.',
+              };
+              final showReconnect = oauthSt != _OAuthState.paused &&
+                  oauthSt != _OAuthState.unknown;
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: bannerBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: bannerBorder),
+                ),
+                child: Row(
+                  children: [
+                    Icon(bannerIcon, size: 16, color: bannerFg),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        bannerText,
+                        style: AppFonts.geist(
+                            fontSize: 12, color: bannerFg),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  AppButton(
-                    label: 'Reconectar',
-                    variant: AppButtonVariant.danger,
-                    size: AppButtonSize.sm,
-                    isLoading: _reconnecting,
-                    onPressed: _reconnect,
-                  ),
-                ],
-              ),
-            ),
+                    if (showReconnect) ...[
+                      const SizedBox(width: 8),
+                      AppButton(
+                        label: 'Reconectar ahora',
+                        variant: isWarn
+                            ? AppButtonVariant.outline
+                            : AppButtonVariant.danger,
+                        size: AppButtonSize.sm,
+                        isLoading: _reconnecting,
+                        onPressed: _reconnect,
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }(),
           ],
 
           // Card fuente principal
@@ -1159,6 +1209,18 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
                         size: AppButtonSize.sm,
                         isDisabled: _reconnecting,
                         prefixIcon: const Icon(Icons.refresh_rounded, size: 14, color: AppColors.ctTeal),
+                        onPressed: _reconnect,
+                      ),
+                    ] else if (_isOAuth &&
+                        oauthSt != _OAuthState.connected &&
+                        oauthSt != _OAuthState.loading &&
+                        oauthSt != _OAuthState.paused &&
+                        oauthSt != _OAuthState.notApplicable) ...[
+                      AppButton(
+                        label: 'Reconectar',
+                        variant: AppButtonVariant.danger,
+                        size: AppButtonSize.sm,
+                        isLoading: _reconnecting,
                         onPressed: _reconnect,
                       ),
                     ],
@@ -1319,7 +1381,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
 }
 
 // Estado OAuth enum
-enum _OAuthState { notApplicable, loading, unknown, connected, expired, disconnected }
+enum _OAuthState { notApplicable, loading, unknown, connected, expired, disconnected, reauthRequired, revoked, paused }
 
 // Badge de estado OAuth
 class _OAuthStateBadge extends StatelessWidget {
@@ -1343,11 +1405,23 @@ class _OAuthStateBadge extends StatelessWidget {
           'Conectado',
           Icons.check_circle_rounded
         ),
+      _OAuthState.reauthRequired => (
+          AppColors.ctWarnBg,
+          AppColors.ctWarn,
+          'Necesita reconexión',
+          Icons.warning_rounded
+        ),
       _OAuthState.expired => (
           AppColors.ctWarnBg,
           AppColors.ctWarn,
           'Token expirado',
           Icons.warning_rounded
+        ),
+      _OAuthState.revoked => (
+          AppColors.ctRedBg,
+          AppColors.ctRedText,
+          'Acceso revocado',
+          Icons.link_off_rounded
         ),
       _OAuthState.disconnected => (
           AppColors.ctRedBg,
@@ -1355,10 +1429,16 @@ class _OAuthStateBadge extends StatelessWidget {
           'Desconectado',
           Icons.link_off_rounded
         ),
+      _OAuthState.paused => (
+          AppColors.ctSurface2,
+          AppColors.ctText2,
+          'Pausada',
+          Icons.pause_circle_rounded
+        ),
       _ => (
           AppColors.ctSurface2,
           AppColors.ctText2,
-          'Verificando...',
+          'Sin conectar',
           Icons.help_outline_rounded
         ),
     };
