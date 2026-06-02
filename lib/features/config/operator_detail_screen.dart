@@ -3,11 +3,13 @@ import 'dart:html' as html;
 import 'dart:ui_web' as ui;
 
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/api/operator_fields_api.dart';
 import '../../core/api/operator_roles_api.dart';
 import '../../core/api/operators_api.dart';
 import '../../core/providers/permissions_provider.dart';
@@ -25,11 +27,13 @@ import '../../shared/widgets/app_dropdown.dart';
 import '../../shared/widgets/app_editable_section.dart';
 import '../../shared/widgets/app_multi_select.dart';
 import '../../shared/widgets/app_tag_chip.dart';
+import 'utils/operator_image_upload.dart';
 import 'widgets/phone_field_widget.dart';
+import 'widgets/phone_secondary_widget.dart';
 
 // ── Section keys ─────────────────────────────────────────────────────────────
 
-enum SectionKey { personal, roles, preferredChannels }
+enum SectionKey { personal, roles, preferredChannels, secondaryPhones, customFields }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -589,6 +593,20 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
   List<String> _editingChannelsOrder = [];
   String? _channelsError;
 
+  // ── Section-edit: Contacto adicional ────────────────────────────────────
+  bool _editingSecondaryPhones = false;
+  List<Map<String, dynamic>> _editingSecondaryPhonesList = [];
+  String? _secondaryPhonesError;
+
+  // ── Section-edit: Campos personalizados ─────────────────────────────────
+  bool _editingCustomFields = false;
+  List<Map<String, dynamic>> _customFieldDefs = [];
+  Map<String, dynamic> _editingCfValues = {};
+  Map<String, TextEditingController> _cfControllers = {};
+  Map<String, bool> _cfUploading = {};
+  String? _customFieldsError;
+  bool _cfDefsLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -616,6 +634,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
       _loadTypes();
       _loadRoles();
       _loadTelegramChannels();
+      _loadCustomFieldDefs();
     });
   }
 
@@ -623,6 +642,9 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
   void dispose() {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
+    for (final c in _cfControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -778,6 +800,373 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     }
   }
 
+  // ── Section-edit: Contacto adicional methods ────────────────────────────
+
+  void _enterEditSecondaryPhones() {
+    final meta = widget.op['metadata'] as Map<String, dynamic>? ?? {};
+    final existing = ((meta['phone_secondary'] as List?) ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    setState(() {
+      _editingSecondaryPhonesList = existing;
+      _editingSecondaryPhones = true;
+      _secondaryPhonesError = null;
+    });
+  }
+
+  void _cancelEditSecondaryPhones() {
+    setState(() {
+      _editingSecondaryPhones = false;
+      _secondaryPhonesError = null;
+    });
+  }
+
+  Future<void> _saveSecondaryPhones() async {
+    final id = widget.op['id'] as String? ?? '';
+    final op = widget.op;
+    try {
+      await OperatorsApi.updateOperator(
+        id: id,
+        displayName: op['display_name'] as String? ?? op['name'] as String? ?? '',
+        phone: op['phone'] as String? ?? '',
+        roleIds: (op['role_ids'] as List?)?.cast<String>() ?? [],
+        phoneSecondary: _editingSecondaryPhonesList,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _secondaryPhonesError = _extractErrorMsg(e));
+      rethrow;
+    }
+  }
+
+  // ── Section-edit: Campos personalizados methods ────────────────────────
+
+  Future<void> _loadCustomFieldDefs() async {
+    setState(() => _cfDefsLoading = true);
+    try {
+      final defs = await OperatorFieldsApi.getOperatorFields();
+      if (mounted) setState(() { _customFieldDefs = defs; _cfDefsLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _cfDefsLoading = false);
+    }
+  }
+
+  void _enterEditCustomFields() {
+    // Build initial values from current custom_fields list
+    final initMap = <String, dynamic>{};
+    final rawCf = widget.op['custom_fields'];
+    if (rawCf is List) {
+      for (final cf in rawCf) {
+        if (cf is Map) {
+          final key = cf['field_key'] as String? ?? '';
+          if (key.isNotEmpty) initMap[key] = cf['value'];
+        }
+      }
+    }
+
+    // Create controllers for text/number/date fields
+    for (final c in _cfControllers.values) { c.dispose(); }
+    final controllers = <String, TextEditingController>{};
+    for (final def in _customFieldDefs) {
+      final key = def['field_key'] as String? ?? '';
+      final type = def['field_type'] as String? ?? 'text';
+      if (['text', 'number', 'date'].contains(type)) {
+        String displayVal = '';
+        final initVal = initMap[key];
+        if (initVal != null) {
+          if (type == 'date') {
+            try {
+              final parts = initVal.toString().split('-');
+              if (parts.length == 3) {
+                displayVal = '${parts[2].padLeft(2, '0')}/${parts[1].padLeft(2, '0')}/${parts[0]}';
+              }
+            } catch (_) {
+              displayVal = initVal.toString();
+            }
+          } else {
+            displayVal = initVal.toString();
+          }
+        }
+        controllers[key] = TextEditingController(text: displayVal);
+      }
+    }
+
+    setState(() {
+      _editingCfValues = Map<String, dynamic>.from(initMap);
+      _cfControllers = controllers;
+      _cfUploading = {};
+      _editingCustomFields = true;
+      _customFieldsError = null;
+    });
+  }
+
+  void _cancelEditCustomFields() {
+    setState(() {
+      _editingCustomFields = false;
+      _customFieldsError = null;
+    });
+  }
+
+  Future<void> _saveCustomFields() async {
+    // Validate required fields
+    for (final def in _customFieldDefs) {
+      final key = def['field_key'] as String? ?? '';
+      final isRequired = def['required'] as bool? ?? false;
+      final type = def['field_type'] as String? ?? 'text';
+      if (!isRequired || type == 'boolean') continue;
+      dynamic val;
+      if (['text', 'number', 'date'].contains(type)) {
+        val = _cfControllers[key]?.text.trim();
+      } else {
+        val = _editingCfValues[key];
+      }
+      if (val == null || val.toString().isEmpty) {
+        setState(() => _customFieldsError = '${def['label'] ?? key} es requerido');
+        return;
+      }
+    }
+
+    // Collect values
+    final values = <String, dynamic>{};
+    for (final def in _customFieldDefs) {
+      final key = def['field_key'] as String? ?? '';
+      final type = def['field_type'] as String? ?? 'text';
+      dynamic val;
+      if (type == 'date') {
+        final text = _cfControllers[key]?.text.trim() ?? '';
+        if (text.isNotEmpty) {
+          try {
+            final parts = text.split('/');
+            if (parts.length == 3) {
+              val = '${parts[2]}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}';
+            }
+          } catch (_) {}
+        }
+      } else if (type == 'text' || type == 'number') {
+        final text = _cfControllers[key]?.text.trim() ?? '';
+        if (text.isNotEmpty) val = text;
+      } else {
+        val = _editingCfValues[key];
+      }
+      if (val != null) values[key] = val;
+    }
+
+    final id = widget.op['id'] as String? ?? '';
+    final op = widget.op;
+    try {
+      await OperatorsApi.updateOperator(
+        id: id,
+        displayName: op['display_name'] as String? ?? op['name'] as String? ?? '',
+        phone: op['phone'] as String? ?? '',
+        roleIds: (op['role_ids'] as List?)?.cast<String>() ?? [],
+        customFieldValues: values.isNotEmpty ? values : null,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _customFieldsError = _extractErrorMsg(e));
+      rethrow;
+    }
+  }
+
+  Future<void> _pickCfFile(String fieldKey, {required bool isPhoto}) async {
+    if (_cfUploading[fieldKey] == true) return;
+    final result = await FilePicker.platform.pickFiles(
+      type: isPhoto ? FileType.custom : FileType.any,
+      allowedExtensions: isPhoto ? ['jpg', 'jpeg', 'png'] : null,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) return;
+    if (bytes.lengthInBytes > 10 * 1024 * 1024) {
+      setState(() => _customFieldsError = 'El archivo excede 10MB');
+      return;
+    }
+    setState(() { _cfUploading[fieldKey] = true; _customFieldsError = null; });
+    try {
+      final operatorId = widget.op['id'] as String? ?? '';
+      final url = isPhoto
+          ? await uploadOperatorImage(
+              operatorId: operatorId, bytes: bytes,
+              extension: file.extension ?? 'jpg', subfolder: 'fields/$fieldKey')
+          : await uploadOperatorFile(
+              operatorId: operatorId, bytes: bytes,
+              extension: file.extension ?? 'bin', subfolder: 'fields/$fieldKey');
+      if (mounted) setState(() { _editingCfValues[fieldKey] = url; _cfUploading[fieldKey] = false; });
+    } catch (_) {
+      if (mounted) setState(() { _cfUploading[fieldKey] = false; _customFieldsError = 'No se pudo subir el archivo'; });
+    }
+  }
+
+  List<String> _getCfChoices(Map<String, dynamic> def) {
+    final raw = def['options'];
+    if (raw is List) return raw.map((e) => e.toString()).toList();
+    if (raw is Map) {
+      final choices = raw['choices'];
+      if (choices is List) return choices.map((e) => e.toString()).toList();
+    }
+    return [];
+  }
+
+  Widget _buildCfEditInput(Map<String, dynamic> def) {
+    final key = def['field_key'] as String? ?? '';
+    final label = def['label'] as String? ?? key;
+    final type = def['field_type'] as String? ?? 'text';
+    final isRequired = def['required'] as bool? ?? false;
+    final displayLabel = '$label${isRequired ? ' *' : ''}';
+
+    Widget input;
+    switch (type) {
+      case 'boolean':
+        final boolVal = _editingCfValues[key] == true || _editingCfValues[key].toString() == 'true';
+        input = Switch(
+          value: boolVal,
+          activeTrackColor: AppColors.ctTeal,
+          activeThumbColor: AppColors.ctNavy,
+          onChanged: (v) => setState(() => _editingCfValues[key] = v),
+        );
+      case 'select':
+        final choices = _getCfChoices(def);
+        final current = _editingCfValues[key] as String?;
+        input = AppDropdown<String>(
+          value: choices.contains(current) ? current : null,
+          hint: 'Seleccionar',
+          items: choices.map((c) => AppDropdownItem(value: c, label: c)).toList(),
+          onChanged: (v) => setState(() => _editingCfValues[key] = v),
+        );
+      case 'date':
+        final ctrl = _cfControllers[key];
+        if (ctrl == null) { input = const SizedBox.shrink(); break; }
+        input = GestureDetector(
+          onTap: () async {
+            DateTime? initial;
+            try {
+              final parts = ctrl.text.split('/');
+              if (parts.length == 3) {
+                initial = DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
+              }
+            } catch (_) {}
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: initial ?? DateTime.now(),
+              firstDate: DateTime(1900),
+              lastDate: DateTime(2100),
+            );
+            if (picked != null && mounted) {
+              setState(() {
+                ctrl.text = '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
+              });
+            }
+          },
+          child: AbsorbPointer(
+            child: TextField(
+              controller: ctrl,
+              readOnly: true,
+              style: AppTextStyles.body,
+              decoration: InputDecoration(
+                hintText: 'dd/mm/aaaa',
+                hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                filled: true, fillColor: AppColors.ctSurface2,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.ctBorder)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.ctBorder)),
+                suffixIcon: const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.ctText2),
+              ),
+            ),
+          ),
+        );
+      case 'photo':
+        final url = _editingCfValues[key] as String?;
+        final uploading = _cfUploading[key] ?? false;
+        input = GestureDetector(
+          onTap: uploading ? null : () => _pickCfFile(key, isPhoto: true),
+          child: Container(
+            width: 80, height: 80,
+            decoration: BoxDecoration(
+              color: AppColors.ctSurface2,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.ctBorder),
+            ),
+            child: uploading
+                ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                : (url != null && url.isNotEmpty)
+                    ? ClipRRect(borderRadius: BorderRadius.circular(7), child: Image.network(url, fit: BoxFit.cover))
+                    : const Icon(Icons.add_photo_alternate_outlined, size: 28, color: AppColors.ctText3),
+          ),
+        );
+      case 'document':
+        final docUrl = _editingCfValues[key] as String?;
+        final uploading = _cfUploading[key] ?? false;
+        final hasDoc = docUrl != null && docUrl.isNotEmpty;
+        input = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (hasDoc)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  const Icon(Icons.insert_drive_file_outlined, size: 14, color: AppColors.ctTeal),
+                  const SizedBox(width: 6),
+                  const Expanded(child: Text('Documento subido', style: AppTextStyles.navItem)),
+                  GestureDetector(onTap: () => setState(() => _editingCfValues[key] = null),
+                    child: const Icon(Icons.close, size: 14, color: AppColors.ctText3)),
+                ]),
+              ),
+            if (uploading)
+              const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+            else
+              AppButton(
+                label: hasDoc ? 'Cambiar documento' : 'Subir documento',
+                onPressed: () => _pickCfFile(key, isPhoto: false),
+                variant: AppButtonVariant.outline, size: AppButtonSize.sm,
+                prefixIcon: const Icon(Icons.upload_file_outlined, size: 16),
+              ),
+          ],
+        );
+      default: // text, number
+        final ctrl = _cfControllers[key];
+        if (ctrl == null) { input = const SizedBox.shrink(); break; }
+        input = TextField(
+          controller: ctrl,
+          style: AppTextStyles.body,
+          keyboardType: type == 'number' ? TextInputType.number : null,
+          decoration: InputDecoration(
+            hintText: label, hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+            filled: true, fillColor: AppColors.ctSurface2,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.ctBorder)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.ctBorder)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.ctTeal)),
+          ),
+        );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _FieldLabel(displayLabel),
+          const SizedBox(height: 6),
+          input,
+        ],
+      ),
+    );
+  }
+
+  static String _extractErrorMsg(Object e) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      if (data is Map) {
+        final detail = data['detail'];
+        if (detail is Map && detail['message'] is String) return detail['message'] as String;
+        if (detail is String && detail.isNotEmpty) return detail;
+      }
+    }
+    return 'Error al guardar';
+  }
+
   // ── Shared post-save housekeeping ─────────────────────────────────────────
 
   void _afterSectionSaved(SectionKey key) {
@@ -796,6 +1185,12 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
           _editingChannels = false;
           _channelsError = null;
           _orderedTypes = List<String>.from(_editingChannelsOrder);
+        case SectionKey.secondaryPhones:
+          _editingSecondaryPhones = false;
+          _secondaryPhonesError = null;
+        case SectionKey.customFields:
+          _editingCustomFields = false;
+          _customFieldsError = null;
       }
     });
   }
@@ -1210,23 +1605,43 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
             );
           }),
 
-          if (phoneSecondary.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const _SectionTitle('Teléfonos secundarios'),
-            const SizedBox(height: 12),
-            ...phoneSecondary.map((p) {
-              final lbl    = p['label']   as String? ?? '—';
-              final ch     = p['channel'] as String? ?? '';
-              final pPhone = p['phone']   as String? ?? '—';
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _FieldRow(
-                  label: lbl + (ch.isNotEmpty ? ' ($ch)' : ''),
-                  value: pPhone,
-                ),
-              );
-            }),
-          ],
+          // ── Sección: Contacto adicional (section-edit) ────────────
+          const SizedBox(height: 24),
+          AppEditableSection(
+            title: 'Contacto adicional',
+            isEditing: _editingSecondaryPhones,
+            canEdit: canManage,
+            onEdit: _enterEditSecondaryPhones,
+            onCancel: _cancelEditSecondaryPhones,
+            onSave: _saveSecondaryPhones,
+            onSavedSuccessfully: () => _afterSectionSaved(SectionKey.secondaryPhones),
+            errorText: _secondaryPhonesError,
+            viewChild: phoneSecondary.isEmpty
+                ? Text('Sin contactos adicionales',
+                    style: AppTextStyles.body.copyWith(color: AppColors.ctText3))
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: phoneSecondary.map((p) {
+                      final lbl = p['label'] as String? ?? '—';
+                      final ch = p['channel'] as String? ?? '';
+                      final pPhone = p['phone'] as String? ?? '—';
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _FieldRow(
+                          label: lbl + (ch.isNotEmpty ? ' ($ch)' : ''),
+                          value: pPhone,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+            editChild: PhoneSecondaryWidget(
+              initial: _editingSecondaryPhonesList.isNotEmpty
+                  ? _editingSecondaryPhonesList
+                  : null,
+              onChanged: (list) =>
+                  setState(() => _editingSecondaryPhonesList = list),
+            ),
+          ),
 
           // ── Sección: Roles (section-edit) ──────────────────────────────
           const SizedBox(height: 24),
@@ -1323,25 +1738,42 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
           _FieldRow(label: 'Última modificación', value: _fmtDate(updatedAt)),
           _FieldRow(label: 'Modificado por',      value: updatedBy),
 
-          // ── Campos personalizados ───────────────────────────────────────
-          Builder(builder: (context) {
-            final rawCf = op['custom_fields'];
-            final customFields = rawCf is List
-                ? rawCf
-                    .map((e) => Map<String, dynamic>.from(e as Map))
-                    .toList()
-                : <Map<String, dynamic>>[];
-            if (customFields.isEmpty) return const SizedBox.shrink();
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 16),
-                const _SectionTitle('Campos personalizados'),
-                const SizedBox(height: 12),
-                ...customFields.map((cf) => _CustomFieldReadRow(field: cf)),
-              ],
-            );
-          }),
+          // ── Sección: Campos personalizados (section-edit) ─────────────
+          if (_customFieldDefs.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            AppEditableSection(
+              title: 'Campos personalizados',
+              isEditing: _editingCustomFields,
+              canEdit: canManage,
+              onEdit: _enterEditCustomFields,
+              onCancel: _cancelEditCustomFields,
+              onSave: _saveCustomFields,
+              onSavedSuccessfully: () => _afterSectionSaved(SectionKey.customFields),
+              errorText: _customFieldsError,
+              viewChild: Builder(builder: (_) {
+                final rawCf = op['custom_fields'];
+                final customFields = rawCf is List
+                    ? rawCf.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+                    : <Map<String, dynamic>>[];
+                if (customFields.isEmpty) {
+                  return Text('Sin campos personalizados',
+                      style: AppTextStyles.body.copyWith(color: AppColors.ctText3));
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: customFields.map((cf) => _CustomFieldReadRow(field: cf)).toList(),
+                );
+              }),
+              editChild: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _customFieldDefs.map((def) => _buildCfEditInput(def)).toList(),
+              ),
+            ),
+          ] else if (_cfDefsLoading) ...[
+            const SizedBox(height: 24),
+            const Center(child: SizedBox(width: 18, height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctTeal))),
+          ],
         ],
       ),
     );
