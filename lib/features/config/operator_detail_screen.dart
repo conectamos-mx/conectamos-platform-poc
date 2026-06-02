@@ -1598,30 +1598,6 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
           ],
 
           const SizedBox(height: 24),
-          // ── Telegram ──────────────────────────────────────────────
-          if (tgChatId != null && tgChatId.isNotEmpty) ...[
-            const _FieldLabel('Telegram Chat ID'),
-            const SizedBox(height: 4),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.ctTgBubble,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.telegram,
-                      size: 14, color: AppColors.ctTg),
-                  const SizedBox(width: 5),
-                  Text(tgChatId,
-                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500, color: AppColors.ctTg)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
           // Telegram invite — only when status is 'none' (not linked, not pending)
           Builder(builder: (context) {
             final tgLinkStatus = op['telegram_link_status'] as String? ??
