@@ -3,17 +3,21 @@ import 'dart:html' as html;
 import 'dart:ui_web' as ui;
 
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/api/operator_fields_api.dart';
 import '../../core/api/operator_roles_api.dart';
 import '../../core/api/operators_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/identity_config.dart';
+import '../../core/utils/phone_normalizer.dart';
 import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
@@ -21,7 +25,16 @@ import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/app_alert_banner.dart';
 import '../../shared/widgets/app_detail_header.dart';
 import '../../shared/widgets/app_dropdown.dart';
-import 'widgets/operator_form_dialog.dart';
+import '../../shared/widgets/app_editable_section.dart';
+import '../../shared/widgets/app_multi_select.dart';
+import '../../shared/widgets/app_tag_chip.dart';
+import 'utils/operator_image_upload.dart';
+import 'widgets/phone_field_widget.dart';
+import 'widgets/phone_secondary_widget.dart';
+
+// ── Section keys ─────────────────────────────────────────────────────────────
+
+enum SectionKey { personal, roles, preferredChannels, secondaryPhones, customFields }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,18 +83,116 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
   bool _loading = true;
   String? _error;
   late TabController _tabCtrl;
+  bool _uploadingAvatar = false;
+  RealtimeChannel? _realtimeChannel;
 
   @override
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 3, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      _subscribeRealtime();
+    });
   }
 
   @override
   void dispose() {
     _tabCtrl.dispose();
+    if (_realtimeChannel != null) {
+      Supabase.instance.client.removeChannel(_realtimeChannel!).ignore();
+    }
     super.dispose();
+  }
+
+  // ── Realtime subscription ───────────────────────────────────────────────
+
+  void _subscribeRealtime() {
+    try {
+      _realtimeChannel = Supabase.instance.client
+          .channel('op_detail_${widget.operatorId}')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.update,
+            schema: 'public',
+            table: 'operators',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'id',
+              value: widget.operatorId,
+            ),
+            callback: _handleRealtimeUpdate,
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('[Realtime] subscribe error: $e');
+      _realtimeChannel = null;
+    }
+  }
+
+  void _handleRealtimeUpdate(PostgresChangePayload payload) {
+    if (!mounted || _op == null) return;
+    final row = payload.newRecord;
+    // Shallow merge — update _op with new values from the realtime payload.
+    // NOTE: If a section is currently in edit mode, we do NOT overwrite its
+    // fields here because the user's unsaved edits take visual priority.
+    // The next save or cancel will reconcile with fresh data via onReload.
+    setState(() {
+      _op = {..._op!, ...row};
+    });
+  }
+
+  // ── Avatar tap action ──────────────────────────────────────────────────
+
+  Future<void> _onAvatarTap() async {
+    if (_uploadingAvatar || _op == null) return;
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) return;
+    if (bytes.lengthInBytes > 10 * 1024 * 1024) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('La imagen excede 10MB'),
+          backgroundColor: AppColors.ctDanger,
+        ));
+      }
+      return;
+    }
+
+    setState(() => _uploadingAvatar = true);
+    try {
+      final url = await uploadOperatorImage(
+        operatorId: widget.operatorId,
+        bytes: bytes,
+        extension: file.extension ?? 'jpg',
+      );
+      await OperatorsApi.updateOperator(
+        id: widget.operatorId,
+        displayName: _op!['display_name'] as String? ?? _op!['name'] as String? ?? '',
+        phone: _op!['phone'] as String? ?? '',
+        roleIds: (_op!['role_ids'] as List?)?.cast<String>() ?? [],
+        profilePictureUrl: url,
+      );
+      if (!mounted) return;
+      setState(() {
+        _op = {..._op!, 'profile_picture_url': url};
+        _uploadingAvatar = false;
+      });
+      ref.read(operatorListVersionProvider.notifier).state++;
+    } catch (_) {
+      if (mounted) {
+        setState(() => _uploadingAvatar = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Error al subir la imagen'),
+          backgroundColor: AppColors.ctDanger,
+        ));
+      }
+    }
   }
 
   Future<void> _load() async {
@@ -205,32 +316,6 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
     }
   }
 
-  Future<void> _openEdit() async {
-    final op = _op!;
-    final meta = op['metadata'] as Map<String, dynamic>? ?? {};
-
-    await showDialog(
-      context: context,
-      builder: (_) => OperatorFormDialog(
-        operatorId: widget.operatorId,
-        initialName:
-            op['display_name'] as String? ?? op['name'] as String? ?? '',
-        initialPhone: op['phone'] as String? ?? '',
-        initialRoleIds: (op['role_ids'] as List?)?.cast<String>() ?? [],
-        initialTelegramChatId: meta['telegram_chat_id'] as String?,
-        initialMetadata: meta,
-        initialEmail: op['email'] as String?,
-        initialNationality: op['nationality'] as String?,
-        initialIdentityNumber: op['identity_number'] as String?,
-        initialProfilePictureUrl: op['profile_picture_url'] as String?,
-        initialCustomFields: (op['custom_fields'] as List?)
-            ?.map((e) => Map<String, dynamic>.from(e as Map))
-            .toList(),
-        onSaved: _load,
-      ),
-    );
-  }
-
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
@@ -291,14 +376,42 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
         backLabel: 'Operadores',
         onBack: () => context.go('/operators'),
         subtitle: op['phone'] as String?,
-        avatar: ((op['profile_picture_url'] as String?) ?? '').isNotEmpty
-            ? Image.network(
-                op['profile_picture_url'] as String,
-                fit: BoxFit.cover,
-                width: 40,
-                height: 40,
-              )
-            : const Icon(Icons.person_rounded, size: 22, color: AppColors.ctText2),
+        avatar: GestureDetector(
+          onTap: canManage ? _onAvatarTap : null,
+          child: MouseRegion(
+            cursor: canManage ? SystemMouseCursors.click : SystemMouseCursors.basic,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (((op['profile_picture_url'] as String?) ?? '').isNotEmpty)
+                  Image.network(
+                    op['profile_picture_url'] as String,
+                    fit: BoxFit.cover,
+                    width: 40,
+                    height: 40,
+                  )
+                else
+                  const Icon(Icons.person_rounded, size: 22, color: AppColors.ctText2),
+                if (_uploadingAvatar)
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
         statusLabel: _statusStyle(status).label,
         statusActive: status == 'active',
         chips: [
@@ -309,10 +422,6 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
         ],
         actions: [
           if (canManage) ...[
-            AppActionButton(
-              variant: AppActionVariant.edit,
-              onPressed: _openEdit,
-            ),
             if (status == 'active' || status == 'incident')
               AppActionButton(
                 variant: AppActionVariant.suspend,
@@ -583,35 +692,633 @@ class _DatosTab extends ConsumerStatefulWidget {
 class _DatosTabState extends ConsumerState<_DatosTab> {
   List<String> _orderedTypes = [];
   bool _loadingTypes = false;
-  bool _saving = false;
 
-  // Rol
-  String? _roleId;
+  // Roles
   List<Map<String, dynamic>> _availableRoles = [];
-  bool _savingRole = false;
 
   // Telegram invite
   List<Map<String, dynamic>>? _availableTgChannels;
   String? _selectedTgChannelId;
   bool _sendingTgInvite = false;
 
+  // ── Section-edit: Información personal ──────────────────────────────────
+  bool _editingPersonal = false;
+  late TextEditingController _nameCtrl;
+  late TextEditingController _emailCtrl;
+  String _phoneE164 = '';
+  String _phoneCountryIso = 'MX';
+  String _phoneLocalNumber = '';
+  String? _personalError;
+
+  // ── Section-edit: Roles ─────────────────────────────────────────────────
+  bool _editingRoles = false;
+  List<String> _selectedRoleIds = [];
+  String? _rolesError;
+
+  // ── Section-edit: Canal preferido ───────────────────────────────────────
+  bool _editingChannels = false;
+  List<String> _editingChannelsOrder = [];
+  String? _channelsError;
+
+  // ── Section-edit: Contacto adicional ────────────────────────────────────
+  bool _editingSecondaryPhones = false;
+  List<Map<String, dynamic>> _editingSecondaryPhonesList = [];
+  String? _secondaryPhonesError;
+
+  // ── Section-edit: Campos personalizados ─────────────────────────────────
+  bool _editingCustomFields = false;
+  List<Map<String, dynamic>> _customFieldDefs = [];
+  Map<String, dynamic> _editingCfValues = {};
+  Map<String, TextEditingController> _cfControllers = {};
+  Map<String, bool> _cfUploading = {};
+  String? _customFieldsError;
+  bool _cfDefsLoading = false;
+
   @override
   void initState() {
     super.initState();
+
+    // Initialize personal section controllers
+    final op = widget.op;
+    _nameCtrl = TextEditingController(
+      text: op['display_name'] as String? ?? op['name'] as String? ?? '',
+    );
+    _emailCtrl = TextEditingController(text: op['email'] as String? ?? '');
+    final rawPhone = op['phone'] as String? ?? '';
+    if (rawPhone.isNotEmpty) {
+      final (iso, local) = PhoneNormalizer.parsePhone(rawPhone);
+      _phoneCountryIso = iso;
+      _phoneLocalNumber = local;
+      _phoneE164 = PhoneNormalizer.formatToE164(local, iso);
+    }
+
     // Seed from persisted preferred_channel_types before API loads
-    final raw = widget.op['preferred_channel_types'];
+    final raw = op['preferred_channel_types'];
     if (raw is List) {
       _orderedTypes = raw.map((e) => e.toString()).toList();
-    }
-    // Seed role from operator data
-    final rawRoleIds = widget.op['role_ids'];
-    if (rawRoleIds is List && rawRoleIds.isNotEmpty) {
-      _roleId = rawRoleIds.first?.toString();
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadTypes();
       _loadRoles();
       _loadTelegramChannels();
+      _loadCustomFieldDefs();
+    });
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    for (final c in _cfControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _enterEditPersonal() {
+    final op = widget.op;
+    _nameCtrl.text = op['display_name'] as String? ?? op['name'] as String? ?? '';
+    _emailCtrl.text = op['email'] as String? ?? '';
+    final rawPhone = op['phone'] as String? ?? '';
+    if (rawPhone.isNotEmpty) {
+      final (iso, local) = PhoneNormalizer.parsePhone(rawPhone);
+      _phoneCountryIso = iso;
+      _phoneLocalNumber = local;
+      _phoneE164 = PhoneNormalizer.formatToE164(local, iso);
+    }
+    setState(() {
+      _editingPersonal = true;
+      _personalError = null;
+    });
+  }
+
+  void _cancelEditPersonal() {
+    setState(() {
+      _editingPersonal = false;
+      _personalError = null;
+    });
+  }
+
+  Future<void> _savePersonal() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) {
+      setState(() => _personalError = 'Nombre obligatorio');
+      return;
+    }
+    final phone = _phoneE164;
+    if (phone.isEmpty) {
+      setState(() => _personalError = 'Teléfono obligatorio');
+      return;
+    }
+    final email = _emailCtrl.text.trim();
+    final id = widget.op['id'] as String? ?? '';
+
+    try {
+      await OperatorsApi.updateOperator(
+        id: id,
+        displayName: name,
+        phone: phone,
+        roleIds: (widget.op['role_ids'] as List?)?.cast<String>() ?? [],
+        email: email.isNotEmpty ? email : null,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      String msg = 'Error al guardar';
+      if (e is DioException) {
+        final data = e.response?.data;
+        if (data is Map) {
+          final detail = data['detail'];
+          if (detail is Map && detail['message'] is String) {
+            msg = detail['message'] as String;
+          } else if (detail is String && detail.isNotEmpty) {
+            msg = detail;
+          }
+        }
+      }
+      setState(() => _personalError = msg);
+      rethrow;
+    }
+  }
+
+  // ── Section-edit: Roles methods ─────────────────────────────────────────
+
+  void _enterEditRoles() {
+    setState(() {
+      _selectedRoleIds = (widget.op['role_ids'] as List?)?.cast<String>() ?? [];
+      _editingRoles = true;
+      _rolesError = null;
+    });
+  }
+
+  void _cancelEditRoles() {
+    setState(() {
+      _editingRoles = false;
+      _rolesError = null;
+    });
+  }
+
+  Future<void> _saveRoles() async {
+    if (_selectedRoleIds.isEmpty) {
+      setState(() => _rolesError = 'Selecciona al menos un rol');
+      return;
+    }
+    final id = widget.op['id'] as String? ?? '';
+    try {
+      await OperatorsApi.patchRoleIds(id: id, roleIds: _selectedRoleIds);
+    } catch (e) {
+      if (!mounted) return;
+      String msg = 'Error al actualizar roles';
+      if (e is DioException) {
+        final data = e.response?.data;
+        if (data is Map) {
+          final detail = data['detail'];
+          if (detail is Map && detail['message'] is String) {
+            msg = detail['message'] as String;
+          } else if (detail is String && detail.isNotEmpty) {
+            msg = detail;
+          }
+        }
+      }
+      setState(() => _rolesError = msg);
+      rethrow;
+    }
+  }
+
+  // ── Section-edit: Canal preferido methods ──────────────────────────────
+
+  void _enterEditChannels() {
+    setState(() {
+      _editingChannelsOrder = List<String>.from(_orderedTypes);
+      _editingChannels = true;
+      _channelsError = null;
+    });
+  }
+
+  void _cancelEditChannels() {
+    setState(() {
+      _editingChannels = false;
+      _channelsError = null;
+    });
+  }
+
+  Future<void> _saveChannels() async {
+    final id = widget.op['id'] as String? ?? '';
+    try {
+      await OperatorsApi.patchPreferredChannelTypes(
+        id: id,
+        types: _editingChannelsOrder,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      String msg = 'Error al actualizar canal preferido';
+      if (e is DioException) {
+        final data = e.response?.data;
+        if (data is Map) {
+          final detail = data['detail'];
+          if (detail is Map && detail['message'] is String) {
+            msg = detail['message'] as String;
+          } else if (detail is String && detail.isNotEmpty) {
+            msg = detail;
+          }
+        }
+      }
+      setState(() => _channelsError = msg);
+      rethrow;
+    }
+  }
+
+  // ── Section-edit: Contacto adicional methods ────────────────────────────
+
+  void _enterEditSecondaryPhones() {
+    final meta = widget.op['metadata'] as Map<String, dynamic>? ?? {};
+    final existing = ((meta['phone_secondary'] as List?) ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    setState(() {
+      _editingSecondaryPhonesList = existing;
+      _editingSecondaryPhones = true;
+      _secondaryPhonesError = null;
+    });
+  }
+
+  void _cancelEditSecondaryPhones() {
+    setState(() {
+      _editingSecondaryPhones = false;
+      _secondaryPhonesError = null;
+    });
+  }
+
+  Future<void> _saveSecondaryPhones() async {
+    final id = widget.op['id'] as String? ?? '';
+    final op = widget.op;
+    try {
+      await OperatorsApi.updateOperator(
+        id: id,
+        displayName: op['display_name'] as String? ?? op['name'] as String? ?? '',
+        phone: op['phone'] as String? ?? '',
+        roleIds: (op['role_ids'] as List?)?.cast<String>() ?? [],
+        phoneSecondary: _editingSecondaryPhonesList,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _secondaryPhonesError = _extractErrorMsg(e));
+      rethrow;
+    }
+  }
+
+  // ── Section-edit: Campos personalizados methods ────────────────────────
+
+  Future<void> _loadCustomFieldDefs() async {
+    setState(() => _cfDefsLoading = true);
+    try {
+      final defs = await OperatorFieldsApi.getOperatorFields();
+      if (mounted) setState(() { _customFieldDefs = defs; _cfDefsLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _cfDefsLoading = false);
+    }
+  }
+
+  void _enterEditCustomFields() {
+    // Build initial values from current custom_fields list
+    final initMap = <String, dynamic>{};
+    final rawCf = widget.op['custom_fields'];
+    if (rawCf is List) {
+      for (final cf in rawCf) {
+        if (cf is Map) {
+          final key = cf['field_key'] as String? ?? '';
+          if (key.isNotEmpty) initMap[key] = cf['value'];
+        }
+      }
+    }
+
+    // Create controllers for text/number/date fields
+    for (final c in _cfControllers.values) { c.dispose(); }
+    final controllers = <String, TextEditingController>{};
+    for (final def in _customFieldDefs) {
+      final key = def['field_key'] as String? ?? '';
+      final type = def['field_type'] as String? ?? 'text';
+      if (['text', 'number', 'date'].contains(type)) {
+        String displayVal = '';
+        final initVal = initMap[key];
+        if (initVal != null) {
+          if (type == 'date') {
+            try {
+              final parts = initVal.toString().split('-');
+              if (parts.length == 3) {
+                displayVal = '${parts[2].padLeft(2, '0')}/${parts[1].padLeft(2, '0')}/${parts[0]}';
+              }
+            } catch (_) {
+              displayVal = initVal.toString();
+            }
+          } else {
+            displayVal = initVal.toString();
+          }
+        }
+        controllers[key] = TextEditingController(text: displayVal);
+      }
+    }
+
+    setState(() {
+      _editingCfValues = Map<String, dynamic>.from(initMap);
+      _cfControllers = controllers;
+      _cfUploading = {};
+      _editingCustomFields = true;
+      _customFieldsError = null;
+    });
+  }
+
+  void _cancelEditCustomFields() {
+    setState(() {
+      _editingCustomFields = false;
+      _customFieldsError = null;
+    });
+  }
+
+  Future<void> _saveCustomFields() async {
+    // Validate required fields
+    for (final def in _customFieldDefs) {
+      final key = def['field_key'] as String? ?? '';
+      final isRequired = def['required'] as bool? ?? false;
+      final type = def['field_type'] as String? ?? 'text';
+      if (!isRequired || type == 'boolean') continue;
+      dynamic val;
+      if (['text', 'number', 'date'].contains(type)) {
+        val = _cfControllers[key]?.text.trim();
+      } else {
+        val = _editingCfValues[key];
+      }
+      if (val == null || val.toString().isEmpty) {
+        setState(() => _customFieldsError = '${def['label'] ?? key} es requerido');
+        return;
+      }
+    }
+
+    // Collect values
+    final values = <String, dynamic>{};
+    for (final def in _customFieldDefs) {
+      final key = def['field_key'] as String? ?? '';
+      final type = def['field_type'] as String? ?? 'text';
+      dynamic val;
+      if (type == 'date') {
+        final text = _cfControllers[key]?.text.trim() ?? '';
+        if (text.isNotEmpty) {
+          try {
+            final parts = text.split('/');
+            if (parts.length == 3) {
+              val = '${parts[2]}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}';
+            }
+          } catch (_) {}
+        }
+      } else if (type == 'text' || type == 'number') {
+        final text = _cfControllers[key]?.text.trim() ?? '';
+        if (text.isNotEmpty) val = text;
+      } else {
+        val = _editingCfValues[key];
+      }
+      if (val != null) values[key] = val;
+    }
+
+    final id = widget.op['id'] as String? ?? '';
+    final op = widget.op;
+    try {
+      await OperatorsApi.updateOperator(
+        id: id,
+        displayName: op['display_name'] as String? ?? op['name'] as String? ?? '',
+        phone: op['phone'] as String? ?? '',
+        roleIds: (op['role_ids'] as List?)?.cast<String>() ?? [],
+        customFieldValues: values.isNotEmpty ? values : null,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _customFieldsError = _extractErrorMsg(e));
+      rethrow;
+    }
+  }
+
+  Future<void> _pickCfFile(String fieldKey, {required bool isPhoto}) async {
+    if (_cfUploading[fieldKey] == true) return;
+    final result = await FilePicker.platform.pickFiles(
+      type: isPhoto ? FileType.custom : FileType.any,
+      allowedExtensions: isPhoto ? ['jpg', 'jpeg', 'png'] : null,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) return;
+    if (bytes.lengthInBytes > 10 * 1024 * 1024) {
+      setState(() => _customFieldsError = 'El archivo excede 10MB');
+      return;
+    }
+    setState(() { _cfUploading[fieldKey] = true; _customFieldsError = null; });
+    try {
+      final operatorId = widget.op['id'] as String? ?? '';
+      final url = isPhoto
+          ? await uploadOperatorImage(
+              operatorId: operatorId, bytes: bytes,
+              extension: file.extension ?? 'jpg', subfolder: 'fields/$fieldKey')
+          : await uploadOperatorFile(
+              operatorId: operatorId, bytes: bytes,
+              extension: file.extension ?? 'bin', subfolder: 'fields/$fieldKey');
+      if (mounted) setState(() { _editingCfValues[fieldKey] = url; _cfUploading[fieldKey] = false; });
+    } catch (_) {
+      if (mounted) setState(() { _cfUploading[fieldKey] = false; _customFieldsError = 'No se pudo subir el archivo'; });
+    }
+  }
+
+  List<String> _getCfChoices(Map<String, dynamic> def) {
+    final raw = def['options'];
+    if (raw is List) return raw.map((e) => e.toString()).toList();
+    if (raw is Map) {
+      final choices = raw['choices'];
+      if (choices is List) return choices.map((e) => e.toString()).toList();
+    }
+    return [];
+  }
+
+  Widget _buildCfEditInput(Map<String, dynamic> def) {
+    final key = def['field_key'] as String? ?? '';
+    final label = def['label'] as String? ?? key;
+    final type = def['field_type'] as String? ?? 'text';
+    final isRequired = def['required'] as bool? ?? false;
+    final displayLabel = '$label${isRequired ? ' *' : ''}';
+
+    Widget input;
+    switch (type) {
+      case 'boolean':
+        final boolVal = _editingCfValues[key] == true || _editingCfValues[key].toString() == 'true';
+        input = Switch(
+          value: boolVal,
+          activeTrackColor: AppColors.ctTeal,
+          activeThumbColor: AppColors.ctNavy,
+          onChanged: (v) => setState(() => _editingCfValues[key] = v),
+        );
+      case 'select':
+        final choices = _getCfChoices(def);
+        final current = _editingCfValues[key] as String?;
+        input = AppDropdown<String>(
+          value: choices.contains(current) ? current : null,
+          hint: 'Seleccionar',
+          items: choices.map((c) => AppDropdownItem(value: c, label: c)).toList(),
+          onChanged: (v) => setState(() => _editingCfValues[key] = v),
+        );
+      case 'date':
+        final ctrl = _cfControllers[key];
+        if (ctrl == null) { input = const SizedBox.shrink(); break; }
+        input = GestureDetector(
+          onTap: () async {
+            DateTime? initial;
+            try {
+              final parts = ctrl.text.split('/');
+              if (parts.length == 3) {
+                initial = DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
+              }
+            } catch (_) {}
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: initial ?? DateTime.now(),
+              firstDate: DateTime(1900),
+              lastDate: DateTime(2100),
+            );
+            if (picked != null && mounted) {
+              setState(() {
+                ctrl.text = '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
+              });
+            }
+          },
+          child: AbsorbPointer(
+            child: TextField(
+              controller: ctrl,
+              readOnly: true,
+              style: AppTextStyles.body,
+              decoration: InputDecoration(
+                hintText: 'dd/mm/aaaa',
+                hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                filled: true, fillColor: AppColors.ctSurface2,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.ctBorder)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.ctBorder)),
+                suffixIcon: const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.ctText2),
+              ),
+            ),
+          ),
+        );
+      case 'photo':
+        final url = _editingCfValues[key] as String?;
+        final uploading = _cfUploading[key] ?? false;
+        input = GestureDetector(
+          onTap: uploading ? null : () => _pickCfFile(key, isPhoto: true),
+          child: Container(
+            width: 80, height: 80,
+            decoration: BoxDecoration(
+              color: AppColors.ctSurface2,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.ctBorder),
+            ),
+            child: uploading
+                ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                : (url != null && url.isNotEmpty)
+                    ? ClipRRect(borderRadius: BorderRadius.circular(7), child: Image.network(url, fit: BoxFit.cover))
+                    : const Icon(Icons.add_photo_alternate_outlined, size: 28, color: AppColors.ctText3),
+          ),
+        );
+      case 'document':
+        final docUrl = _editingCfValues[key] as String?;
+        final uploading = _cfUploading[key] ?? false;
+        final hasDoc = docUrl != null && docUrl.isNotEmpty;
+        input = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (hasDoc)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  const Icon(Icons.insert_drive_file_outlined, size: 14, color: AppColors.ctTeal),
+                  const SizedBox(width: 6),
+                  const Expanded(child: Text('Documento subido', style: AppTextStyles.navItem)),
+                  GestureDetector(onTap: () => setState(() => _editingCfValues[key] = null),
+                    child: const Icon(Icons.close, size: 14, color: AppColors.ctText3)),
+                ]),
+              ),
+            if (uploading)
+              const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+            else
+              AppButton(
+                label: hasDoc ? 'Cambiar documento' : 'Subir documento',
+                onPressed: () => _pickCfFile(key, isPhoto: false),
+                variant: AppButtonVariant.outline, size: AppButtonSize.sm,
+                prefixIcon: const Icon(Icons.upload_file_outlined, size: 16),
+              ),
+          ],
+        );
+      default: // text, number
+        final ctrl = _cfControllers[key];
+        if (ctrl == null) { input = const SizedBox.shrink(); break; }
+        input = TextField(
+          controller: ctrl,
+          style: AppTextStyles.body,
+          keyboardType: type == 'number' ? TextInputType.number : null,
+          decoration: InputDecoration(
+            hintText: label, hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+            filled: true, fillColor: AppColors.ctSurface2,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.ctBorder)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.ctBorder)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.ctTeal)),
+          ),
+        );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _FieldLabel(displayLabel),
+          const SizedBox(height: 6),
+          input,
+        ],
+      ),
+    );
+  }
+
+  static String _extractErrorMsg(Object e) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      if (data is Map) {
+        final detail = data['detail'];
+        if (detail is Map && detail['message'] is String) return detail['message'] as String;
+        if (detail is String && detail.isNotEmpty) return detail;
+      }
+    }
+    return 'Error al guardar';
+  }
+
+  // ── Shared post-save housekeeping ─────────────────────────────────────────
+
+  void _afterSectionSaved(SectionKey key) {
+    if (!mounted) return;
+    widget.onReload();
+    ref.read(operatorListVersionProvider.notifier).state++;
+    setState(() {
+      switch (key) {
+        case SectionKey.personal:
+          _editingPersonal = false;
+          _personalError = null;
+        case SectionKey.roles:
+          _editingRoles = false;
+          _rolesError = null;
+        case SectionKey.preferredChannels:
+          _editingChannels = false;
+          _channelsError = null;
+          _orderedTypes = List<String>.from(_editingChannelsOrder);
+        case SectionKey.secondaryPhones:
+          _editingSecondaryPhones = false;
+          _secondaryPhonesError = null;
+        case SectionKey.customFields:
+          _editingCustomFields = false;
+          _customFieldsError = null;
+      }
     });
   }
 
@@ -699,43 +1406,6 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     return result;
   }
 
-  Future<void> _saveOrder(List<String> newOrder) async {
-    final operatorId = widget.op['id'] as String? ?? '';
-    if (operatorId.isEmpty) return;
-    setState(() {
-      _orderedTypes = newOrder;
-      _saving = true;
-    });
-    try {
-      await OperatorsApi.patchPreferredChannelTypes(
-        id:    operatorId,
-        types: newOrder,
-      );
-      if (!mounted) return;
-      setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content:         Text('Canal preferido actualizado'),
-        backgroundColor: AppColors.ctOk,
-        duration:        Duration(seconds: 2),
-      ));
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _saving = false);
-      String msg = 'Error al actualizar el canal preferido';
-      if (e is DioException) {
-        final body = e.response?.data;
-        if (body is Map) {
-          final detail = body['detail'] ?? body['message'];
-          if (detail != null) msg = detail.toString();
-        }
-      }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content:         Text(msg),
-        backgroundColor: AppColors.ctDanger,
-      ));
-    }
-  }
-
   Future<void> _loadRoles() async {
     if (!mounted) return;
     final tenantId = ref.read(activeTenantIdProvider);
@@ -747,42 +1417,6 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     } catch (_) {}
   }
 
-  Future<void> _saveRole(String? roleId) async {
-    final operatorId = widget.op['id'] as String? ?? '';
-    if (operatorId.isEmpty) return;
-    setState(() {
-      _roleId = roleId;
-      _savingRole = true;
-    });
-    try {
-      await OperatorsApi.patchRoleIds(
-        id: operatorId,
-        roleIds: roleId != null ? [roleId] : [],
-      );
-      if (!mounted) return;
-      setState(() => _savingRole = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Rol actualizado'),
-        backgroundColor: AppColors.ctOk,
-        duration: Duration(seconds: 2),
-      ));
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _savingRole = false);
-      String msg = 'Error al actualizar el rol';
-      if (e is DioException) {
-        final body = e.response?.data;
-        if (body is Map) {
-          final detail = body['detail'] ?? body['message'];
-          if (detail != null) msg = detail.toString();
-        }
-      }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(msg),
-        backgroundColor: AppColors.ctDanger,
-      ));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -816,15 +1450,113 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _SectionTitle('Información personal'),
-          const SizedBox(height: 12),
-          _FieldRow(label: 'Nombre completo', value: name),
-          _FieldRow(label: 'Correo', value: email.isNotEmpty ? email : '—'),
-          if (nationality.isNotEmpty)
-            _FieldRow(label: 'Nacionalidad', value: nationality),
-          if (identityNumber.isNotEmpty)
-            _FieldRow(label: idLabel, value: identityNumber),
-          _FieldRow(label: 'Teléfono WhatsApp', value: phone),
+          // ── Sección: Información personal (section-edit) ──────────
+          AppEditableSection(
+            title: 'Información personal',
+            isEditing: _editingPersonal,
+            canEdit: canManage,
+            onEdit: _enterEditPersonal,
+            onCancel: _cancelEditPersonal,
+            onSave: _savePersonal,
+            onSavedSuccessfully: () => _afterSectionSaved(SectionKey.personal),
+            canSave: _nameCtrl.text.trim().isNotEmpty && _phoneE164.isNotEmpty,
+            errorText: _personalError,
+            viewChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _FieldRow(label: 'Nombre completo', value: name),
+                _FieldRow(label: 'Teléfono WhatsApp', value: phone),
+                _FieldRow(label: 'Correo', value: email.isNotEmpty ? email : '—'),
+              ],
+            ),
+            editChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _FieldLabel('Nombre completo *'),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: _nameCtrl,
+                  style: AppTextStyles.body,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: AppColors.ctSurface2,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctBorder),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctBorder),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctTeal),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                PhoneFieldWidget(
+                  label: 'Teléfono WhatsApp *',
+                  initialCountryIso: _phoneCountryIso,
+                  initialLocalNumber: _phoneLocalNumber,
+                  onChanged: (e164) => setState(() => _phoneE164 = e164),
+                ),
+                const SizedBox(height: 12),
+                const _FieldLabel('Correo electrónico'),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: _emailCtrl,
+                  style: AppTextStyles.body,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: AppColors.ctSurface2,
+                    hintText: 'correo@ejemplo.com',
+                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctBorder),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctBorder),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctTeal),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Sección: Identidad (read-only, ADR-367) ────────────────
+          if (nationality.isNotEmpty || identityNumber.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            AppEditableSection(
+              title: 'Identidad',
+              isEditing: false,
+              canEdit: false,
+              onSave: () async {},
+              onCancel: () {},
+              viewChild: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (nationality.isNotEmpty)
+                    _FieldRow(label: 'Nacionalidad', value: nationality),
+                  if (identityNumber.isNotEmpty)
+                    _FieldRow(label: idLabel, value: identityNumber),
+                ],
+              ),
+              editChild: const SizedBox.shrink(),
+            ),
+          ],
+
+          const SizedBox(height: 24),
           // ── Telegram ──────────────────────────────────────────────
           if (tgChatId != null && tgChatId.isNotEmpty) ...[
             const _FieldLabel('Telegram Chat ID'),
@@ -1000,107 +1732,129 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
             );
           }),
 
-          if (phoneSecondary.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const _SectionTitle('Teléfonos secundarios'),
-            const SizedBox(height: 12),
-            ...phoneSecondary.map((p) {
-              final lbl    = p['label']   as String? ?? '—';
-              final ch     = p['channel'] as String? ?? '';
-              final pPhone = p['phone']   as String? ?? '—';
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _FieldRow(
-                  label: lbl + (ch.isNotEmpty ? ' ($ch)' : ''),
-                  value: pPhone,
-                ),
+          // ── Sección: Contacto adicional (section-edit) ────────────
+          const SizedBox(height: 24),
+          AppEditableSection(
+            title: 'Contacto adicional',
+            isEditing: _editingSecondaryPhones,
+            canEdit: canManage,
+            onEdit: _enterEditSecondaryPhones,
+            onCancel: _cancelEditSecondaryPhones,
+            onSave: _saveSecondaryPhones,
+            onSavedSuccessfully: () => _afterSectionSaved(SectionKey.secondaryPhones),
+            errorText: _secondaryPhonesError,
+            viewChild: phoneSecondary.isEmpty
+                ? Text('Sin contactos adicionales',
+                    style: AppTextStyles.body.copyWith(color: AppColors.ctText3))
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: phoneSecondary.map((p) {
+                      final lbl = p['label'] as String? ?? '—';
+                      final ch = p['channel'] as String? ?? '';
+                      final pPhone = p['phone'] as String? ?? '—';
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _FieldRow(
+                          label: lbl + (ch.isNotEmpty ? ' ($ch)' : ''),
+                          value: pPhone,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+            editChild: PhoneSecondaryWidget(
+              initial: _editingSecondaryPhonesList.isNotEmpty
+                  ? _editingSecondaryPhonesList
+                  : null,
+              onChanged: (list) =>
+                  setState(() => _editingSecondaryPhonesList = list),
+            ),
+          ),
+
+          // ── Sección: Roles (section-edit) ──────────────────────────────
+          const SizedBox(height: 24),
+          AppEditableSection(
+            title: 'Roles',
+            isEditing: _editingRoles,
+            canEdit: canManage,
+            onEdit: _enterEditRoles,
+            onCancel: _cancelEditRoles,
+            onSave: _saveRoles,
+            onSavedSuccessfully: () => _afterSectionSaved(SectionKey.roles),
+            canSave: _selectedRoleIds.isNotEmpty,
+            errorText: _rolesError,
+            viewChild: Builder(builder: (_) {
+              final roleIds = (op['role_ids'] as List?)?.cast<String>() ?? [];
+              if (roleIds.isEmpty) {
+                return Text('Sin roles asignados',
+                    style: AppTextStyles.body.copyWith(color: AppColors.ctText3));
+              }
+              return Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: roleIds.map((rid) {
+                  final role = _availableRoles.firstWhere(
+                    (r) => r['id'] == rid,
+                    orElse: () => {'label': rid, 'color': '#59E0CC'},
+                  );
+                  return AppTagChip(
+                    label: role['label'] as String? ?? rid,
+                    colorHex: role['color'] as String?,
+                  );
+                }).toList(),
               );
             }),
-          ],
-
-          // ── Canal preferido ─────────────────────────────────────────────
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const _SectionTitle('Canal preferido'),
-              if (_saving) ...[
-                const SizedBox(width: 10),
-                const SizedBox(
-                  width:  14,
-                  height: 14,
-                  child:  CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.ctTeal,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (_loadingTypes)
-            const SizedBox(
-              height: 36,
-              child: Center(
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.ctTeal,
-                ),
-              ),
-            )
-          else if (_orderedTypes.isEmpty)
-            Text(
-              'Sin canales disponibles. Asigna flows al operador primero.',
-              style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-            )
-          else
-            _ChannelTypeOrderList(
-              types:      _orderedTypes,
-              enabled:    canManage && !_saving,
-              onReorder:  canManage ? _saveOrder : null,
-            ),
-
-          // ── Rol de operador ─────────────────────────────────────────────
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const _SectionTitle('Rol'),
-              if (_savingRole) ...[
-                const SizedBox(width: 10),
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppColors.ctTeal),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 10),
-          DropdownButton<String?>(
-            value: _availableRoles.any((r) => r['id'] == _roleId)
-                ? _roleId
-                : null,
-            isExpanded: true,
-            underline: Container(height: 1, color: AppColors.ctBorder),
-            style: AppTextStyles.body,
-            items: [
-              DropdownMenuItem<String?>(
-                value: null,
-                child: Text('Sin rol',
-                    style: AppTextStyles.body.copyWith(color: AppColors.ctText3)),
-              ),
-              ..._availableRoles.map((role) {
-                final id = role['id'] as String? ?? '';
-                final label = role['label'] as String? ??
-                    role['slug'] as String? ??
-                    id;
-                return DropdownMenuItem<String?>(
-                  value: id,
-                  child: Text(label, style: AppTextStyles.body),
-                );
+            editChild: AppMultiSelect<String>(
+              items: _availableRoles
+                  .map((r) => AppMultiSelectItem(
+                        value: r['id'] as String? ?? '',
+                        label: r['label'] as String? ?? '—',
+                      ))
+                  .toList(),
+              selectedValues: _selectedRoleIds,
+              placeholder: 'Seleccionar roles...',
+              searchable: true,
+              onChanged: (vals) => setState(() {
+                _selectedRoleIds = vals;
+                _rolesError = null;
               }),
-            ],
-            onChanged: canManage && !_savingRole ? _saveRole : null,
+            ),
+          ),
+
+          // ── Sección: Canal preferido (section-edit) ────────────────────
+          const SizedBox(height: 24),
+          AppEditableSection(
+            title: 'Canal preferido',
+            isEditing: _editingChannels,
+            canEdit: canManage && _orderedTypes.length > 1,
+            onEdit: _enterEditChannels,
+            onCancel: _cancelEditChannels,
+            onSave: _saveChannels,
+            onSavedSuccessfully: () => _afterSectionSaved(SectionKey.preferredChannels),
+            errorText: _channelsError,
+            viewChild: _loadingTypes
+                ? const SizedBox(
+                    height: 36,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.ctTeal),
+                    ),
+                  )
+                : _orderedTypes.isEmpty
+                    ? Text(
+                        'Sin canales disponibles. Asigna flows al operador primero.',
+                        style: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                      )
+                    : _ChannelTypeOrderList(
+                        types: _orderedTypes,
+                        enabled: false,
+                        onReorder: null,
+                      ),
+            editChild: _ChannelTypeOrderList(
+              types: _editingChannelsOrder,
+              enabled: true,
+              onReorder: (newOrder) =>
+                  setState(() => _editingChannelsOrder = newOrder),
+            ),
           ),
 
           const SizedBox(height: 16),
@@ -1111,25 +1865,42 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
           _FieldRow(label: 'Última modificación', value: _fmtDate(updatedAt)),
           _FieldRow(label: 'Modificado por',      value: updatedBy),
 
-          // ── Campos personalizados ───────────────────────────────────────
-          Builder(builder: (context) {
-            final rawCf = op['custom_fields'];
-            final customFields = rawCf is List
-                ? rawCf
-                    .map((e) => Map<String, dynamic>.from(e as Map))
-                    .toList()
-                : <Map<String, dynamic>>[];
-            if (customFields.isEmpty) return const SizedBox.shrink();
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 16),
-                const _SectionTitle('Campos personalizados'),
-                const SizedBox(height: 12),
-                ...customFields.map((cf) => _CustomFieldReadRow(field: cf)),
-              ],
-            );
-          }),
+          // ── Sección: Campos personalizados (section-edit) ─────────────
+          if (_customFieldDefs.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            AppEditableSection(
+              title: 'Campos personalizados',
+              isEditing: _editingCustomFields,
+              canEdit: canManage,
+              onEdit: _enterEditCustomFields,
+              onCancel: _cancelEditCustomFields,
+              onSave: _saveCustomFields,
+              onSavedSuccessfully: () => _afterSectionSaved(SectionKey.customFields),
+              errorText: _customFieldsError,
+              viewChild: Builder(builder: (_) {
+                final rawCf = op['custom_fields'];
+                final customFields = rawCf is List
+                    ? rawCf.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+                    : <Map<String, dynamic>>[];
+                if (customFields.isEmpty) {
+                  return Text('Sin campos personalizados',
+                      style: AppTextStyles.body.copyWith(color: AppColors.ctText3));
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: customFields.map((cf) => _CustomFieldReadRow(field: cf)).toList(),
+                );
+              }),
+              editChild: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _customFieldDefs.map((def) => _buildCfEditInput(def)).toList(),
+              ),
+            ),
+          ] else if (_cfDefsLoading) ...[
+            const SizedBox(height: 24),
+            const Center(child: SizedBox(width: 18, height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctTeal))),
+          ],
         ],
       ),
     );

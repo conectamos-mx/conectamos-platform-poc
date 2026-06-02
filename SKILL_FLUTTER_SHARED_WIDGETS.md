@@ -1276,3 +1276,65 @@ AppTagChip(label: 'Sin color')  // usa teal default
 **PROHIBIDO usar en su lugar:**
 - `Container` ad-hoc con `BoxDecoration` para tags de rol o categoria
 - `AppBadge` para representar roles — AppBadge es para estados, AppTagChip para categorias
+
+---
+
+### 2.23 AppEditableSection · `lib/shared/widgets/app_editable_section.dart`
+
+Seccion con patron view/edit toggle. En view mode muestra contenido read-only con boton "Editar".
+En edit mode muestra inputs con "Guardar" / "Cancelar". Save es async con loading state.
+Uso en pantallas de detalle con edicion por seccion (no global).
+
+```dart
+import '../../shared/widgets/app_editable_section.dart';
+
+// Patron recomendado: onSave solo hace el API call (throw on failure),
+// onSavedSuccessfully centraliza housekeeping via _afterSectionSaved.
+AppEditableSection(
+  title: 'Informacion personal',
+  isEditing: _editingPersonal,
+  onEdit: _enterEditPersonal,
+  onCancel: _cancelEditPersonal,
+  onSave: _savePersonal,
+  onSavedSuccessfully: () => _afterSectionSaved(SectionKey.personal),
+  canSave: _nameCtrl.text.trim().isNotEmpty,
+  errorText: _personalError,
+  viewChild: Column(children: [
+    _FieldRow(label: 'Nombre', value: name),
+    _FieldRow(label: 'Telefono', value: phone),
+  ]),
+  editChild: Column(children: [
+    TextField(controller: _nameCtrl),
+    PhoneFieldWidget(onChanged: (v) => _phone = v),
+  ]),
+)
+
+// Read-only section (sin boton Editar)
+AppEditableSection(
+  title: 'Identidad',
+  isEditing: false,
+  canEdit: false,
+  onSave: () async {},
+  onCancel: () {},
+  viewChild: _FieldRow(label: 'CURP', value: curp),
+  editChild: const SizedBox.shrink(),
+)
+```
+
+| Prop | Tipo | Default | Descripcion |
+|------|------|---------|-------------|
+| `title` | `String` | requerido | Titulo de la seccion (se muestra uppercase) |
+| `viewChild` | `Widget` | requerido | Contenido en modo lectura |
+| `editChild` | `Widget` | requerido | Contenido en modo edicion |
+| `onSave` | `Future<void> Function()` | requerido | Callback async al guardar. Throw para indicar error. |
+| `onCancel` | `VoidCallback` | requerido | Callback al cancelar |
+| `onEdit` | `VoidCallback?` | null | Callback al entrar a edicion. Si null y canEdit es true, no se muestra boton. |
+| `onSavedSuccessfully` | `VoidCallback?` | null | Se dispara tras onSave exitoso (sin throw). Patron recomendado: centralizar exit edit + clear error + bump provider en `_afterSectionSaved`. |
+| `isEditing` | `bool` | false | Si la seccion esta en modo edicion |
+| `canSave` | `bool` | true | Habilita/deshabilita boton Guardar |
+| `canEdit` | `bool` | true | Si false, oculta boton Editar (seccion read-only permanente) |
+| `errorText` | `String?` | null | Texto de error inline debajo del editChild |
+
+**PROHIBIDO usar en su lugar:**
+- Dialogs modales para edicion campo-por-campo en pantallas de detalle
+- Auto-save sin confirmacion del usuario (patron anterior del detail de operadores)

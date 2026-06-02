@@ -17,7 +17,6 @@ import '../../shared/widgets/app_tag_chip.dart';
 import '../../shared/widgets/screen_header.dart';
 import 'widgets/create_operator_dialog.dart';
 import 'widgets/import_operators_dialog.dart';
-import 'widgets/operator_form_dialog.dart';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -123,15 +122,6 @@ class _OperatorsScreenState extends ConsumerState<OperatorsScreen> {
     }
   }
 
-  void _updateOperatorMetadata(String operatorId, Map<String, dynamic> metadata) {
-    setState(() {
-      _operators = _operators.map((op) {
-        if (op['id'] == operatorId) return {...op, 'metadata': metadata};
-        return op;
-      }).toList();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     // Recarga operadores cuando cambia el tenant
@@ -176,7 +166,6 @@ class _OperatorsScreenState extends ConsumerState<OperatorsScreen> {
                     roles: _roles,
                     onRefresh: _fetchOperators,
                     canManage: canManage,
-                    onOperatorMetadataUpdated: _updateOperatorMetadata,
                   ),
                 ),
         ),
@@ -221,14 +210,11 @@ class _OperatorsBody extends StatefulWidget {
     required this.roles,
     required this.onRefresh,
     required this.canManage,
-    this.onOperatorMetadataUpdated,
   });
   final List<Map<String, dynamic>> operators;
   final List<Map<String, dynamic>> roles;
   final VoidCallback onRefresh;
   final bool canManage;
-  final void Function(String id, Map<String, dynamic> metadata)?
-      onOperatorMetadataUpdated;
 
   @override
   State<_OperatorsBody> createState() => _OperatorsBodyState();
@@ -414,8 +400,6 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
                         rolesById: rolesById,
                         onRefresh: widget.onRefresh,
                         canManage: widget.canManage,
-                        onOperatorMetadataUpdated:
-                            widget.onOperatorMetadataUpdated,
                       ),
                       if (!isLast)
                         const Divider(
@@ -449,15 +433,12 @@ class _OperatorRow extends StatefulWidget {
     required this.rolesById,
     required this.onRefresh,
     required this.canManage,
-    this.onOperatorMetadataUpdated,
   });
   final Map<String, dynamic> op;
   final List<Map<String, dynamic>> roles;
   final Map<String, Map<String, dynamic>> rolesById;
   final VoidCallback onRefresh;
   final bool canManage;
-  final void Function(String id, Map<String, dynamic> metadata)?
-      onOperatorMetadataUpdated;
 
   @override
   State<_OperatorRow> createState() => _OperatorRowState();
@@ -490,7 +471,6 @@ class _OperatorRowState extends State<_OperatorRow> {
     final op = widget.op;
     final name = op['display_name'] as String? ??
         op['name'] as String? ?? '—';
-    final phone = op['phone'] as String? ?? '—';
     final status = op['status'] as String?;
     final flows = (op['flows'] as List? ?? []).map((f) {
       if (f is Map) return Map<String, dynamic>.from(f);
@@ -501,9 +481,6 @@ class _OperatorRowState extends State<_OperatorRow> {
     final st = _statusBadgeInfo(status);
     final metadata = op['metadata'] as Map<String, dynamic>? ?? {};
     final profilePictureUrl = op['profile_picture_url'] as String?;
-    final email = op['email'] as String?;
-    final nationality = op['nationality'] as String?;
-    final identityNumber = op['identity_number'] as String?;
     final tgStatus = metadata['telegram_link_status'] as String?;
     final tgExpiresAt = metadata['telegram_link_expires_at'] as String?;
     final hasTelegramFlow = flows.any((f) {
@@ -633,30 +610,6 @@ class _OperatorRowState extends State<_OperatorRow> {
                   ? Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        AppActionButton(
-                          variant: AppActionVariant.edit,
-                          onPressed: () async {
-                            await showDialog(
-                              context: context,
-                              builder: (_) => OperatorFormDialog(
-                                operatorId: id,
-                                initialName: name,
-                                initialPhone: phone,
-                                initialRoleIds: (op['role_ids'] as List?)?.cast<String>() ?? [],
-                                initialTelegramChatId: metadata['telegram_chat_id'] as String?,
-                                initialMetadata: metadata,
-                                initialEmail: email,
-                                initialNationality: nationality,
-                                initialIdentityNumber: identityNumber,
-                                initialProfilePictureUrl: profilePictureUrl,
-                                onSaved: widget.onRefresh,
-                                onOperatorMetadataUpdated:
-                                    widget.onOperatorMetadataUpdated,
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(width: 4),
                         if (status == 'active')
                           AppActionButton(
                             variant: AppActionVariant.suspend,
