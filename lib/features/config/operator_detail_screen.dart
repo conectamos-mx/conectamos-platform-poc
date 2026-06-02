@@ -21,7 +21,6 @@ import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/app_alert_banner.dart';
 import '../../shared/widgets/app_detail_header.dart';
 import '../../shared/widgets/app_dropdown.dart';
-import 'widgets/operator_form_dialog.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -205,32 +204,6 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
     }
   }
 
-  Future<void> _openEdit() async {
-    final op = _op!;
-    final meta = op['metadata'] as Map<String, dynamic>? ?? {};
-
-    await showDialog(
-      context: context,
-      builder: (_) => OperatorFormDialog(
-        operatorId: widget.operatorId,
-        initialName:
-            op['display_name'] as String? ?? op['name'] as String? ?? '',
-        initialPhone: op['phone'] as String? ?? '',
-        initialRoleIds: (op['role_ids'] as List?)?.cast<String>() ?? [],
-        initialTelegramChatId: meta['telegram_chat_id'] as String?,
-        initialMetadata: meta,
-        initialEmail: op['email'] as String?,
-        initialNationality: op['nationality'] as String?,
-        initialIdentityNumber: op['identity_number'] as String?,
-        initialProfilePictureUrl: op['profile_picture_url'] as String?,
-        initialCustomFields: (op['custom_fields'] as List?)
-            ?.map((e) => Map<String, dynamic>.from(e as Map))
-            .toList(),
-        onSaved: _load,
-      ),
-    );
-  }
-
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
@@ -309,10 +282,6 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
         ],
         actions: [
           if (canManage) ...[
-            AppActionButton(
-              variant: AppActionVariant.edit,
-              onPressed: _openEdit,
-            ),
             if (status == 'active' || status == 'incident')
               AppActionButton(
                 variant: AppActionVariant.suspend,
