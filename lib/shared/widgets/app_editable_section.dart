@@ -19,6 +19,7 @@ class AppEditableSection extends StatefulWidget {
     required this.onCancel,
     this.isEditing = false,
     this.onEdit,
+    this.onSavedSuccessfully,
     this.canSave = true,
     this.canEdit = true,
     this.errorText,
@@ -41,6 +42,10 @@ class AppEditableSection extends StatefulWidget {
 
   /// Called when the user taps "Editar".
   final VoidCallback? onEdit;
+
+  /// Fires after [onSave] completes without throwing. Use for housekeeping
+  /// shared across sections: exit edit mode, clear errors, invalidate caches.
+  final VoidCallback? onSavedSuccessfully;
 
   /// Whether the section is currently in edit mode.
   final bool isEditing;
@@ -65,6 +70,7 @@ class _AppEditableSectionState extends State<AppEditableSection> {
     setState(() => _saving = true);
     try {
       await widget.onSave();
+      widget.onSavedSuccessfully?.call();
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -112,7 +118,8 @@ class _AppEditableSectionState extends State<AppEditableSection> {
                 label: 'Cancelar',
                 variant: AppButtonVariant.ghost,
                 size: AppButtonSize.sm,
-                onPressed: _saving ? () {} : widget.onCancel,
+                isDisabled: _saving,
+                onPressed: widget.onCancel,
               ),
               const SizedBox(width: 8),
               AppButton(

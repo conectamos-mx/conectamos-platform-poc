@@ -25,6 +25,10 @@ import '../../shared/widgets/app_dropdown.dart';
 import '../../shared/widgets/app_editable_section.dart';
 import 'widgets/phone_field_widget.dart';
 
+// ── Section keys ─────────────────────────────────────────────────────────────
+
+enum SectionKey { personal }
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -664,13 +668,6 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
         roleIds: (widget.op['role_ids'] as List?)?.cast<String>() ?? [],
         email: email.isNotEmpty ? email : null,
       );
-      if (!mounted) return;
-      widget.onReload();
-      ref.read(operatorListVersionProvider.notifier).state++;
-      setState(() {
-        _editingPersonal = false;
-        _personalError = null;
-      });
     } catch (e) {
       if (!mounted) return;
       String msg = 'Error al guardar';
@@ -688,6 +685,21 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
       setState(() => _personalError = msg);
       rethrow;
     }
+  }
+
+  // ── Shared post-save housekeeping ─────────────────────────────────────────
+
+  void _afterSectionSaved(SectionKey key) {
+    if (!mounted) return;
+    widget.onReload();
+    ref.read(operatorListVersionProvider.notifier).state++;
+    setState(() {
+      switch (key) {
+        case SectionKey.personal:
+          _editingPersonal = false;
+          _personalError = null;
+      }
+    });
   }
 
   Future<void> _loadTelegramChannels() async {
@@ -899,6 +911,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
             onEdit: _enterEditPersonal,
             onCancel: _cancelEditPersonal,
             onSave: _savePersonal,
+            onSavedSuccessfully: () => _afterSectionSaved(SectionKey.personal),
             canSave: _nameCtrl.text.trim().isNotEmpty && _phoneE164.isNotEmpty,
             errorText: _personalError,
             viewChild: Column(

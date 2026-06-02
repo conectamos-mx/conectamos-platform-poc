@@ -1288,16 +1288,17 @@ Uso en pantallas de detalle con edicion por seccion (no global).
 ```dart
 import '../../shared/widgets/app_editable_section.dart';
 
+// Patron recomendado: onSave solo hace el API call (throw on failure),
+// onSavedSuccessfully centraliza housekeeping via _afterSectionSaved.
 AppEditableSection(
   title: 'Informacion personal',
   isEditing: _editingPersonal,
-  onEdit: () => setState(() => _editingPersonal = true),
-  onCancel: () => setState(() => _editingPersonal = false),
-  onSave: () async {
-    await OperatorsApi.updateOperator(id: id, displayName: name, phone: phone);
-    setState(() => _editingPersonal = false);
-  },
+  onEdit: _enterEditPersonal,
+  onCancel: _cancelEditPersonal,
+  onSave: _savePersonal,
+  onSavedSuccessfully: () => _afterSectionSaved(SectionKey.personal),
   canSave: _nameCtrl.text.trim().isNotEmpty,
+  errorText: _personalError,
   viewChild: Column(children: [
     _FieldRow(label: 'Nombre', value: name),
     _FieldRow(label: 'Telefono', value: phone),
@@ -1328,6 +1329,7 @@ AppEditableSection(
 | `onSave` | `Future<void> Function()` | requerido | Callback async al guardar. Throw para indicar error. |
 | `onCancel` | `VoidCallback` | requerido | Callback al cancelar |
 | `onEdit` | `VoidCallback?` | null | Callback al entrar a edicion. Si null y canEdit es true, no se muestra boton. |
+| `onSavedSuccessfully` | `VoidCallback?` | null | Se dispara tras onSave exitoso (sin throw). Patron recomendado: centralizar exit edit + clear error + bump provider en `_afterSectionSaved`. |
 | `isEditing` | `bool` | false | Si la seccion esta en modo edicion |
 | `canSave` | `bool` | true | Habilita/deshabilita boton Guardar |
 | `canEdit` | `bool` | true | Si false, oculta boton Editar (seccion read-only permanente) |
