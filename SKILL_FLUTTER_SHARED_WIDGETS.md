@@ -1179,7 +1179,7 @@ AppAlertBanner(
 | `variant` | `AppAlertBannerVariant` | requerido | Estilo visual del banner |
 | `title` | `String` | requerido | Titulo en negrita |
 | `message` | `String?` | null | Mensaje secundario debajo del titulo |
-| `actions` | `List<Widget>?` | null | Botones a la derecha (usar AppButton) |
+| `actions` | `List<Widget>?` | null | Botones debajo del texto (Wrap layout, usar AppButton) |
 | `prefixIcon` | `Widget?` | null | Icono custom (override del default) |
 
 **PROHIBIDO usar en su lugar:**

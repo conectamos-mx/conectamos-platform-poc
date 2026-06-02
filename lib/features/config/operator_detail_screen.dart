@@ -179,6 +179,7 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
       }
 
       if (!mounted) return;
+      ref.read(operatorListVersionProvider.notifier).state++;
       context.go('/operators');
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Operador eliminado'),

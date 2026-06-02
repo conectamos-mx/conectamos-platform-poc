@@ -40,6 +40,7 @@ class AppAlertBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasActions = actions != null && actions!.isNotEmpty;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -74,21 +75,17 @@ class AppAlertBanner extends StatelessWidget {
                     style: AppTextStyles.bodySmall.copyWith(color: _textColor),
                   ),
                 ],
-              ],
-            ),
-          ),
-          if (actions != null && actions!.isNotEmpty) ...[
-            const SizedBox(width: 12),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (int i = 0; i < actions!.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 8),
-                  actions![i],
+                if (hasActions) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: actions!,
+                  ),
                 ],
               ],
             ),
-          ],
+          ),
         ],
       ),
     );

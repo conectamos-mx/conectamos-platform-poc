@@ -122,3 +122,7 @@ final allTenantsProvider = Provider<List<TenantInfo>>((ref) {
 /// Versión de estado de canales — incrementar tras toggle activo/inactivo para
 /// notificar a pantallas dependientes (conversations, operators).
 final channelStateVersionProvider = StateProvider<int>((ref) => 0);
+
+/// Versión de estado de operadores — incrementar tras delete/restore para
+/// notificar a la lista de operadores.
+final operatorListVersionProvider = StateProvider<int>((ref) => 0);

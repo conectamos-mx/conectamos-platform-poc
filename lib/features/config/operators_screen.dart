@@ -15,6 +15,7 @@ import '../../shared/widgets/app_dropdown.dart';
 import '../../shared/widgets/app_search_bar.dart';
 import '../../shared/widgets/app_tag_chip.dart';
 import '../../shared/widgets/screen_header.dart';
+import 'widgets/create_operator_dialog.dart';
 import 'widgets/import_operators_dialog.dart';
 import 'widgets/operator_form_dialog.dart';
 
@@ -137,6 +138,10 @@ class _OperatorsScreenState extends ConsumerState<OperatorsScreen> {
     ref.listen<String>(activeTenantIdProvider, (prev, next) {
       if (prev != null && prev != next) _fetchOperators();
     });
+    // Recarga cuando otro screen señala un cambio (ej: delete desde detail)
+    ref.listen<int>(operatorListVersionProvider, (prev, next) {
+      if (prev != next) _fetchOperators();
+    });
 
     final canManage = hasPermission(ref, 'operators', 'manage');
     return Column(
@@ -147,7 +152,7 @@ class _OperatorsScreenState extends ConsumerState<OperatorsScreen> {
             await showDialog(
               context: context,
               builder: (_) =>
-                  OperatorFormDialog(onSaved: _fetchOperators),
+                  CreateOperatorDialog(onSaved: _fetchOperators),
             );
           },
           onImport: () {
