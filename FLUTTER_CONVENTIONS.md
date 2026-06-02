@@ -479,3 +479,20 @@ Patron establecido en ADR-347. Tres helpers en `execution_detail_screen.dart`:
 **Regla de duplicacion:** no duplicar estos helpers en otros screens. Si se necesitan en mas de un lugar, extraer a `lib/core/utils/show_if_evaluator.dart`.
 
 **Sidebar y header ring:** `execution_metadata_sidebar.dart` y `execution_header_block.dart` tienen logica de show_if inline (no importan los helpers). Si se modifica la logica, actualizar los 3 archivos.
+
+---
+
+## Section-edit pattern (detail screens)
+
+Pantallas de detalle con edicion por seccion usan `AppEditableSection` (lib/shared/widgets/app_editable_section.dart).
+
+**Patron:**
+- Cada seccion editable tiene su propio estado `_editingX` (bool).
+- Solo una seccion puede estar en modo edit a la vez (no es un requisito del primitivo, pero si del UX).
+- `onSave` es async. Si falla, el primitivo deja de mostrar loading; el caller setea `errorText`.
+- `onCancel` revierte cambios locales (reset controllers) y vuelve a view mode sin tocar backend.
+- Tras save exitoso: actualizar el estado local via `setState`, bumpear `operatorListVersionProvider` (o equivalente), y salir de edit mode.
+
+**Prohibido:**
+- Dialogs modales para editar campos en pantallas de detalle (patron anterior).
+- Auto-save sin confirmacion explicita del usuario.
