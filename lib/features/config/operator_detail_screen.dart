@@ -5,6 +5,7 @@ import 'dart:ui_web' as ui;
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -82,18 +83,116 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
   bool _loading = true;
   String? _error;
   late TabController _tabCtrl;
+  bool _uploadingAvatar = false;
+  RealtimeChannel? _realtimeChannel;
 
   @override
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 3, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      _subscribeRealtime();
+    });
   }
 
   @override
   void dispose() {
     _tabCtrl.dispose();
+    if (_realtimeChannel != null) {
+      Supabase.instance.client.removeChannel(_realtimeChannel!).ignore();
+    }
     super.dispose();
+  }
+
+  // ── Realtime subscription ───────────────────────────────────────────────
+
+  void _subscribeRealtime() {
+    try {
+      _realtimeChannel = Supabase.instance.client
+          .channel('op_detail_${widget.operatorId}')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.update,
+            schema: 'public',
+            table: 'operators',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'id',
+              value: widget.operatorId,
+            ),
+            callback: _handleRealtimeUpdate,
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('[Realtime] subscribe error: $e');
+      _realtimeChannel = null;
+    }
+  }
+
+  void _handleRealtimeUpdate(PostgresChangePayload payload) {
+    if (!mounted || _op == null) return;
+    final row = payload.newRecord;
+    // Shallow merge — update _op with new values from the realtime payload.
+    // NOTE: If a section is currently in edit mode, we do NOT overwrite its
+    // fields here because the user's unsaved edits take visual priority.
+    // The next save or cancel will reconcile with fresh data via onReload.
+    setState(() {
+      _op = {..._op!, ...row};
+    });
+  }
+
+  // ── Avatar tap action ──────────────────────────────────────────────────
+
+  Future<void> _onAvatarTap() async {
+    if (_uploadingAvatar || _op == null) return;
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) return;
+    if (bytes.lengthInBytes > 10 * 1024 * 1024) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('La imagen excede 10MB'),
+          backgroundColor: AppColors.ctDanger,
+        ));
+      }
+      return;
+    }
+
+    setState(() => _uploadingAvatar = true);
+    try {
+      final url = await uploadOperatorImage(
+        operatorId: widget.operatorId,
+        bytes: bytes,
+        extension: file.extension ?? 'jpg',
+      );
+      await OperatorsApi.updateOperator(
+        id: widget.operatorId,
+        displayName: _op!['display_name'] as String? ?? _op!['name'] as String? ?? '',
+        phone: _op!['phone'] as String? ?? '',
+        roleIds: (_op!['role_ids'] as List?)?.cast<String>() ?? [],
+        profilePictureUrl: url,
+      );
+      if (!mounted) return;
+      setState(() {
+        _op = {..._op!, 'profile_picture_url': url};
+        _uploadingAvatar = false;
+      });
+      ref.read(operatorListVersionProvider.notifier).state++;
+    } catch (_) {
+      if (mounted) {
+        setState(() => _uploadingAvatar = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Error al subir la imagen'),
+          backgroundColor: AppColors.ctDanger,
+        ));
+      }
+    }
   }
 
   Future<void> _load() async {
@@ -277,14 +376,42 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
         backLabel: 'Operadores',
         onBack: () => context.go('/operators'),
         subtitle: op['phone'] as String?,
-        avatar: ((op['profile_picture_url'] as String?) ?? '').isNotEmpty
-            ? Image.network(
-                op['profile_picture_url'] as String,
-                fit: BoxFit.cover,
-                width: 40,
-                height: 40,
-              )
-            : const Icon(Icons.person_rounded, size: 22, color: AppColors.ctText2),
+        avatar: GestureDetector(
+          onTap: canManage ? _onAvatarTap : null,
+          child: MouseRegion(
+            cursor: canManage ? SystemMouseCursors.click : SystemMouseCursors.basic,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (((op['profile_picture_url'] as String?) ?? '').isNotEmpty)
+                  Image.network(
+                    op['profile_picture_url'] as String,
+                    fit: BoxFit.cover,
+                    width: 40,
+                    height: 40,
+                  )
+                else
+                  const Icon(Icons.person_rounded, size: 22, color: AppColors.ctText2),
+                if (_uploadingAvatar)
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
         statusLabel: _statusStyle(status).label,
         statusActive: status == 'active',
         chips: [
