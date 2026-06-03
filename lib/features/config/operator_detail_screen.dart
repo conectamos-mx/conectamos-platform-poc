@@ -705,6 +705,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
   bool _editingPersonal = false;
   late TextEditingController _nameCtrl;
   late TextEditingController _emailCtrl;
+  late TextEditingController _telegramChatIdCtrl;
   String _phoneE164 = '';
   String _phoneCountryIso = 'MX';
   String _phoneLocalNumber = '';
@@ -744,6 +745,10 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
       text: op['display_name'] as String? ?? op['name'] as String? ?? '',
     );
     _emailCtrl = TextEditingController(text: op['email'] as String? ?? '');
+    final metadata = op['metadata'] as Map<String, dynamic>? ?? {};
+    _telegramChatIdCtrl = TextEditingController(
+      text: metadata['telegram_chat_id']?.toString() ?? '',
+    );
     final rawPhone = op['phone'] as String? ?? '';
     if (rawPhone.isNotEmpty) {
       final (iso, local) = PhoneNormalizer.parsePhone(rawPhone);
@@ -769,6 +774,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
   void dispose() {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
+    _telegramChatIdCtrl.dispose();
     for (final c in _cfControllers.values) {
       c.dispose();
     }
@@ -779,6 +785,8 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     final op = widget.op;
     _nameCtrl.text = op['display_name'] as String? ?? op['name'] as String? ?? '';
     _emailCtrl.text = op['email'] as String? ?? '';
+    final metadata = op['metadata'] as Map<String, dynamic>? ?? {};
+    _telegramChatIdCtrl.text = metadata['telegram_chat_id']?.toString() ?? '';
     final rawPhone = op['phone'] as String? ?? '';
     if (rawPhone.isNotEmpty) {
       final (iso, local) = PhoneNormalizer.parsePhone(rawPhone);
@@ -811,6 +819,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
       return;
     }
     final email = _emailCtrl.text.trim();
+    final telegramChatId = _telegramChatIdCtrl.text.trim();
     final id = widget.op['id'] as String? ?? '';
 
     try {
@@ -820,6 +829,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
         phone: phone,
         roleIds: (widget.op['role_ids'] as List?)?.cast<String>() ?? [],
         email: email.isNotEmpty ? email : null,
+        telegramChatId: telegramChatId.isNotEmpty ? telegramChatId : null,
       );
     } catch (e) {
       if (!mounted) return;
@@ -1467,6 +1477,10 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
                 _FieldRow(label: 'Nombre completo', value: name),
                 _FieldRow(label: 'Teléfono WhatsApp', value: phone),
                 _FieldRow(label: 'Correo', value: email.isNotEmpty ? email : '—'),
+                _FieldRow(
+                  label: 'Telegram Chat ID',
+                  value: tgChatId?.isNotEmpty == true ? tgChatId! : '—',
+                ),
               ],
             ),
             editChild: Column(
@@ -1530,6 +1544,33 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 12),
+                const _FieldLabel('Telegram Chat ID'),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: _telegramChatIdCtrl,
+                  style: AppTextStyles.body,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: AppColors.ctSurface2,
+                    hintText: '123456789',
+                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctBorder),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctBorder),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.ctTeal),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -1557,30 +1598,6 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
           ],
 
           const SizedBox(height: 24),
-          // ── Telegram ──────────────────────────────────────────────
-          if (tgChatId != null && tgChatId.isNotEmpty) ...[
-            const _FieldLabel('Telegram Chat ID'),
-            const SizedBox(height: 4),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.ctTgBubble,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.telegram,
-                      size: 14, color: AppColors.ctTg),
-                  const SizedBox(width: 5),
-                  Text(tgChatId,
-                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500, color: AppColors.ctTg)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
           // Telegram invite — only when status is 'none' (not linked, not pending)
           Builder(builder: (context) {
             final tgLinkStatus = op['telegram_link_status'] as String? ??

@@ -14,7 +14,9 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/app_detail_header.dart';
+import '../../shared/widgets/catalog_item_form.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -352,6 +354,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
                   catalog: catalog,
                   canManage: _canManage,
                   onChanged: _onPatchChanged,
+                  onReload: _load,
                 ),
                 _ItemsTab(
                   key: ValueKey(catalog['id']),
@@ -831,10 +834,12 @@ class _SourceTab extends ConsumerStatefulWidget {
     required this.catalog,
     required this.canManage,
     required this.onChanged,
+    this.onReload,
   });
   final Map<String, dynamic> catalog;
   final bool canManage;
   final void Function(Map<String, dynamic>) onChanged;
+  final VoidCallback? onReload;
 
   @override
   ConsumerState<_SourceTab> createState() => _SourceTabState();
@@ -996,6 +1001,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
         if (mounted) {
           setState(() => _reconnecting = false);
           _loadOAuthStatus();
+          widget.onReload?.call();
           if (data == successMsg) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text('Conexión renovada correctamente'),
@@ -1016,6 +1022,21 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
   _OAuthState get _oauthState {
     if (!_isOAuth) return _OAuthState.notApplicable;
     if (_loadingOAuth) return _OAuthState.loading;
+
+    // Prioritize integration_status from backend when available
+    final integrationStatus =
+        widget.catalog['integration_status'] as String?;
+    if (integrationStatus != null) {
+      return switch (integrationStatus) {
+        'active' => _OAuthState.connected,
+        'error' || 'reauth_required' => _OAuthState.reauthRequired,
+        'revoked' => _OAuthState.revoked,
+        'paused' => _OAuthState.paused,
+        _ => _OAuthState.disconnected,
+      };
+    }
+
+    // Backward compat: infer from OAuth status when integration_status absent
     final status = _oauthStatus;
     if (status == null) return _OAuthState.unknown;
     if (status['connected'] != true) return _OAuthState.disconnected;
@@ -1092,43 +1113,74 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
 
           // Banner OAuth problema
           if (_isOAuth &&
-              (oauthSt == _OAuthState.expired ||
-                  oauthSt == _OAuthState.disconnected)) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: AppColors.ctRedBg,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: AppColors.ctDanger.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.link_off_rounded,
-                      size: 16, color: AppColors.ctDanger),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      oauthSt == _OAuthState.expired
-                          ? 'El token de acceso ha expirado. Reconecta para continuar sincronizando.'
-                          : 'La cuenta no está conectada. Conecta para habilitar la sincronización.',
-                      style: AppFonts.geist(
-                          fontSize: 12, color: AppColors.ctDanger),
+              oauthSt != _OAuthState.connected &&
+              oauthSt != _OAuthState.loading &&
+              oauthSt != _OAuthState.notApplicable) ...[
+            () {
+              final isWarn = oauthSt == _OAuthState.reauthRequired ||
+                  oauthSt == _OAuthState.expired;
+              final bannerBg =
+                  isWarn ? AppColors.ctWarnBg : AppColors.ctRedBg;
+              final bannerBorder = isWarn
+                  ? AppColors.ctWarn.withValues(alpha: 0.4)
+                  : AppColors.ctDanger.withValues(alpha: 0.3);
+              final bannerFg =
+                  isWarn ? AppColors.ctWarn : AppColors.ctDanger;
+              final bannerIcon = isWarn
+                  ? Icons.warning_amber_rounded
+                  : Icons.link_off_rounded;
+              final bannerText = switch (oauthSt) {
+                _OAuthState.reauthRequired =>
+                  'La conexión con $sourceLabel necesita reconexión. Los sincronizados están fallando hasta que se reconecte.',
+                _OAuthState.expired =>
+                  'El token de acceso ha expirado. Reconecta para continuar sincronizando.',
+                _OAuthState.revoked =>
+                  'La conexión con $sourceLabel fue revocada. Los sincronizados están fallando hasta que se reconecte.',
+                _OAuthState.disconnected =>
+                  'La cuenta no está conectada. Conecta para habilitar la sincronización.',
+                _OAuthState.paused =>
+                  'La integración está pausada. Los sincronizados no se ejecutarán hasta que se reactive.',
+                _ =>
+                  'La conexión con $sourceLabel no está activa.',
+              };
+              final showReconnect = oauthSt != _OAuthState.paused &&
+                  oauthSt != _OAuthState.unknown;
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: bannerBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: bannerBorder),
+                ),
+                child: Row(
+                  children: [
+                    Icon(bannerIcon, size: 16, color: bannerFg),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        bannerText,
+                        style: AppFonts.geist(
+                            fontSize: 12, color: bannerFg),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  AppButton(
-                    label: 'Reconectar',
-                    variant: AppButtonVariant.danger,
-                    size: AppButtonSize.sm,
-                    isLoading: _reconnecting,
-                    onPressed: _reconnect,
-                  ),
-                ],
-              ),
-            ),
+                    if (showReconnect) ...[
+                      const SizedBox(width: 8),
+                      AppButton(
+                        label: 'Reconectar ahora',
+                        variant: isWarn
+                            ? AppButtonVariant.outline
+                            : AppButtonVariant.danger,
+                        size: AppButtonSize.sm,
+                        isLoading: _reconnecting,
+                        onPressed: _reconnect,
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }(),
           ],
 
           // Card fuente principal
@@ -1159,6 +1211,18 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
                         size: AppButtonSize.sm,
                         isDisabled: _reconnecting,
                         prefixIcon: const Icon(Icons.refresh_rounded, size: 14, color: AppColors.ctTeal),
+                        onPressed: _reconnect,
+                      ),
+                    ] else if (_isOAuth &&
+                        oauthSt != _OAuthState.connected &&
+                        oauthSt != _OAuthState.loading &&
+                        oauthSt != _OAuthState.paused &&
+                        oauthSt != _OAuthState.notApplicable) ...[
+                      AppButton(
+                        label: 'Reconectar',
+                        variant: AppButtonVariant.danger,
+                        size: AppButtonSize.sm,
+                        isLoading: _reconnecting,
                         onPressed: _reconnect,
                       ),
                     ],
@@ -1319,7 +1383,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
 }
 
 // Estado OAuth enum
-enum _OAuthState { notApplicable, loading, unknown, connected, expired, disconnected }
+enum _OAuthState { notApplicable, loading, unknown, connected, expired, disconnected, reauthRequired, revoked, paused }
 
 // Badge de estado OAuth
 class _OAuthStateBadge extends StatelessWidget {
@@ -1343,11 +1407,23 @@ class _OAuthStateBadge extends StatelessWidget {
           'Conectado',
           Icons.check_circle_rounded
         ),
+      _OAuthState.reauthRequired => (
+          AppColors.ctWarnBg,
+          AppColors.ctWarn,
+          'Necesita reconexión',
+          Icons.warning_rounded
+        ),
       _OAuthState.expired => (
           AppColors.ctWarnBg,
           AppColors.ctWarn,
           'Token expirado',
           Icons.warning_rounded
+        ),
+      _OAuthState.revoked => (
+          AppColors.ctRedBg,
+          AppColors.ctRedText,
+          'Acceso revocado',
+          Icons.link_off_rounded
         ),
       _OAuthState.disconnected => (
           AppColors.ctRedBg,
@@ -1355,10 +1431,16 @@ class _OAuthStateBadge extends StatelessWidget {
           'Desconectado',
           Icons.link_off_rounded
         ),
+      _OAuthState.paused => (
+          AppColors.ctSurface2,
+          AppColors.ctText2,
+          'Pausada',
+          Icons.pause_circle_rounded
+        ),
       _ => (
           AppColors.ctSurface2,
           AppColors.ctText2,
-          'Verificando...',
+          'Sin conectar',
           Icons.help_outline_rounded
         ),
     };
@@ -1513,16 +1595,24 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
   }
 
   Future<void> _showItemDetail(Map<String, dynamic> item) async {
-    await showModalBottomSheet(
+    final changed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.ctSurface,
       shape: const RoundedRectangleBorder(
           borderRadius:
               BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) =>
-          _ItemDetailSheet(item: item, fields: _fields),
+      builder: (_) => _ItemDetailSheet(
+        item: item,
+        fields: _fields,
+        catalog: widget.catalog,
+        canManage: _isManual && widget.canManage,
+      ),
     );
+    if (changed == true && mounted) {
+      setState(() { _page = 1; });
+      _loadPage();
+    }
   }
 
   Future<void> _showAddItem() async {
@@ -1755,16 +1845,170 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
 
 // ── Item sheets ───────────────────────────────────────────────────────────────
 
-class _ItemDetailSheet extends StatelessWidget {
-  const _ItemDetailSheet(
-      {required this.item, required this.fields});
+class _ItemDetailSheet extends ConsumerStatefulWidget {
+  const _ItemDetailSheet({
+    required this.item,
+    required this.fields,
+    required this.catalog,
+    required this.canManage,
+  });
   final Map<String, dynamic> item;
   final List<Map<String, dynamic>> fields;
+  final Map<String, dynamic> catalog;
+  final bool canManage;
+
+  @override
+  ConsumerState<_ItemDetailSheet> createState() =>
+      _ItemDetailSheetState();
+}
+
+class _ItemDetailSheetState extends ConsumerState<_ItemDetailSheet> {
+  Map<String, dynamic> get _rawData =>
+      widget.item['data'] is Map
+          ? Map<String, dynamic>.from(widget.item['data'] as Map)
+          : <String, dynamic>{};
+
+  String get _itemId => widget.item['id'] as String? ?? '';
+
+  String get _catalogId => widget.catalog['id'] as String? ?? '';
+
+  String get _primaryKeyField =>
+      widget.catalog['primary_key'] as String? ??
+      (widget.fields.isNotEmpty
+          ? (widget.fields.first['key'] as String? ?? '')
+          : '');
+
+  Future<void> _openEditDialog() async {
+    final formKey = GlobalKey<CatalogItemFormState>();
+    bool saving = false;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => Dialog(
+          backgroundColor: AppColors.ctSurface,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('Editar item',
+                          style: AppFonts.onest(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.ctText)),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded,
+                            size: 20, color: AppColors.ctText2),
+                        onPressed: () =>
+                            Navigator.of(ctx).pop(false),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  CatalogItemForm(
+                    key: formKey,
+                    fieldsSchema: widget.fields,
+                    primaryKeyField: _primaryKeyField,
+                    initialData: _rawData,
+                  ),
+                  const SizedBox(height: 8),
+                  AppButton(
+                    label: 'Guardar',
+                    variant: AppButtonVariant.teal,
+                    expand: true,
+                    isLoading: saving,
+                    onPressed: () async {
+                      final fs = formKey.currentState;
+                      if (fs == null || !fs.validate()) return;
+                      setDialogState(() => saving = true);
+                      try {
+                        final tenantId =
+                            ref.read(activeTenantIdProvider);
+                        await CatalogsApi.updateItem(
+                          tenantId: tenantId,
+                          catalogId: _catalogId,
+                          itemId: _itemId,
+                          data: fs.getValue(),
+                        );
+                        if (ctx.mounted) {
+                          Navigator.of(ctx).pop(true);
+                        }
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          setDialogState(() => saving = false);
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  'Error al actualizar item: $e'),
+                              backgroundColor: AppColors.ctDanger,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (ok == true && mounted) {
+      Navigator.of(context).pop(true);
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final confirmed = await AppConfirmDialog.show(
+      context: context,
+      title: 'Eliminar item',
+      body: 'Esta accion no se puede deshacer. '
+          'El item sera eliminado permanentemente.',
+      confirmLabel: 'Eliminar',
+      variant: AppConfirmDialogVariant.danger,
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final tenantId = ref.read(activeTenantIdProvider);
+      final result = await CatalogsApi.deleteItem(
+        tenantId: tenantId,
+        catalogId: _catalogId,
+        itemId: _itemId,
+      );
+      final unlinked =
+          result['unlinked_assignment_resources'] as int? ?? 0;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(unlinked > 0
+              ? 'Item eliminado. $unlinked recursos desreferenciados.'
+              : 'Item eliminado.'),
+        ));
+        Navigator.of(context).pop(true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error al eliminar item: $e'),
+          backgroundColor: AppColors.ctDanger,
+        ));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final rawData =
-        item['data'] is Map ? item['data'] as Map : null;
+    final rawData = _rawData;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.6,
@@ -1783,6 +2027,20 @@ class _ItemDetailSheet extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                         color: AppColors.ctText)),
                 const Spacer(),
+                if (widget.canManage) ...[
+                  IconButton(
+                    tooltip: 'Editar',
+                    icon: const Icon(Icons.edit_outlined,
+                        size: 18, color: AppColors.ctTeal),
+                    onPressed: _openEditDialog,
+                  ),
+                  IconButton(
+                    tooltip: 'Eliminar',
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        size: 18, color: AppColors.ctDanger),
+                    onPressed: _confirmDelete,
+                  ),
+                ],
                 IconButton(
                   icon: const Icon(Icons.close_rounded,
                       size: 20, color: AppColors.ctText2),
@@ -1793,20 +2051,20 @@ class _ItemDetailSheet extends StatelessWidget {
           ),
           const Divider(height: 1, color: AppColors.ctBorder),
           Expanded(
-            child: fields.isNotEmpty
+            child: widget.fields.isNotEmpty
                 ? ListView.separated(
                     controller: ctrl,
                     padding: const EdgeInsets.all(20),
-                    itemCount: fields.length,
-                    separatorBuilder: (_, _) =>
+                    itemCount: widget.fields.length,
+                    separatorBuilder: (context, index) =>
                         const Divider(
                             height: 16, color: AppColors.ctBorder),
-                    itemBuilder: (_, i) {
-                      final field = fields[i];
+                    itemBuilder: (context, i) {
+                      final field = widget.fields[i];
                       final k = field['key'] as String? ?? '';
                       final lbl =
                           field['label'] as String? ?? k;
-                      final val = item[k] ?? rawData?[k];
+                      final val = widget.item[k] ?? rawData[k];
                       return _DetailRow(
                           label: lbl,
                           value: val?.toString() ?? '—');
@@ -1815,13 +2073,13 @@ class _ItemDetailSheet extends StatelessWidget {
                 : ListView.separated(
                     controller: ctrl,
                     padding: const EdgeInsets.all(20),
-                    itemCount: item.length,
-                    separatorBuilder: (_, _) =>
+                    itemCount: widget.item.length,
+                    separatorBuilder: (context, index) =>
                         const Divider(
                             height: 16, color: AppColors.ctBorder),
-                    itemBuilder: (_, i) {
+                    itemBuilder: (context, i) {
                       final entry =
-                          item.entries.elementAt(i);
+                          widget.item.entries.elementAt(i);
                       return _DetailRow(
                           label: entry.key,
                           value:
@@ -1876,32 +2134,22 @@ class _AddItemSheet extends ConsumerStatefulWidget {
 }
 
 class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
-  final Map<String, TextEditingController> _ctrls = {};
+  final _formKey = GlobalKey<CatalogItemFormState>();
   bool _saving = false;
 
-  @override
-  void initState() {
-    super.initState();
-    for (final field in widget.fields) {
-      final key = field['key'] as String? ?? '';
-      if (key.isNotEmpty) _ctrls[key] = TextEditingController();
-    }
-  }
-
-  @override
-  void dispose() {
-    for (final ctrl in _ctrls.values) { ctrl.dispose(); }
-    super.dispose();
-  }
+  String get _primaryKeyField =>
+      widget.catalog['primary_key'] as String? ??
+      (widget.fields.isNotEmpty
+          ? (widget.fields.first['key'] as String? ?? '')
+          : '');
 
   Future<void> _submit() async {
     if (_saving) return;
+    final formState = _formKey.currentState;
+    if (formState == null || !formState.validate()) return;
     final tenantId = ref.read(activeTenantIdProvider);
     final catalogId = widget.catalog['id'] as String? ?? '';
-    final data = {
-      for (final e in _ctrls.entries)
-        if (e.value.text.isNotEmpty) e.key: e.value.text.trim(),
-    };
+    final data = formState.getValue();
     setState(() => _saving = true);
     try {
       await CatalogsApi.createItem(
@@ -1942,28 +2190,11 @@ class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
               ],
             ),
             const SizedBox(height: 12),
-            ...widget.fields.map((field) {
-              final key = field['key'] as String? ?? '';
-              final label =
-                  field['label'] as String? ?? key;
-              final ctrl = _ctrls[key];
-              if (ctrl == null || key.isEmpty) {
-                return const SizedBox.shrink();
-              }
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: TextField(
-                  controller: ctrl,
-                  style: AppFonts.geist(
-                      fontSize: 13, color: AppColors.ctText),
-                  decoration: InputDecoration(
-                    labelText: label,
-                    labelStyle: AppFonts.geist(
-                        fontSize: 12, color: AppColors.ctText2),
-                  ),
-                ),
-              );
-            }),
+            CatalogItemForm(
+              key: _formKey,
+              fieldsSchema: widget.fields,
+              primaryKeyField: _primaryKeyField,
+            ),
             const SizedBox(height: 8),
             AppButton(
               label: 'Guardar',
