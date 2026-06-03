@@ -371,6 +371,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
       final item = _fields.removeAt(oldIndex);
       _fields.insert(newIndex, item);
     });
+    _save(silent: true);
   }
 
   List<String> _findFieldReferences(String fieldKey) {
@@ -1756,25 +1757,47 @@ class _CamposTab extends StatelessWidget {
                 ),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, i) {
-                        final field = groupFields[i];
-                        return _FieldRow(
-                          key: ValueKey(field['id']?.toString() ?? 'c$i'),
-                          field: field,
-                          index: i,
-                          canManage: canManage,
-                          isLast: i == groupFields.length - 1,
-                          indented: true,
-                          onEdit: () =>
-                              onEditField(field, fields.indexOf(field)),
-                          onDelete: () =>
-                              onDeleteField(field, fields.indexOf(field)),
-                        );
-                      },
-                      childCount: groupFields.length,
-                    ),
+                  sliver: SliverReorderableList(
+                    itemCount: groupFields.length,
+                    onReorder: canManage
+                        ? (oldIdx, newIdx) {
+                            // Map local group indices → global _fields indices
+                            final globalIndices = groupFields
+                                .map((f) => fields.indexOf(f))
+                                .toList();
+                            final oldGlobal = globalIndices[oldIdx];
+                            int targetGlobal;
+                            if (newIdx >= groupFields.length) {
+                              targetGlobal = globalIndices.last + 1;
+                            } else {
+                              targetGlobal = globalIndices[newIdx];
+                            }
+                            if (oldIdx < newIdx) {
+                              targetGlobal -= 1;
+                            }
+                            // Convert post-removal insert position to
+                            // pre-removal convention expected by _onReorder
+                            final newGlobal = targetGlobal >= oldGlobal
+                                ? targetGlobal + 1
+                                : targetGlobal;
+                            onReorder(oldGlobal, newGlobal);
+                          }
+                        : (int a, int b) {},
+                    itemBuilder: (context, i) {
+                      final field = groupFields[i];
+                      return _FieldRow(
+                        key: ValueKey(field['id']?.toString() ?? 'c$i'),
+                        field: field,
+                        index: i,
+                        canManage: canManage,
+                        isLast: i == groupFields.length - 1,
+                        indented: true,
+                        onEdit: () =>
+                            onEditField(field, fields.indexOf(field)),
+                        onDelete: () =>
+                            onDeleteField(field, fields.indexOf(field)),
+                      );
+                    },
                   ),
                 ),
               ];
