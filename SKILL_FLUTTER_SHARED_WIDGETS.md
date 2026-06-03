@@ -1338,3 +1338,88 @@ AppEditableSection(
 **PROHIBIDO usar en su lugar:**
 - Dialogs modales para edicion campo-por-campo en pantallas de detalle
 - Auto-save sin confirmacion del usuario (patron anterior del detail de operadores)
+
+---
+
+### 2.24 AppSwitch · `lib/shared/widgets/app_switch.dart`
+
+Toggle booleano con label. Usa tokens del design system (ctTeal active, ctBorder inactive).
+
+```dart
+import '../../shared/widgets/app_switch.dart';
+
+AppSwitch(
+  label: 'Activo',
+  value: _isActive,
+  onChanged: (v) => setState(() => _isActive = v),
+)
+
+// Disabled
+AppSwitch(
+  label: 'Bloqueado',
+  value: true,
+  enabled: false,
+  onChanged: (_) {},
+)
+```
+
+| Prop | Tipo | Default | Descripcion |
+|------|------|---------|-------------|
+| `label` | `String` | requerido | Texto a la izquierda del switch |
+| `value` | `bool` | requerido | Estado actual |
+| `onChanged` | `ValueChanged<bool>` | requerido | Callback al cambiar |
+| `enabled` | `bool` | true | Si false, el switch queda deshabilitado |
+
+---
+
+### 2.25 CatalogItemForm · `lib/shared/widgets/catalog_item_form.dart`
+
+Formulario dinamico schema-driven para crear/editar items de catalogo.
+Renderiza campos segun `type` del schema: text, number, boolean, options (dropdown).
+Emite tipos nativos en `getValue()`: `String`, `num`, `bool`.
+
+```dart
+import '../../shared/widgets/catalog_item_form.dart';
+
+// Crear item (initialData = null)
+final formKey = GlobalKey<CatalogItemFormState>();
+CatalogItemForm(
+  key: formKey,
+  fieldsSchema: catalog['fields_schema'],
+  primaryKeyField: 'sku',
+)
+
+// Editar item (initialData != null, PK read-only)
+CatalogItemForm(
+  key: formKey,
+  fieldsSchema: catalog['fields_schema'],
+  primaryKeyField: 'sku',
+  initialData: item['data'],
+)
+
+// Validar y obtener datos
+if (formKey.currentState!.validate()) {
+  final data = formKey.currentState!.getValue();
+  // data['price'] es num, data['active'] es bool
+}
+```
+
+| Prop | Tipo | Default | Descripcion |
+|------|------|---------|-------------|
+| `fieldsSchema` | `List<Map<String,dynamic>>` | requerido | Schema de campos (key, label, type, options) |
+| `primaryKeyField` | `String` | requerido | Key del campo PK (se deshabilita en edit mode) |
+| `initialData` | `Map<String,dynamic>?` | null | Datos iniciales. Si != null, modo edicion (PK read-only) |
+| `enabled` | `bool` | true | Habilita/deshabilita todos los campos |
+
+**Metodos publicos (via GlobalKey):**
+- `validate()` → `bool`: PK no vacio; numbers parseables.
+- `getValue()` → `Map<String,dynamic>`: tipos nativos. Number vacio se omite.
+
+**Mapeo de type:**
+| type | Widget | Valor emitido |
+|------|--------|---------------|
+| `text` | AppTextField | String |
+| `number` | AppTextField (numerico) | num (int o double) |
+| `boolean` | AppSwitch | bool |
+| campo con `options` | AppDropdown | String |
+| otro | AppTextField (fallback) | String |

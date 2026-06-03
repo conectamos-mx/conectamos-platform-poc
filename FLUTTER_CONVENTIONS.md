@@ -461,6 +461,24 @@ await AppWizardShell.show(
 
 ---
 
+## 16. Formularios schema-driven con emision de tipos nativos (2026-06-02)
+
+Cuando un formulario se genera dinamicamente a partir de un `fields_schema`
+(lista de maps con `key`, `label`, `type`, `options`), el form debe:
+
+1. **Mapear `type` al widget correcto:** text → AppTextField, number → AppTextField
+   con `keyboardType: TextInputType.numberWithOptions(decimal: true)` + formatter,
+   boolean → AppSwitch, campo con `options` → AppDropdown.
+2. **Emitir tipos nativos en `getValue()`:** number → `num`, boolean → `bool`,
+   text/select → `String`. Campos number vacios se omiten (no enviar `""`).
+3. **Validar client-side:** PK no vacio, numbers parseables a `num`.
+4. **Modo edicion:** campo PK se renderiza disabled. `initialData != null` indica edit.
+5. **Reusar un solo widget** para crear y editar (compartir form, no duplicar).
+
+**Referencia:** `CatalogItemForm` (`lib/shared/widgets/catalog_item_form.dart`).
+
+---
+
 ## show_if evaluation en execution detail
 
 Patron establecido en ADR-347. Tres helpers en `execution_detail_screen.dart`:
