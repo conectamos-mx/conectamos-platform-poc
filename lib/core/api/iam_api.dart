@@ -106,4 +106,12 @@ class IamApi {
       '/iam/users/$tenantUserId/unlink-operator',
     );
   }
+
+  static Future<void> deleteUser(String id) async {
+    await ApiClient.instance.delete('/iam/users/$id');
+  }
+
+  static Future<void> revokeInvitation(String id) async {
+    await ApiClient.instance.delete('/iam/invitations/$id');
+  }
 }
