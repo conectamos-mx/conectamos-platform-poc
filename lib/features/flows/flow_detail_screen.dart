@@ -1756,25 +1756,37 @@ class _CamposTab extends StatelessWidget {
                 ),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, i) {
-                        final field = groupFields[i];
-                        return _FieldRow(
-                          key: ValueKey(field['id']?.toString() ?? 'c$i'),
-                          field: field,
-                          index: i,
-                          canManage: canManage,
-                          isLast: i == groupFields.length - 1,
-                          indented: true,
-                          onEdit: () =>
-                              onEditField(field, fields.indexOf(field)),
-                          onDelete: () =>
-                              onDeleteField(field, fields.indexOf(field)),
-                        );
-                      },
-                      childCount: groupFields.length,
-                    ),
+                  sliver: SliverReorderableList(
+                    itemCount: groupFields.length,
+                    onReorder: canManage
+                        ? (oldIdx, newIdx) {
+                            // Map local group indices to global _fields indices
+                            final globalIndices = groupFields
+                                .map((f) => fields.indexOf(f))
+                                .toList();
+                            final globalOld = globalIndices[oldIdx];
+                            var globalNew = newIdx >= groupFields.length
+                                ? globalIndices.last + 1
+                                : globalIndices[newIdx];
+                            if (globalNew > globalOld) globalNew--;
+                            onReorder(globalOld, globalNew > globalOld ? globalNew + 1 : globalNew);
+                          }
+                        : (int a, int b) {},
+                    itemBuilder: (context, i) {
+                      final field = groupFields[i];
+                      return _FieldRow(
+                        key: ValueKey(field['id']?.toString() ?? 'c$i'),
+                        field: field,
+                        index: i,
+                        canManage: canManage,
+                        isLast: i == groupFields.length - 1,
+                        indented: true,
+                        onEdit: () =>
+                            onEditField(field, fields.indexOf(field)),
+                        onDelete: () =>
+                            onDeleteField(field, fields.indexOf(field)),
+                      );
+                    },
                   ),
                 ),
               ];
