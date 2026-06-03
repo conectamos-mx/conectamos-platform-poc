@@ -366,6 +366,30 @@ Active migration in progress — do not revert these changes:
 - Create dialog (`_openForm(flow: null)`) is kept for quick creation.
 - Edit dialog (`_openForm(flow: entry)`) is removed — editing lives in `FlowDetailScreen`.
 
+### Control Towers (`lib/features/config/worker_detail_screen.dart`)
+
+**Tab: Torres de Control** — worker-level configuration for push-only notification groups.
+
+**Features:**
+- CRUD dialogs: `_CreateTowerDialog`, `_EditTowerDialog`
+- Name validation with spam-trigger detection (words: "torre", "test", "dev", "grupo", "control")
+- `_NamingGuideDialog` — info modal with examples of good/bad names and anti-spam tips
+- `ParticipantsWidget` — manages phone numbers with country code selector (E.164 format)
+- 3 estados visuales:
+  - `active`: Badge verde "Activo", botones habilitados
+  - `inactive`: Badge gris "Inactivo", banner de advertencia, botón "Eliminar" deshabilitado
+  - `deleted`: NO aparece en listado (filtrado en backend)
+
+**Backend integration:** `GroupsApi.createControlTower()`, `updateControlTower()`, `deleteControlTower()`
+- Creación con delays anti-spam (2.5s entre participantes)
+- Actualización calcula diff de participantes en backend
+- Delete es soft-delete (`status='deleted'`)
+
+**Flow integration:** `flow_detail_screen.dart` action `notify_group`
+- Selector de tipo: "Grupo (bidireccional)" o "Torre de Control (solo notificaciones)"
+- Solo torres `active` aparecen en selector
+- Guarda `destination_type` ('group' o 'control_tower') + `group_id`
+
 ---
 
 ## CI/CD

@@ -81,4 +81,74 @@ class GroupsApi {
       '/groups/$groupId/visibility/$tenantUserId',
     );
   }
+
+  // ── Control Towers ──────────────────────────────────────────────────────
+
+  static Future<List<Map<String, dynamic>>> listControlTowers() async {
+    final response = await ApiClient.instance.get('/control-towers');
+    return List<Map<String, dynamic>>.from(response.data);
+  }
+
+  static Future<Map<String, dynamic>> createControlTower({
+    required String workerId,
+    required String displayName,
+    String? description,
+    required List<String> participantPhones,
+  }) async {
+    final response = await ApiClient.instance.post(
+      '/control-towers',
+      data: {
+        'worker_id': workerId,
+        'display_name': displayName,
+        if (description != null) 'description': description,
+        'participant_phones': participantPhones,
+      },
+    );
+    return Map<String, dynamic>.from(response.data);
+  }
+
+  static Future<Map<String, dynamic>> getControlTower({
+    required String towerId,
+  }) async {
+    final response = await ApiClient.instance.get('/control-towers/$towerId');
+    return Map<String, dynamic>.from(response.data);
+  }
+
+  static Future<Map<String, dynamic>> updateControlTower({
+    required String towerId,
+    String? displayName,
+    String? description,
+    String? status,
+    List<String>? participants,
+    String? iconUrl,
+  }) async {
+    final response = await ApiClient.instance.put(
+      '/control-towers/$towerId',
+      data: {
+        if (displayName != null) 'display_name': displayName,
+        if (description != null) 'description': description,
+        if (status != null) 'status': status,
+        if (participants != null) 'participants': participants,
+        if (iconUrl != null && iconUrl.isNotEmpty) 'icon_url': iconUrl,
+      },
+    );
+    return Map<String, dynamic>.from(response.data);
+  }
+
+  static Future<void> deleteControlTower({
+    required String towerId,
+  }) async {
+    await ApiClient.instance.delete('/control-towers/$towerId');
+  }
+
+  static Future<Map<String, dynamic>> sendMessageToTower({
+    required String towerId,
+    required String message,
+  }) async {
+    final response = await ApiClient.instance.post(
+      '/control-towers/$towerId/send-message',
+      data: {'message': message},
+    );
+    return Map<String, dynamic>.from(response.data);
+  }
 }

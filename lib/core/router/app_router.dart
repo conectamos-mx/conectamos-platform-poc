@@ -33,14 +33,14 @@ import '../../shared/widgets/app_shell.dart';
 
 // Mapa de ruta → permiso requerido
 const _kRoutePermissions = {
-  '/operators':    'operators.view',
-  '/connections':  'settings.view',
-  '/settings':     'settings.view',
-  '/workers':      'settings.manage',
-  '/catalogs':     'catalogs.view',
-  '/assignments':  'assignments.view',
-  '/broadcast':    'broadcasts.send',
-  '/escalaciones': 'escalations.view',
+  '/operators':       'operators.view',
+  '/connections':     'settings.view',
+  '/settings':        'settings.view',
+  '/workers':         'settings.manage',
+  '/catalogs':        'catalogs.view',
+  '/assignments':     'assignments.view',
+  '/broadcast':       'broadcasts.send',
+  '/escalaciones':    'escalations.view',
 };
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -250,7 +250,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               ],
             ),
           ]),
-          // Branch 11 — Catalogs
+          // Branch 12 — Catalogs
           StatefulShellBranch(routes: [
             GoRoute(
               path: '/catalogs',
@@ -270,7 +270,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               ],
             ),
           ]),
-          // Branch 12 — Assignments
+          // Branch 13 — Assignments
           StatefulShellBranch(routes: [
             GoRoute(
               path: '/assignments',
