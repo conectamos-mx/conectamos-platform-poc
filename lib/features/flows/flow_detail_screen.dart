@@ -1760,16 +1760,26 @@ class _CamposTab extends StatelessWidget {
                     itemCount: groupFields.length,
                     onReorder: canManage
                         ? (oldIdx, newIdx) {
-                            // Map local group indices to global _fields indices
+                            // Map local group indices → global _fields indices
                             final globalIndices = groupFields
                                 .map((f) => fields.indexOf(f))
                                 .toList();
-                            final globalOld = globalIndices[oldIdx];
-                            var globalNew = newIdx >= groupFields.length
-                                ? globalIndices.last + 1
-                                : globalIndices[newIdx];
-                            if (globalNew > globalOld) globalNew--;
-                            onReorder(globalOld, globalNew > globalOld ? globalNew + 1 : globalNew);
+                            final oldGlobal = globalIndices[oldIdx];
+                            int targetGlobal;
+                            if (newIdx >= groupFields.length) {
+                              targetGlobal = globalIndices.last + 1;
+                            } else {
+                              targetGlobal = globalIndices[newIdx];
+                            }
+                            if (oldIdx < newIdx) {
+                              targetGlobal -= 1;
+                            }
+                            // Convert post-removal insert position to
+                            // pre-removal convention expected by _onReorder
+                            final newGlobal = targetGlobal >= oldGlobal
+                                ? targetGlobal + 1
+                                : targetGlobal;
+                            onReorder(oldGlobal, newGlobal);
                           }
                         : (int a, int b) {},
                     itemBuilder: (context, i) {
