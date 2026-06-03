@@ -371,6 +371,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
       final item = _fields.removeAt(oldIndex);
       _fields.insert(newIndex, item);
     });
+    _save(silent: true);
   }
 
   List<String> _findFieldReferences(String fieldKey) {
