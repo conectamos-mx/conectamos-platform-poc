@@ -31,6 +31,14 @@ const List<(String, String, String)> kPhoneCountries = [
   ('GB', 'Reino Unido', '+44'),
 ];
 
+/// Maximum local-digit length per country (E.164 total minus dial-code digits).
+const Map<String, int> kPhoneMaxLocalDigits = {
+  'MX': 10, 'US': 10, 'CO': 10, 'GT': 8, 'HN': 8, 'SV': 8,
+  'ES': 9,  'AR': 10, 'CL': 9,  'PE': 9,  'VE': 10, 'EC': 9,
+  'BO': 8,  'PY': 9,  'UY': 8,  'BR': 11, 'CA': 10, 'FR': 9,
+  'DE': 11, 'IT': 10, 'GB': 10,
+};
+
 /// Unicode flag emoji for an ISO 3166-1 alpha-2 code.
 String countryFlag(String iso) {
   const base = 0x1F1E6 - 0x41;
@@ -109,10 +117,18 @@ class _PhoneFieldWidgetState extends State<PhoneFieldWidget> {
         _iso = result.$1;
         _dialCode = result.$2;
         _localError = null;
+        // Truncate if current text exceeds new country's max length.
+        final max = kPhoneMaxLocalDigits[_iso] ?? 15;
+        if (_ctrl.text.length > max) {
+          _ctrl.text = _ctrl.text.substring(0, max);
+          _ctrl.selection = TextSelection.collapsed(offset: _ctrl.text.length);
+        }
       });
       _emit();
     }
   }
+
+  int get _maxDigits => kPhoneMaxLocalDigits[_iso] ?? 15;
 
   @override
   Widget build(BuildContext context) {
@@ -177,8 +193,8 @@ class _PhoneFieldWidgetState extends State<PhoneFieldWidget> {
                 enabled: widget.enabled,
                 keyboardType: TextInputType.phone,
                 inputFormatters: [
-                  FilteringTextInputFormatter.allow(
-                      RegExp(r'[\d\s\-\(\)\+]')),
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(_maxDigits),
                 ],
                 style: AppTextStyles.body,
                 onEditingComplete: () => setState(() {

@@ -1816,52 +1816,51 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
                 placeholder: 'Juan García',
               ),
               const SizedBox(height: 12),
-              _Row2(
-                left: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Email', style: AppTextStyles.formLabel),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _emailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      onChanged: (_) {
-                        if (_emailError != null) setState(() => _emailError = null);
-                      },
-                      style: AppTextStyles.body,
-                      decoration: InputDecoration(
-                        hintText: 'usuario@empresa.com',
-                        hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                        errorText: _emailError,
-                        errorStyle: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
-                        filled: true,
-                        fillColor: AppColors.ctSurface2,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.ctBorder2),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Email', style: AppTextStyles.formLabel),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    onChanged: (_) {
+                      if (_emailError != null) setState(() => _emailError = null);
+                    },
+                    style: AppTextStyles.body,
+                    decoration: InputDecoration(
+                      hintText: 'usuario@empresa.com',
+                      hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                      errorText: _emailError,
+                      errorStyle: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
+                      filled: true,
+                      fillColor: AppColors.ctSurface2,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppColors.ctBorder2),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: _emailError != null ? AppColors.ctDanger : AppColors.ctBorder2,
                         ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(
-                            color: _emailError != null ? AppColors.ctDanger : AppColors.ctBorder2,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(
-                            color: _emailError != null ? AppColors.ctDanger : AppColors.ctTeal,
-                            width: 1.5,
-                          ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: _emailError != null ? AppColors.ctDanger : AppColors.ctTeal,
+                          width: 1.5,
                         ),
                       ),
                     ),
-                  ],
-                ),
-                right: PhoneFieldWidget(
-                  label: 'Teléfono (opcional)',
-                  onChanged: (e164) => _phoneE164 = e164,
-                ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              PhoneFieldWidget(
+                label: 'Teléfono (opcional)',
+                onChanged: (e164) => _phoneE164 = e164,
               ),
               const SizedBox(height: 12),
               const Text(
