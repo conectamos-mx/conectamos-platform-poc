@@ -2,8 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/api/api_client.dart';
+import '../../core/api/iam_api.dart';
 import '../../core/theme/text_styles.dart';
+import '../../shared/validators/phone_validator.dart';
 import 'auth_shared.dart';
 
 class ActivateScreen extends StatefulWidget {
@@ -46,14 +47,15 @@ class _ActivateScreenState extends State<ActivateScreen> {
 
   Future<void> _validateToken() async {
     try {
-      final res = await ApiClient.instance.get('/iam/invite/${widget.token}');
+      final data = await IamApi.getInvitation(widget.token);
       if (!mounted) return;
-      Map<String, dynamic> data;
-      try {
-        data = Map<String, dynamic>.from(res.data as Map);
-      } catch (_) {
-        data = {};
-      }
+
+      // Pre-populate name & phone from invitation data seeded by admin.
+      final nombre   = data['nombre']?.toString() ?? '';
+      final telefono = data['telefono']?.toString() ?? '';
+      if (nombre.isNotEmpty)   _nameCtrl.text  = nombre;
+      if (telefono.isNotEmpty) _phoneCtrl.text = telefono;
+
       setState(() { _inviteData = data; _loadingToken = false; });
     } on DioException catch (e) {
       if (!mounted) return;
@@ -73,22 +75,50 @@ class _ActivateScreenState extends State<ActivateScreen> {
     }
   }
 
+  /// Extract role name defensively: backend sends role as {id, name} map,
+  /// but handle string fallback just in case.
+  String _roleName() {
+    final role = _inviteData?['role'];
+    if (role is Map) return role['name']?.toString() ?? '';
+    if (role is String) return role;
+    return '';
+  }
+
   Future<void> _submit() async {
     final name    = _nameCtrl.text.trim();
     final pass    = _passCtrl.text;
     final confirm = _confirmCtrl.text;
     final phone   = _phoneCtrl.text.trim();
 
-    if (name.isEmpty) { setState(() => _submitError = 'Ingresa tu nombre completo'); return; }
-    if (phone.isEmpty) { setState(() => _submitError = 'Ingresa tu número de teléfono'); return; }
-    if (pass.length < 8) { setState(() => _submitError = 'La contraseña debe tener al menos 8 caracteres'); return; }
-    if (pass != confirm) { setState(() => _submitError = 'Las contraseñas no coinciden'); return; }
+    if (name.isEmpty) {
+      setState(() => _submitError = 'Ingresa tu nombre completo');
+      return;
+    }
+    if (phone.isEmpty) {
+      setState(() => _submitError = 'Ingresa tu número de teléfono');
+      return;
+    }
+    final phoneErr = validatePhoneE164(phone);
+    if (phoneErr != null) {
+      setState(() => _submitError = phoneErr);
+      return;
+    }
+    if (pass.length < 8) {
+      setState(() => _submitError = 'La contraseña debe tener al menos 8 caracteres');
+      return;
+    }
+    if (pass != confirm) {
+      setState(() => _submitError = 'Las contraseñas no coinciden');
+      return;
+    }
 
     setState(() { _submitting = true; _submitError = null; });
     try {
-      await ApiClient.instance.post(
-        '/iam/invite/${widget.token}/accept',
-        data: {'password': pass, 'nombre': name, 'telefono': phone},
+      await IamApi.acceptInvitation(
+        widget.token,
+        password: pass,
+        nombre: name,
+        telefono: phone,
       );
       if (!mounted) return;
       setState(() { _submitting = false; _success = true; });
@@ -218,7 +248,7 @@ class _ActivateScreenState extends State<ActivateScreen> {
 
   Widget _buildForm() {
     final tenantName = _inviteData?['tenant_name']?.toString() ?? '';
-    final role       = _inviteData?['role']?.toString() ?? '';
+    final role       = _roleName();
 
     return Column(
       mainAxisSize: MainAxisSize.min,

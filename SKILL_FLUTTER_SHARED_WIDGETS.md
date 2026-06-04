@@ -1423,3 +1423,44 @@ if (formKey.currentState!.validate()) {
 | `boolean` | AppSwitch | bool |
 | campo con `options` | AppDropdown | String |
 | otro | AppTextField (fallback) | String |
+
+---
+
+### 2.19 validatePhoneE164 · `lib/shared/validators/phone_validator.dart`
+
+Validador E.164 compartido para campos de teléfono. Retorna `null` si el valor es válido
+o vacío (el caller decide si el campo es obligatorio). Retorna un string de error
+user-facing si el formato es inválido.
+
+**Reglas:** requiere `+`, seguido de 10–15 dígitos. Acepta espacios, guiones y paréntesis
+(se limpian internamente antes de validar).
+
+```dart
+import '../../shared/validators/phone_validator.dart';
+
+// En un formulario — campo opcional
+final phoneErr = validatePhoneE164(_phoneCtrl.text);
+if (phoneErr != null) {
+  setState(() => _phoneError = phoneErr);
+  return;
+}
+
+// En un formulario — campo obligatorio
+final phone = _phoneCtrl.text.trim();
+if (phone.isEmpty) {
+  setState(() => _error = 'Ingresa tu teléfono');
+  return;
+}
+final phoneErr = validatePhoneE164(phone);
+if (phoneErr != null) {
+  setState(() => _error = phoneErr);
+  return;
+}
+```
+
+| Firma | Retorno |
+|---|---|
+| `String? validatePhoneE164(String? value)` | `null` = válido o vacío; `String` = mensaje de error |
+
+**Cuándo usarlo:** En TODOS los campos de teléfono del proyecto. No crear validadores
+locales MX-céntricos ni variantes E.164 propias — este es el único.

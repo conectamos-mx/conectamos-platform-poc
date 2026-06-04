@@ -8,6 +8,7 @@ import '../../core/api/iam_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/validators/phone_validator.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/page_header.dart';
 import 'role_permissions_panel.dart';
@@ -601,18 +602,6 @@ class _BillingCardState extends ConsumerState<_BillingCard> {
 }
 
 // ── Validadores IAM ──────────────────────────────────────────────────────────
-
-/// E.164 genérico: requiere +, 10-15 dígitos. Retorna null si válido o vacío.
-String? _validatePhoneE164(String? value) {
-  if (value == null || value.trim().isEmpty) return null;
-  final cleaned = value.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-  if (!cleaned.startsWith('+')) return 'Debe iniciar con + (ej. +52 55 1234 5678)';
-  final digits = cleaned.substring(1);
-  if (digits.length < 10 || digits.length > 15 || !RegExp(r'^\d+$').hasMatch(digits)) {
-    return 'Formato inválido. Usa formato E.164 (ej. +52 55 1234 5678)';
-  }
-  return null;
-}
 
 /// Email: formato básico + normalización.
 String? _validateEmail(String? value) {
@@ -1437,7 +1426,7 @@ class _EditUserDialogState extends State<_EditUserDialog> {
 
   Future<void> _save() async {
     final nombre   = _nombreCtrl.text.trim();
-    final phoneErr = _validatePhoneE164(_telefonoCtrl.text);
+    final phoneErr = validatePhoneE164(_telefonoCtrl.text);
     if (nombre.isEmpty) {
       setState(() => _error = 'Ingresa el nombre completo');
       return;
@@ -1793,7 +1782,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
   Future<void> _send() async {
     final nombre     = _nombreCtrl.text.trim();
     final emailErr   = _validateEmail(_emailCtrl.text);
-    final phoneErr   = _validatePhoneE164(_telefonoCtrl.text);
+    final phoneErr   = validatePhoneE164(_telefonoCtrl.text);
 
     if (nombre.isEmpty) {
       setState(() => _error = 'Ingresa el nombre completo');
