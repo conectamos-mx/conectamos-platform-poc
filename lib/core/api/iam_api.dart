@@ -106,4 +106,31 @@ class IamApi {
       '/iam/users/$tenantUserId/unlink-operator',
     );
   }
+
+  static Future<Map<String, dynamic>> getInvitation(String token) async {
+    final res = await ApiClient.instance.get('/iam/invite/$token');
+    return res.data is Map
+        ? Map<String, dynamic>.from(res.data as Map)
+        : <String, dynamic>{};
+  }
+
+  static Future<void> acceptInvitation(
+    String token, {
+    required String password,
+    required String nombre,
+    required String telefono,
+  }) async {
+    await ApiClient.instance.post(
+      '/iam/invite/$token/accept',
+      data: {'password': password, 'nombre': nombre, 'telefono': telefono},
+    );
+  }
+
+  static Future<void> deleteUser(String id) async {
+    await ApiClient.instance.delete('/iam/users/$id');
+  }
+
+  static Future<void> revokeInvitation(String id) async {
+    await ApiClient.instance.delete('/iam/invitations/$id');
+  }
 }
