@@ -23,6 +23,7 @@ import '../../shared/widgets/app_button.dart';
 import '../config/template_create_dialog.dart';
 import 'widgets/action_mini_diagram.dart';
 import 'widgets/precond_mini_diagram.dart';
+import 'widgets/variable_picker_dropdown.dart';
 
 import '../../shared/widgets/app_dropdown.dart';
 import '../../shared/widgets/app_multi_select.dart';
@@ -4798,10 +4799,18 @@ class _ActionDialogState extends State<_ActionDialog> {
         _hasHeaders = cfg['has_headers'] as bool? ?? false;
         final mapping = cfg['column_mapping'] as Map? ?? {};
         final fieldKeyRe = RegExp(r'^\{\{fields\.([\w.]+)\}\}$');
+        final metaKeyRe = RegExp(r'^\{\{(operator|execution)\.([\w.]+)\}\}$');
         for (final e in mapping.entries) {
           final valStr = e.value.toString();
-          final m = fieldKeyRe.firstMatch(valStr);
-          _columnMappingKeys.add(m?.group(1));
+          final fieldMatch = fieldKeyRe.firstMatch(valStr);
+          final metaMatch = metaKeyRe.firstMatch(valStr);
+          String? parsedKey;
+          if (fieldMatch != null) {
+            parsedKey = fieldMatch.group(1);
+          } else if (metaMatch != null) {
+            parsedKey = '__meta.${metaMatch.group(1)}.${metaMatch.group(2)}';
+          }
+          _columnMappingKeys.add(parsedKey);
           _columnMappingRows.add((
             TextEditingController(text: e.key.toString()),
             TextEditingController(text: valStr),
@@ -5403,6 +5412,8 @@ class _ActionDialogState extends State<_ActionDialog> {
         keys.add(key);
       }
     }
+    // Include all metadata variable keys
+    keys.addAll(kAllMetaKeys);
     return keys;
   }
 
@@ -5436,6 +5447,118 @@ class _ActionDialogState extends State<_ActionDialog> {
     }
     debugPrint('[_buildFieldDropdownItems] DONE - total items: ${items.length}');
     return items;
+  }
+
+  /// Builds a single column-mapping row used by both append_row and
+  /// update_row Google Sheets actions.
+  Widget _buildColumnMappingRow(int i) {
+    final row = _columnMappingRows[i];
+    final selectedKey = _columnMappingKeys.length > i ? _columnMappingKeys[i] : null;
+    final hasFields = widget.flowFields.isNotEmpty;
+    final allKeys = _buildAllValidKeys();
+    final isMetaKey = selectedKey != null && selectedKey.startsWith('__meta.');
+    final effectiveKey = isMetaKey
+        ? selectedKey
+        : (selectedKey != null &&
+            (allKeys.contains(selectedKey) ||
+             (_loadingCatalogSchemas && selectedKey.contains('.'))))
+            ? selectedKey
+            : null;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              // Column selector (header name or letter)
+              if (_hasHeaders && _sheetHeaders.isNotEmpty)
+                SizedBox(
+                  width: 150,
+                  child: AppDropdown<String?>(
+                    value: row.$1.text.isEmpty ? null : row.$1.text,
+                    hint: 'Columna...',
+                    items: _sheetHeaders
+                        .map((h) => AppDropdownItem<String?>(value: h, label: h))
+                        .toList(),
+                    onChanged: (v) => setState(() {
+                      row.$1.text = v ?? '';
+                    }),
+                  ),
+                )
+              else
+                SizedBox(
+                  width: 70,
+                  child: _ColMappingField(
+                    controller: row.$1,
+                    placeholder: _hasHeaders ? 'Columna' : 'A',
+                    onChanged: () => setState(() {}),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text('\u2192',
+                    style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
+              ),
+              // Value selector: VariablePickerDropdown with search
+              if (hasFields)
+                Expanded(
+                  child: VariablePickerDropdown(
+                    flowFields: widget.flowFields,
+                    catalogSchemas: _catalogSchemas,
+                    loadingCatalogSchemas: _loadingCatalogSchemas,
+                    selectedKey: effectiveKey,
+                    onSelected: (key, template) => setState(() {
+                      if (_columnMappingKeys.length > i) {
+                        _columnMappingKeys[i] = key;
+                      }
+                      if (key != null) {
+                        row.$2.text = template;
+                      } else {
+                        row.$2.clear();
+                      }
+                    }),
+                  ),
+                )
+              else
+                Expanded(
+                  child: _ColMappingField(
+                    controller: row.$2,
+                    placeholder: '{{fields.nombre}}',
+                    onChanged: () => setState(() {}),
+                  ),
+                ),
+              IconButton(
+                icon: const Icon(Icons.remove_circle_outline,
+                    size: 16, color: AppColors.ctDanger),
+                onPressed: _columnMappingRows.length > 1
+                    ? () => setState(() {
+                          row.$1.dispose();
+                          row.$2.dispose();
+                          _columnMappingRows.removeAt(i);
+                          _columnMappingKeys.removeAt(i);
+                        })
+                    : null,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                    minWidth: 28, minHeight: 28),
+              ),
+            ],
+          ),
+          // Custom text field shown below when "Personalizado" is selected
+          if (hasFields && effectiveKey == null)
+            Padding(
+              padding: const EdgeInsets.only(left: 78, top: 4),
+              child: _ColMappingField(
+                controller: row.$2,
+                placeholder: '{{fields.nombre}} o valor fijo',
+                onChanged: () => setState(() {}),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   static List<AppDropdownItem<String>> _conditionOpsForType(String? type) {
@@ -6745,162 +6868,7 @@ class _ActionDialogState extends State<_ActionDialog> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                ..._columnMappingRows.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final row = entry.value;
-                  final selectedKey = _columnMappingKeys.length > i ? _columnMappingKeys[i] : null;
-                  final hasFields = widget.flowFields.isNotEmpty;
-                  // Validate against expanded keys (includes compound asset_ref keys)
-                  // While schemas are loading, trust compound keys (contain dots)
-                  final allKeys = _buildAllValidKeys();
-                  final effectiveKey = (selectedKey != null &&
-                      (allKeys.contains(selectedKey) ||
-                       (_loadingCatalogSchemas && selectedKey.contains('.'))))
-                      ? selectedKey
-                      : null;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            if (_hasHeaders && _sheetHeaders.isNotEmpty)
-                              SizedBox(
-                                width: 150,
-                                child: AppDropdown<String?>(
-                                  value: row.$1.text.isEmpty ? null : row.$1.text,
-                                  hint: 'Columna...',
-                                  items: _sheetHeaders
-                                      .map((h) => AppDropdownItem<String?>(value: h, label: h))
-                                      .toList(),
-                                  onChanged: (v) => setState(() {
-                                    row.$1.text = v ?? '';
-                                  }),
-                                ),
-                              )
-                            else
-                              SizedBox(
-                                width: 70,
-                                child: _ColMappingField(
-                                  controller: row.$1,
-                                  placeholder: _hasHeaders ? 'Columna' : 'A',
-                                  onChanged: () => setState(() {}),
-                                ),
-                              ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6),
-                              child: Text('→',
-                                  style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
-                            ),
-                            if (hasFields)
-                              Expanded(
-                                child: _DropdownContainer(
-                                  child: DropdownButton<String?>(
-                                    value: effectiveKey,
-                                    isExpanded: true,
-                                    underline: const SizedBox.shrink(),
-                                    dropdownColor: AppColors.ctSurface,
-                                    hint: Text(
-                                      _loadingCatalogSchemas
-                                          ? 'Cargando campos…'
-                                          : 'Campo del flujo…',
-                                      style: const TextStyle(
-                                        fontFamily: 'Geist',
-                                        fontSize: 13,
-                                        color: AppColors.ctText3,
-                                      ),
-                                    ),
-                                    items: [
-                                      DropdownMenuItem<String?>(
-                                        value: null,
-                                        child: Text(
-                                          'Personalizado…',
-                                          style: const TextStyle(
-                                            fontFamily: 'Geist',
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ),
-                                      ..._buildFieldDropdownItems().map((item) => DropdownMenuItem<String?>(
-                                        value: item.value,
-                                        child: Text(
-                                          item.label,
-                                          style: const TextStyle(
-                                            fontFamily: 'Geist',
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      )),
-                                      // Temporary item while schemas load for compound keys
-                                      if (_loadingCatalogSchemas &&
-                                          effectiveKey != null &&
-                                          effectiveKey.contains('.') &&
-                                          !_buildAllValidKeys().contains(effectiveKey))
-                                        DropdownMenuItem<String?>(
-                                          value: effectiveKey,
-                                          child: Text(
-                                            'Cargando…',
-                                            style: const TextStyle(
-                                              fontFamily: 'Geist',
-                                              fontSize: 13,
-                                              color: AppColors.ctText3,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                    onChanged: (v) => setState(() {
-                                      if (_columnMappingKeys.length > i) {
-                                        _columnMappingKeys[i] = v;
-                                      }
-                                      if (v != null) {
-                                        row.$2.text = '{{fields.$v}}';
-                                      } else {
-                                        row.$2.clear();
-                                      }
-                                    }),
-                                  ),
-                                ),
-                              )
-                            else
-                              Expanded(
-                                child: _ColMappingField(
-                                  controller: row.$2,
-                                  placeholder: '{{fields.nombre}}',
-                                  onChanged: () => setState(() {}),
-                                ),
-                              ),
-                            IconButton(
-                              icon: const Icon(Icons.remove_circle_outline,
-                                  size: 16, color: AppColors.ctDanger),
-                              onPressed: _columnMappingRows.length > 1
-                                  ? () => setState(() {
-                                        row.$1.dispose();
-                                        row.$2.dispose();
-                                        _columnMappingRows.removeAt(i);
-                                        _columnMappingKeys.removeAt(i);
-                                      })
-                                  : null,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                  minWidth: 28, minHeight: 28),
-                            ),
-                          ],
-                        ),
-                        // Custom text field shown below when "Personalizado…" is selected
-                        if (hasFields && (effectiveKey == null))
-                          Padding(
-                            padding: const EdgeInsets.only(left: 78, top: 4),
-                            child: _ColMappingField(
-                              controller: row.$2,
-                              placeholder: '{{fields.nombre}} o valor fijo',
-                              onChanged: () => setState(() {}),
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                }),
+                ..._columnMappingRows.asMap().entries.map((e) => _buildColumnMappingRow(e.key)),
               ] else if (_type == 'google_sheets_update_row') ...[
                 ..._buildGoogleSheetsFields(),
                 const SizedBox(height: 16),
@@ -6994,124 +6962,7 @@ class _ActionDialogState extends State<_ActionDialog> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                ..._columnMappingRows.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final row = entry.value;
-                  final selectedKey = _columnMappingKeys.length > i ? _columnMappingKeys[i] : null;
-                  final hasFields = widget.flowFields.isNotEmpty;
-                  final allKeys = _buildAllValidKeys();
-                  final effectiveKey = (selectedKey != null &&
-                      (allKeys.contains(selectedKey) ||
-                       (_loadingCatalogSchemas && selectedKey.contains('.'))))
-                      ? selectedKey
-                      : null;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            if (_hasHeaders && _sheetHeaders.isNotEmpty)
-                              SizedBox(
-                                width: 150,
-                                child: AppDropdown<String?>(
-                                  value: row.$1.text.isEmpty ? null : row.$1.text,
-                                  hint: 'Columna...',
-                                  items: _sheetHeaders
-                                      .map((h) => AppDropdownItem<String?>(value: h, label: h))
-                                      .toList(),
-                                  onChanged: (v) => setState(() {
-                                    row.$1.text = v ?? '';
-                                  }),
-                                ),
-                              )
-                            else
-                              SizedBox(
-                                width: 70,
-                                child: _ColMappingField(
-                                  controller: row.$1,
-                                  placeholder: _hasHeaders ? 'Columna' : 'A',
-                                  onChanged: () => setState(() {}),
-                                ),
-                              ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6),
-                              child: Text('\u2192',
-                                  style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
-                            ),
-                            if (hasFields)
-                              Expanded(
-                                child: AppDropdown<String?>(
-                                  value: effectiveKey,
-                                  hint: _loadingCatalogSchemas
-                                      ? 'Cargando campos\u2026'
-                                      : 'Campo del flujo\u2026',
-                                  items: [
-                                    const AppDropdownItem<String?>(
-                                      value: null,
-                                      label: 'Personalizado\u2026',
-                                    ),
-                                    ..._buildFieldDropdownItems(),
-                                    if (_loadingCatalogSchemas &&
-                                        effectiveKey != null &&
-                                        effectiveKey.contains('.') &&
-                                        !_buildAllValidKeys().contains(effectiveKey))
-                                      AppDropdownItem<String?>(
-                                        value: effectiveKey,
-                                        label: 'Cargando\u2026',
-                                      ),
-                                  ],
-                                  onChanged: (v) => setState(() {
-                                    if (_columnMappingKeys.length > i) {
-                                      _columnMappingKeys[i] = v;
-                                    }
-                                    if (v != null) {
-                                      row.$2.text = '{{fields.$v}}';
-                                    } else {
-                                      row.$2.clear();
-                                    }
-                                  }),
-                                ),
-                              )
-                            else
-                              Expanded(
-                                child: _ColMappingField(
-                                  controller: row.$2,
-                                  placeholder: '{{fields.nombre}}',
-                                  onChanged: () => setState(() {}),
-                                ),
-                              ),
-                            IconButton(
-                              icon: const Icon(Icons.remove_circle_outline,
-                                  size: 16, color: AppColors.ctDanger),
-                              onPressed: _columnMappingRows.length > 1
-                                  ? () => setState(() {
-                                        row.$1.dispose();
-                                        row.$2.dispose();
-                                        _columnMappingRows.removeAt(i);
-                                        _columnMappingKeys.removeAt(i);
-                                      })
-                                  : null,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                  minWidth: 28, minHeight: 28),
-                            ),
-                          ],
-                        ),
-                        if (hasFields && (effectiveKey == null))
-                          Padding(
-                            padding: const EdgeInsets.only(left: 78, top: 4),
-                            child: _ColMappingField(
-                              controller: row.$2,
-                              placeholder: '{{fields.nombre}} o valor fijo',
-                              onChanged: () => setState(() {}),
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                }),
+                ..._columnMappingRows.asMap().entries.map((e) => _buildColumnMappingRow(e.key)),
               ],
               if (!_isKnownType) ..._renderDynamicActionFields(),
 
