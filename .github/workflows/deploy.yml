@@ -97,7 +97,7 @@ jobs:
 
       # ── Deploy to S3 ──────────────────────────────────────────────────────────
       # Flutter hashes asset filenames → all assets get long-lived cache.
-      # index.html is NOT hashed → no-cache so browsers always fetch the latest.
+      # Entry points with fixed names (no hash) must revalidate on every load.
       - name: Sync assets to S3 (long-lived cache)
         run: |
           aws s3 sync build/web s3://${{ steps.tf.outputs.bucket }} \
@@ -109,6 +109,16 @@ jobs:
         run: |
           aws s3 cp build/web/index.html s3://${{ steps.tf.outputs.bucket }}/index.html \
             --cache-control "no-cache, no-store, must-revalidate"
+
+      - name: Fix cache headers for unhashed entry points
+        run: |
+          BUCKET="s3://${{ steps.tf.outputs.bucket }}"
+          for f in main.dart.js flutter_bootstrap.js flutter_service_worker.js manifest.json; do
+            aws s3 cp "$BUCKET/$f" "$BUCKET/$f" \
+              --metadata-directive REPLACE \
+              --cache-control "no-cache, must-revalidate" \
+              --content-type "$([ "$f" = "manifest.json" ] && echo 'application/json' || echo 'application/javascript')"
+          done
 
       # ── Invalidate CloudFront ─────────────────────────────────────────────────
       - name: Invalidate CloudFront cache
