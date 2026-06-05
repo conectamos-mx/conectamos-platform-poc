@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/channels_api.dart';
@@ -8,8 +7,9 @@ import '../../core/api/iam_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
-import '../../shared/validators/phone_validator.dart';
+import '../../core/utils/phone_normalizer.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_phone_field.dart';
 import '../../shared/widgets/page_header.dart';
 import 'role_permissions_panel.dart';
 import '../settings/operator_fields_screen.dart';
@@ -1405,44 +1405,43 @@ class _EditUserDialog extends StatefulWidget {
 
 class _EditUserDialogState extends State<_EditUserDialog> {
   late final TextEditingController _nombreCtrl;
-  late final TextEditingController _telefonoCtrl;
+  String _phoneE164 = '';
+  String _initialLocalNumber = '';
+  String _initialCountryIso = 'MX';
   bool _saving = false;
   String? _error;
-  String? _phoneError;
 
   @override
   void initState() {
     super.initState();
-    _nombreCtrl   = TextEditingController(text: widget.initialNombre);
-    _telefonoCtrl = TextEditingController(text: widget.initialTelefono);
+    _nombreCtrl = TextEditingController(text: widget.initialNombre);
+    // Parse existing phone into country + local for the picker.
+    final raw = widget.initialTelefono;
+    if (raw.isNotEmpty) {
+      final (iso, local) = PhoneNormalizer.parsePhone(raw);
+      _initialCountryIso = iso;
+      _initialLocalNumber = local;
+      _phoneE164 = raw;
+    }
   }
 
   @override
   void dispose() {
     _nombreCtrl.dispose();
-    _telefonoCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
-    final nombre   = _nombreCtrl.text.trim();
-    final phoneErr = validatePhoneE164(_telefonoCtrl.text);
+    final nombre = _nombreCtrl.text.trim();
     if (nombre.isEmpty) {
       setState(() => _error = 'Ingresa el nombre completo');
       return;
     }
-    if (phoneErr != null) {
-      setState(() => _phoneError = phoneErr);
-      return;
-    }
-    setState(() { _saving = true; _error = null; _phoneError = null; });
+    setState(() { _saving = true; _error = null; });
     try {
-      final phoneRaw = _telefonoCtrl.text.trim();
       await IamApi.updateUser(widget.userId, {
         'nombre':   nombre,
-        'telefono': phoneRaw.isNotEmpty
-            ? phoneRaw.replaceAll(RegExp(r'[\s\-\(\)]'), '')
-            : '',
+        'telefono': _phoneE164,
       });
       if (!mounted) return;
       widget.onSaved();
@@ -1491,49 +1490,11 @@ class _EditUserDialogState extends State<_EditUserDialog> {
                 placeholder: 'Juan García',
               ),
               const SizedBox(height: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Teléfono (opcional)', style: AppTextStyles.formLabel),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: _telefonoCtrl,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[\d\+\s\-\(\)]')),
-                    ],
-                    onChanged: (_) {
-                      if (_phoneError != null) setState(() => _phoneError = null);
-                    },
-                    style: AppTextStyles.body,
-                    decoration: InputDecoration(
-                      hintText: '+52 55 1234 5678',
-                      hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                      errorText: _phoneError,
-                      errorStyle: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
-                      filled: true,
-                      fillColor: AppColors.ctSurface2,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppColors.ctBorder2),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(
-                          color: _phoneError != null ? AppColors.ctDanger : AppColors.ctBorder2,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(
-                          color: _phoneError != null ? AppColors.ctDanger : AppColors.ctTeal,
-                          width: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+              PhoneFieldWidget(
+                label: 'Teléfono (opcional)',
+                initialLocalNumber: _initialLocalNumber,
+                initialCountryIso: _initialCountryIso,
+                onChanged: (e164) => _phoneE164 = e164,
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
@@ -1740,15 +1701,14 @@ class _InviteUserDialog extends ConsumerStatefulWidget {
 }
 
 class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
-  final _nombreCtrl   = TextEditingController();
-  final _telefonoCtrl = TextEditingController();
-  final _emailCtrl    = TextEditingController();
+  final _nombreCtrl = TextEditingController();
+  final _emailCtrl  = TextEditingController();
+  String _phoneE164 = '';
   List<Map<String, dynamic>> _availableRoles = [];
   String? _roleId;
   bool _rolesLoading = true;
   bool _sending = false;
   String? _error;
-  String? _phoneError;
   String? _emailError;
 
   @override
@@ -1760,7 +1720,6 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
   @override
   void dispose() {
     _nombreCtrl.dispose();
-    _telefonoCtrl.dispose();
     _emailCtrl.dispose();
     super.dispose();
   }
@@ -1780,9 +1739,8 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
   }
 
   Future<void> _send() async {
-    final nombre     = _nombreCtrl.text.trim();
-    final emailErr   = _validateEmail(_emailCtrl.text);
-    final phoneErr   = validatePhoneE164(_telefonoCtrl.text);
+    final nombre   = _nombreCtrl.text.trim();
+    final emailErr = _validateEmail(_emailCtrl.text);
 
     if (nombre.isEmpty) {
       setState(() => _error = 'Ingresa el nombre completo');
@@ -1792,25 +1750,20 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
       setState(() => _emailError = emailErr);
       return;
     }
-    if (phoneErr != null) {
-      setState(() => _phoneError = phoneErr);
-      return;
-    }
     if (_roleId == null || _roleId!.isEmpty) {
       setState(() => _error = 'Selecciona un rol');
       return;
     }
-    setState(() { _sending = true; _error = null; _phoneError = null; _emailError = null; });
+    setState(() { _sending = true; _error = null; _emailError = null; });
     try {
-      final email    = _emailCtrl.text.trim().toLowerCase();
-      final phoneRaw = _telefonoCtrl.text.trim();
+      final email = _emailCtrl.text.trim().toLowerCase();
       final payload = <String, dynamic>{
         'nombre':  nombre,
         'email':   email,
         'role_id': _roleId,
       };
-      if (phoneRaw.isNotEmpty) {
-        payload['telefono'] = phoneRaw.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+      if (_phoneE164.isNotEmpty) {
+        payload['telefono'] = _phoneE164;
       }
       await IamApi.inviteUser(payload);
       if (!mounted) return;
@@ -1863,107 +1816,51 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
                 placeholder: 'Juan García',
               ),
               const SizedBox(height: 12),
-              _Row2(
-                left: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Email', style: AppTextStyles.formLabel),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _emailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      onChanged: (_) {
-                        if (_emailError != null) setState(() => _emailError = null);
-                      },
-                      style: AppTextStyles.body,
-                      decoration: InputDecoration(
-                        hintText: 'usuario@empresa.com',
-                        hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                        errorText: _emailError,
-                        errorStyle: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
-                        filled: true,
-                        fillColor: AppColors.ctSurface2,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.ctBorder2),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Email', style: AppTextStyles.formLabel),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    onChanged: (_) {
+                      if (_emailError != null) setState(() => _emailError = null);
+                    },
+                    style: AppTextStyles.body,
+                    decoration: InputDecoration(
+                      hintText: 'usuario@empresa.com',
+                      hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                      errorText: _emailError,
+                      errorStyle: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
+                      filled: true,
+                      fillColor: AppColors.ctSurface2,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppColors.ctBorder2),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: _emailError != null ? AppColors.ctDanger : AppColors.ctBorder2,
                         ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(
-                            color: _emailError != null ? AppColors.ctDanger : AppColors.ctBorder2,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(
-                            color: _emailError != null ? AppColors.ctDanger : AppColors.ctTeal,
-                            width: 1.5,
-                          ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: _emailError != null ? AppColors.ctDanger : AppColors.ctTeal,
+                          width: 1.5,
                         ),
                       ),
                     ),
-                  ],
-                ),
-                right: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Teléfono (opcional)',
-                      style: AppTextStyles.formLabel,
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _telefonoCtrl,
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'[\d\+\s\-\(\)]'),
-                        ),
-                      ],
-                      onChanged: (_) {
-                        if (_phoneError != null) {
-                          setState(() => _phoneError = null);
-                        }
-                      },
-                      style: AppTextStyles.body,
-                      decoration: InputDecoration(
-                        hintText: '+52 55 1234 5678',
-                        hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                        errorText: _phoneError,
-                        errorStyle: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
-                        filled: true,
-                        fillColor: AppColors.ctSurface2,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide:
-                              const BorderSide(color: AppColors.ctBorder2),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(
-                            color: _phoneError != null
-                                ? AppColors.ctDanger
-                                : AppColors.ctBorder2,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(
-                            color: _phoneError != null
-                                ? AppColors.ctDanger
-                                : AppColors.ctTeal,
-                            width: 1.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              PhoneFieldWidget(
+                label: 'Teléfono (opcional)',
+                onChanged: (e164) => _phoneE164 = e164,
               ),
               const SizedBox(height: 12),
               const Text(
