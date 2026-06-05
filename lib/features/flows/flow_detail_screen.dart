@@ -6368,31 +6368,26 @@ class _ActionDialogState extends State<_ActionDialog> {
                   style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 6),
-                _DropdownContainer(
-                  child: DropdownButton<String>(
-                    value: _notificationDestinationType,
-                    isExpanded: true,
-                    underline: const SizedBox.shrink(),
-                    dropdownColor: AppColors.ctSurface,
-                    items: const [
-                      DropdownMenuItem<String>(
-                        value: 'group',
-                        child: Text('Grupo (bidireccional)'),
-                      ),
-                      DropdownMenuItem<String>(
-                        value: 'control_tower',
-                        child: Text('Torre de Control (solo notificaciones)'),
-                      ),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) {
-                        setState(() {
-                          _notificationDestinationType = v;
-                          _selectedGroupId = null; // Reset selection
-                        });
-                      }
-                    },
-                  ),
+                AppDropdown<String>(
+                  value: _notificationDestinationType,
+                  items: const [
+                    AppDropdownItem<String>(
+                      value: 'group',
+                      label: 'Grupo',
+                    ),
+                    AppDropdownItem<String>(
+                      value: 'control_tower',
+                      label: 'Torre de Control',
+                    ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() {
+                        _notificationDestinationType = v;
+                        _selectedGroupId = null; // Reset selection
+                      });
+                    }
+                  },
                 ),
                 const SizedBox(height: 16),
 
@@ -6450,29 +6445,21 @@ class _ActionDialogState extends State<_ActionDialog> {
                     );
                   }
 
-                  return _DropdownContainer(
-                    child: DropdownButton<String>(
-                      value: dataList.any((g) => g['id'] == _selectedGroupId)
-                          ? _selectedGroupId
-                          : null,
-                      isExpanded: true,
-                      underline: const SizedBox.shrink(),
-                      dropdownColor: AppColors.ctSurface,
-                      hint: Text(hintText,
-                          style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
-                      items: dataList.map((g) {
-                        final id = g['id'] as String? ?? '';
-                        final name = g['display_name'] as String? ?? id;
-                        final chType = g['channel_type'] as String? ?? '';
-                        return DropdownMenuItem<String>(
-                          value: id,
-                          child: Text('$name ($chType)',
-                              style: AppTextStyles.body),
-                        );
-                      }).toList(),
-                      onChanged: (v) =>
-                          setState(() => _selectedGroupId = v),
-                    ),
+                  return AppDropdown<String>(
+                    value: dataList.any((g) => g['id'] == _selectedGroupId)
+                        ? _selectedGroupId
+                        : null,
+                    hint: hintText,
+                    items: dataList.map((g) {
+                      final id = g['id'] as String? ?? '';
+                      final name = g['display_name'] as String? ?? id;
+                      final chType = g['channel_type'] as String? ?? '';
+                      return AppDropdownItem<String>(
+                        value: id,
+                        label: '$name ($chType)',
+                      );
+                    }).toList(),
+                    onChanged: (v) => setState(() => _selectedGroupId = v),
                   );
                 }),
                 const SizedBox(height: 16),

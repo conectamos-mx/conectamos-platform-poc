@@ -386,7 +386,7 @@ Active migration in progress — do not revert these changes:
 - Delete es soft-delete (`status='deleted'`)
 
 **Flow integration:** `flow_detail_screen.dart` action `notify_group`
-- Selector de tipo: "Grupo (bidireccional)" o "Torre de Control (solo notificaciones)"
+- Selector de tipo: "Grupo (bidireccional)" o "Torre de Control"
 - Solo torres `active` aparecen en selector
 - Guarda `destination_type` ('group' o 'control_tower') + `group_id`
 
