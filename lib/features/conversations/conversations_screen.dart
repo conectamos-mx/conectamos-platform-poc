@@ -5165,15 +5165,6 @@ class _FeedMessagesState extends State<_FeedMessages> {
 
 
 
-  String _timeLabel(String? iso) {
-    if (iso == null) return '';
-    try {
-      final dt = DateTime.parse(iso).toLocal();
-      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return '';
-    }
-  }
 
   Widget _dateSepChip(String label) => Center(
         child: Container(
@@ -5281,7 +5272,7 @@ class _FeedMessagesState extends State<_FeedMessages> {
                     msg['chat_id'] as String? ?? '';
                 final name = msg['from_name'] as String? ?? phone;
                 final chatId = msg['chat_id'] as String? ?? '';
-                final time = _timeLabel(msg['received_at'] as String?);
+                final time = fmtTime(msg['received_at'] as String?, fallback: '');
                 final waStatus = msg['wa_status'] as String?;
                 final body = _msgBody(msg);
                 final messageType = msg['message_type'] as String?;

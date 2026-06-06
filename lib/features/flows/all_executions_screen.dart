@@ -1872,6 +1872,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
                     worker_:     worker_,
                     status:      status,
                     channelTypes: channelTypes,
+                    createdStr:  createdStr,
                     createdDt:   createdDt,
                     elapsedSec:  elapsedSec,
                     captured:    captured,
@@ -1904,6 +1905,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     required Map<String, dynamic>? worker_,
     required String status,
     required List<String> channelTypes,
+    required String? createdStr,
     required DateTime? createdDt,
     required int? elapsedSec,
     required int captured,
@@ -1962,49 +1964,18 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
       case 'channel':
         return _ChannelBadge(channelTypes: channelTypes);
       case 'created':
-        if (createdDt == null) {
-          return Text('—',
-              style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2));
-        }
-        final now            = DateTime.now();
-        final local          = createdDt.toLocal();
-        final todayStart     = DateTime(now.year, now.month, now.day);
-        final yesterdayStart = todayStart.subtract(const Duration(days: 1));
-        String datePart;
-        if (!local.isBefore(todayStart)) {
-          datePart = 'Hoy';
-        } else if (!local.isBefore(yesterdayStart)) {
-          datePart = 'Ayer';
-        } else {
-          const meses = ['ene','feb','mar','abr','may','jun',
-                         'jul','ago','sep','oct','nov','dic'];
-          datePart = '${local.day} ${meses[local.month - 1]}';
-        }
-        final hh    = local.hour.toString().padLeft(2, '0');
-        final mm    = local.minute.toString().padLeft(2, '0');
-        final line1 = '$datePart, $hh:$mm';
-        final diff  = now.difference(local);
-        final String line2;
-        if (diff.inMinutes < 1) {
-          line2 = 'ahora';
-        } else if (diff.inMinutes < 60) {
-          line2 = 'hace ${diff.inMinutes}m';
-        } else if (diff.inHours < 24) {
-          line2 = 'hace ${diff.inHours}h';
-        } else {
-          line2 = 'hace ${diff.inDays}d';
-        }
+        final cell = fmtCreatedCell(createdStr);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment:  MainAxisAlignment.center,
           children: [
-            Text(line1,
+            Text(cell.dateLine,
                 style: AppFonts.geist(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: AppColors.ctText,
                 )),
-            Text(line2,
+            Text(cell.relativeLine,
                 style: AppFonts.geist(
                     fontSize: 11, color: AppColors.ctText2)),
           ],
@@ -3271,19 +3242,6 @@ class _SidebarRangePickerRow extends StatelessWidget {
   final void Function(String from, String to) onRangeSelected;
   final VoidCallback onClear;
 
-  static String _fmt(String iso) {
-    try {
-      final dt = DateTime.parse(iso).toLocal();
-      final d = '${dt.day.toString().padLeft(2, '0')}/'
-                '${dt.month.toString().padLeft(2, '0')}/'
-                '${dt.year}';
-      final h = '${dt.hour.toString().padLeft(2, '0')}:'
-                '${dt.minute.toString().padLeft(2, '0')}';
-      return '$d $h';
-    } catch (_) {
-      return iso;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -3368,11 +3326,11 @@ class _SidebarRangePickerRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (filterDateFrom != null)
-                  Text('Desde: ${_fmt(filterDateFrom!)}',
+                  Text('Desde: ${fmtDateSlash(filterDateFrom!)}',
                       style: AppFonts.geist(
                           fontSize: 11, color: AppColors.ctTeal)),
                 if (filterDateTo != null)
-                  Text('Hasta: ${_fmt(filterDateTo!)}',
+                  Text('Hasta: ${fmtDateSlash(filterDateTo!)}',
                       style: AppFonts.geist(
                           fontSize: 11, color: AppColors.ctTeal)),
               ],
