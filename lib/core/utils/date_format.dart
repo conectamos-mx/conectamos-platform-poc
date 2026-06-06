@@ -123,6 +123,24 @@ String fmtExecutionDate(String? iso) {
   }
 }
 
+// ── Group label ─────────────────────────────────────────────────────────────
+
+/// "Hoy" / "Ayer" / "5 ene 2026" for date-group separators.
+/// Converts [utcInstant] to active tenant timezone via toZone().
+/// Compares against nowInZone() for "Hoy"/"Ayer" — NOT DateTime.now().
+String fmtDateGroupLabel(DateTime utcInstant) {
+  final tzR = toZone(utcInstant);
+  final nowR = nowInZone();
+  final today = DateTime(nowR.now.year, nowR.now.month, nowR.now.day);
+  final yesterday = today.subtract(const Duration(days: 1));
+  final day = DateTime(tzR.dt.year, tzR.dt.month, tzR.dt.day);
+  final suffix = tzR.utcFallback ? ' (UTC)' : '';
+  if (day == today) return 'Hoy$suffix';
+  if (day == yesterday) return 'Ayer$suffix';
+  final label = '${_dMmm.format(tzR.dt)} ${tzR.dt.year}';
+  return '$label$suffix';
+}
+
 // ── Predicate ───────────────────────────────────────────────────────────────
 
 /// True if [iso] parses to today in active tenant timezone.

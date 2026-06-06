@@ -259,6 +259,55 @@ void main() {
     });
   });
 
+  // ── fmtDateGroupLabel ──────────────────────────────────────────────────────
+
+  group('fmtDateGroupLabel', () {
+    setUp(() => setActiveZone('America/Mexico_City'));
+
+    test('today returns Hoy', () {
+      final now = DateTime.now().toUtc();
+      expect(fmtDateGroupLabel(now), 'Hoy');
+    });
+
+    test('yesterday returns Ayer', () {
+      final yesterday = DateTime.now().subtract(const Duration(hours: 25)).toUtc();
+      expect(fmtDateGroupLabel(yesterday), 'Ayer');
+    });
+
+    test('old date returns d mmm yyyy via intl', () {
+      final dt = DateTime.utc(2026, 3, 15, 12, 0);
+      final result = fmtDateGroupLabel(dt);
+      // intl es_MX: "15 mar 2026" (lowercase)
+      expect(result, contains('15'));
+      expect(result, contains('mar'));
+      expect(result, contains('2026'));
+    });
+
+    test('uses tenant timezone not browser timezone', () {
+      // 2026-01-01T04:00:00Z → Dec 31 22:00 in Mexico City (UTC-6)
+      // If using browser TZ this could be Jan 1 — but in CDMX it's Dec 31
+      setActiveZone('America/Mexico_City');
+      final dt = DateTime.utc(2026, 1, 1, 4, 0);
+      final result = fmtDateGroupLabel(dt);
+      expect(result, contains('31'));
+      expect(result, contains('dic'));
+      expect(result, contains('2025'));
+    });
+
+    test('invalid zone returns date with (UTC) suffix', () {
+      setActiveZone('Invalid/Zone');
+      final dt = DateTime.utc(2026, 6, 15, 12, 0);
+      final result = fmtDateGroupLabel(dt);
+      expect(result, contains('(UTC)'));
+    });
+
+    test('invalid zone today returns Hoy (UTC)', () {
+      setActiveZone('Invalid/Zone');
+      final now = DateTime.now().toUtc();
+      expect(fmtDateGroupLabel(now), 'Hoy (UTC)');
+    });
+  });
+
   // ── Initial state (before setActiveZone) ──────────────────────────────────
 
   group('initial UTC state', () {

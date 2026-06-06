@@ -24,6 +24,7 @@ import '../../core/api/conversations_api.dart';
 import '../../core/api/messages_api.dart';
 import '../../core/api/operators_api.dart';
 import '../../core/utils/date_format.dart';
+import '../../core/utils/tz_format.dart';
 import '../../core/utils/phone_normalizer.dart';
 import '../../core/api/sessions_api.dart';
 import '../../core/api/supabase_messages.dart';
@@ -1733,20 +1734,6 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
     }
   }
 
-  String _chatFormatDate(DateTime dt) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final d = DateTime(dt.year, dt.month, dt.day);
-    if (d == today) return 'Hoy';
-    if (d == yesterday) return 'Ayer';
-    const months = [
-      '', 'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-      'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
-    ];
-    return '${dt.day} ${months[dt.month]} ${dt.year}';
-  }
-
   Widget _chatDateSepChip(String label) => Center(
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 8),
@@ -2907,11 +2894,12 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
                 for (final msg in visibleMessages) {
                   final iso = msg['received_at'] as String?;
                   DateTime? dt;
-                  if (iso != null) dt = DateTime.tryParse(iso)?.toLocal();
+                  if (iso != null) dt = DateTime.tryParse(iso);
                   if (dt != null) {
-                    final day = DateTime(dt.year, dt.month, dt.day);
+                    final tz = toZone(dt).dt;
+                    final day = DateTime(tz.year, tz.month, tz.day);
                     if (lastDay == null || day != lastDay) {
-                      groups.add((label: _chatFormatDate(dt), msgs: []));
+                      groups.add((label: fmtDateGroupLabel(dt), msgs: []));
                       lastDay = day;
                     }
                   } else if (groups.isEmpty) {
@@ -5159,11 +5147,12 @@ class _FeedMessagesState extends State<_FeedMessages> {
     for (final msg in widget.messages) {
       final iso = msg['received_at'] as String?;
       DateTime? dt;
-      if (iso != null) dt = DateTime.tryParse(iso)?.toLocal();
+      if (iso != null) dt = DateTime.tryParse(iso);
       if (dt != null) {
-        final day = DateTime(dt.year, dt.month, dt.day);
+        final tz = toZone(dt).dt;
+        final day = DateTime(tz.year, tz.month, tz.day);
         if (lastDay == null || day != lastDay) {
-          groups.add((label: _formatDate(dt), msgs: []));
+          groups.add((label: fmtDateGroupLabel(dt), msgs: []));
           lastDay = day;
         }
       } else if (groups.isEmpty) {
@@ -5174,19 +5163,7 @@ class _FeedMessagesState extends State<_FeedMessages> {
     return groups;
   }
 
-  String _formatDate(DateTime dt) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final d = DateTime(dt.year, dt.month, dt.day);
-    if (d == today) return 'Hoy';
-    if (d == yesterday) return 'Ayer';
-    const months = [
-      '', 'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-      'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
-    ];
-    return '${dt.day} ${months[dt.month]} ${dt.year}';
-  }
+
 
   String _timeLabel(String? iso) {
     if (iso == null) return '';
