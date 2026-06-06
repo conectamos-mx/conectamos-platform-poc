@@ -8,8 +8,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
-
 import '../../core/api/flows_api.dart';
 import '../../core/utils/date_format.dart' as dtfmt;
 import '../../core/theme/app_theme.dart';
@@ -1138,9 +1136,7 @@ class _DataTableWidget extends ConsumerWidget {
     if (str.isEmpty) return '';
     if (!str.contains('T') && !(str.contains('-') && str.length >= 10)) return str;
     try {
-      // UTC-6 approximation for America/Mexico_City (no timezone package)
-      final dt = DateTime.parse(str).toUtc().subtract(const Duration(hours: 6));
-      return DateFormat('dd/MM HH:mm').format(dt);
+      return dtfmt.fmtDateTimeCompact(str);
     } catch (_) {
       return str;
     }

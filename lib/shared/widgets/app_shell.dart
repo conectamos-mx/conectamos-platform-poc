@@ -58,6 +58,9 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    // ADR-414: keep tz_format global in sync with active tenant timezone.
+    ref.watch(tenantZoneSyncProvider);
+
     // Covers fresh-login case: currentUserProvider is a synchronous Provider
     // that caches null and is never invalidated by auth changes.
     // Listening here ensures load() is called when sign-in completes.
