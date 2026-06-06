@@ -12,6 +12,7 @@ import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/date_format.dart';
+import '../../core/utils/relative_time.dart';
 import '../../shared/widgets/app_button.dart';
 import '../conversations/conversations_screen.dart' show selectedChannelIdProvider;
 import 'widgets/execution_header_block.dart';
@@ -38,13 +39,6 @@ class _ExecutionDetailScreenState
   String? _error;
   Map<String, dynamic>? _exec;
   Map<String, dynamic>? _flow;
-
-  String _elapsedSince(DateTime t) {
-    final d = DateTime.now().difference(t);
-    if (d.inSeconds < 60) return 'hace ${d.inSeconds}s';
-    if (d.inMinutes < 60) return 'hace ${d.inMinutes}m';
-    return 'hace ${d.inHours}h';
-  }
 
   @override
   void initState() {
@@ -201,7 +195,7 @@ class _ExecutionDetailScreenState
                           children: [
                             if (_lastFetch != null)
                               Text(
-                                'Act. ${_elapsedSince(_lastFetch!)}',
+                                'Act. ${fmtRelative(_lastFetch!.toUtc().toIso8601String(), compact: true, showSeconds: true)}',
                                 style: AppFonts.geist(fontSize: 11, color: AppColors.ctText3),
                               ),
                             const SizedBox(width: 4),

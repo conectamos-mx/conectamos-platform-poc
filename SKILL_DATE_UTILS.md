@@ -86,9 +86,10 @@ Todas las funciones delegan al global de zona activa. **Sin parametro `zone:`.**
 
 | Funcion | Firma | Input | Formato salida | Ejemplo | Cuando usar |
 |---|---|---|---|---|---|
-| `fmtRelative` | `String fmtRelative(String? iso, {String nullLabel = '—', bool showSeconds = false})` | ISO string | Ahora / Hace Xm / Hace Xh / Ayer / Hace X dias | `"Hace 5 min"` | Tiempo relativo en listas. `nullLabel: 'Nunca'` para catalogos. |
+| `fmtRelative` | `String fmtRelative(String? iso, {String nullLabel, bool showSeconds, bool compact, int? absoluteAfterDays})` | ISO string | Default: Ahora/Hace X min/Hace Xh/Ayer/Hace X días. compact: ahora/hace Xm/hace Xh/ayer/hace Xd. absoluteAfterDays: dd/MM/yyyy si > N días | `"Hace 5 min"`, `"hace 5m"`, `"05/01/2026"` | Tiempo relativo canonico. `compact: true` para indicadores "Act.". `absoluteAfterDays: 7` para escalaciones. |
 | `fmtElapsedSeconds` | `String fmtElapsedSeconds(int? seconds)` | int (segundos) | Xs / Xm Xs / Xh Xm | `"3m 20s"` | Duracion calculada por backend. NO es un timestamp. Sin TZ. |
-| `elapsedSince` | `String elapsedSince(DateTime t)` | DateTime | hace Xs / hace Xm / hace Xh | `"hace 5m"` | Tiempo desde ultimo fetch. |
+
+> `elapsedSince` fue eliminada en PLA-86. Usar `fmtRelative(dt.toUtc().toIso8601String(), compact: true, showSeconds: true)` en su lugar.
 
 ---
 

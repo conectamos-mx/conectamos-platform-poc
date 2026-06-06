@@ -11,6 +11,7 @@ import '../../core/api/overview_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/date_format.dart';
+import '../../core/utils/relative_time.dart';
 import '../../shared/widgets/operator_avatar.dart';
 import '../../shared/widgets/screen_header.dart';
 
@@ -164,9 +165,7 @@ class _LastUpdatedLabelState extends State<_LastUpdatedLabel> {
   String get _label {
     final lu = widget.lastUpdated;
     if (lu == null) return 'Actualizando...';
-    final diff = DateTime.now().difference(lu);
-    if (diff.inMinutes < 1) return 'Actualizado hace ${diff.inSeconds}s';
-    return 'Actualizado hace ${diff.inMinutes}m';
+    return 'Actualizado ${fmtRelative(lu.toUtc().toIso8601String(), compact: true, showSeconds: true)}';
   }
 
   @override

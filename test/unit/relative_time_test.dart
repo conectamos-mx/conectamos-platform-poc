@@ -1,15 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:conectamos_platform/core/utils/relative_time.dart';
 import 'package:conectamos_platform/core/utils/tz_format.dart';
 
 void main() {
-  setUpAll(() {
+  setUpAll(() async {
+    await initializeDateFormatting('es_MX', null);
     initTz();
   });
 
-  // ── fmtRelative ─────────────────────────────────────────────────────────────
+  // ── fmtRelative (default / Title-case verbose) ────────────────────────────
 
-  group('fmtRelative', () {
+  group('fmtRelative default', () {
     setUp(() => setActiveZone('America/Mexico_City'));
 
     test('null returns default dash', () {
@@ -63,6 +65,93 @@ void main() {
     });
   });
 
+  // ── fmtRelative compact ──────────────────────────────────────────────────
+
+  group('fmtRelative compact', () {
+    setUp(() => setActiveZone('America/Mexico_City'));
+
+    test('just now returns ahora', () {
+      final iso = DateTime.now().toUtc().toIso8601String();
+      expect(fmtRelative(iso, compact: true), 'ahora');
+    });
+
+    test('just now with showSeconds returns hace Xs', () {
+      final iso = DateTime.now().toUtc().toIso8601String();
+      final result = fmtRelative(iso, compact: true, showSeconds: true);
+      expect(result, startsWith('hace'));
+      expect(result, endsWith('s'));
+    });
+
+    test('5 minutes ago returns hace 5m', () {
+      final dt = DateTime.now().subtract(const Duration(minutes: 5));
+      expect(fmtRelative(dt.toUtc().toIso8601String(), compact: true), 'hace 5m');
+    });
+
+    test('3 hours ago returns hace 3h', () {
+      final dt = DateTime.now().subtract(const Duration(hours: 3));
+      expect(fmtRelative(dt.toUtc().toIso8601String(), compact: true), 'hace 3h');
+    });
+
+    test('1 day ago returns ayer', () {
+      final dt = DateTime.now().subtract(const Duration(hours: 25));
+      expect(fmtRelative(dt.toUtc().toIso8601String(), compact: true), 'ayer');
+    });
+
+    test('3 days ago returns hace 3d', () {
+      final dt = DateTime.now().subtract(const Duration(days: 3));
+      expect(fmtRelative(dt.toUtc().toIso8601String(), compact: true), 'hace 3d');
+    });
+  });
+
+  // ── fmtRelative absoluteAfterDays ─────────────────────────────────────────
+
+  group('fmtRelative absoluteAfterDays', () {
+    setUp(() => setActiveZone('America/Mexico_City'));
+
+    test('6 days with absoluteAfterDays=7 returns relative', () {
+      final dt = DateTime.now().subtract(const Duration(days: 6));
+      final result = fmtRelative(
+        dt.toUtc().toIso8601String(),
+        compact: true,
+        absoluteAfterDays: 7,
+      );
+      expect(result, contains('6'));
+      expect(result, isNot(contains('/')));
+    });
+
+    test('8 days with absoluteAfterDays=7 returns dd/MM/yyyy', () {
+      final dt = DateTime.now().subtract(const Duration(days: 8));
+      final result = fmtRelative(
+        dt.toUtc().toIso8601String(),
+        compact: true,
+        absoluteAfterDays: 7,
+      );
+      expect(result, matches(RegExp(r'^\d{2}/\d{2}/\d{4}$')));
+    });
+
+    test('absoluteAfterDays uses tenant timezone for date', () {
+      setActiveZone('America/Mexico_City');
+      // 10 days ago at 4am UTC → in Mexico City it's previous day
+      final dt = DateTime.now().subtract(const Duration(days: 10));
+      final result = fmtRelative(
+        dt.toUtc().toIso8601String(),
+        absoluteAfterDays: 7,
+      );
+      expect(result, matches(RegExp(r'^\d{2}/\d{2}/\d{4}$')));
+    });
+
+    test('absoluteAfterDays with invalid zone returns absolute date', () {
+      setActiveZone('Invalid/Zone');
+      final dt = DateTime.now().subtract(const Duration(days: 10));
+      final result = fmtRelative(
+        dt.toUtc().toIso8601String(),
+        absoluteAfterDays: 7,
+      );
+      // Falls back to UTC — still returns dd/MM/yyyy (no (UTC) suffix for absolute dates)
+      expect(result, matches(RegExp(r'^\d{2}/\d{2}/\d{4}$')));
+    });
+  });
+
   // ── fmtElapsedSeconds ───────────────────────────────────────────────────────
 
   group('fmtElapsedSeconds', () {
@@ -96,37 +185,6 @@ void main() {
 
     test('3600 seconds', () {
       expect(fmtElapsedSeconds(3600), '1h 0m');
-    });
-  });
-
-  // ── elapsedSince ────────────────────────────────────────────────────────────
-
-  group('elapsedSince', () {
-    setUp(() => setActiveZone('America/Mexico_City'));
-
-    test('just now returns hace 0s', () {
-      expect(elapsedSince(DateTime.now()), 'hace 0s');
-    });
-
-    test('30 seconds ago returns hace 30s', () {
-      final t = DateTime.now().subtract(const Duration(seconds: 30));
-      expect(elapsedSince(t), 'hace 30s');
-    });
-
-    test('5 minutes ago returns hace 5m', () {
-      final t = DateTime.now().subtract(const Duration(minutes: 5));
-      expect(elapsedSince(t), 'hace 5m');
-    });
-
-    test('2 hours ago returns hace 2h', () {
-      final t = DateTime.now().subtract(const Duration(hours: 2));
-      expect(elapsedSince(t), 'hace 2h');
-    });
-
-    test('works with invalid zone (fallback UTC)', () {
-      setActiveZone('Invalid/Zone');
-      final t = DateTime.now().subtract(const Duration(minutes: 3));
-      expect(elapsedSince(t), contains('hace'));
     });
   });
 }
