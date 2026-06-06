@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:meta/meta.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../providers/auth_provider.dart';
@@ -14,22 +15,51 @@ class ApiClient {
   ApiClient({
     required SupabaseClient supabaseClient,
     required KeyValueStore storage,
-  }) : dio = _createDio(supabaseClient: supabaseClient, storage: storage);
+    Interceptor? testInterceptor,
+  }) : dio = _createDio(
+         supabaseClient: supabaseClient,
+         storage: storage,
+         testInterceptor: testInterceptor,
+       );
 
   final Dio dio;
 
   static const String baseUrl = _apiBaseUrl;
 
   // ── Legacy static accessor (used by ~30 API classes) ───────────────────────
-  // Initialized via init() in main.dart before runApp.
-  static late final ApiClient _default;
-  static Dio get instance => _default.dio;
+  // Initialized once via init() in main.dart before runApp.
+  // Immutable after first init — use resetForTest() in tests only.
+  static ApiClient? _default;
+  static bool _initialized = false;
+
+  static Dio get instance {
+    assert(_initialized, 'ApiClient.init() must be called before accessing instance');
+    return _default!.dio;
+  }
 
   static void init({
     required SupabaseClient supabaseClient,
     required KeyValueStore storage,
+    Interceptor? testInterceptor,
   }) {
-    _default = ApiClient(supabaseClient: supabaseClient, storage: storage);
+    if (_initialized) {
+      throw StateError(
+        'ApiClient.init() already called. '
+        'In tests, call ApiClient.resetForTest() before re-initializing.',
+      );
+    }
+    _default = ApiClient(
+      supabaseClient: supabaseClient,
+      storage: storage,
+      testInterceptor: testInterceptor,
+    );
+    _initialized = true;
+  }
+
+  @visibleForTesting
+  static void resetForTest() {
+    _default = null;
+    _initialized = false;
   }
 
   // ── Shared Dio factory ─────────────────────────────────────────────────────
@@ -37,6 +67,7 @@ class ApiClient {
   static Dio _createDio({
     required SupabaseClient supabaseClient,
     required KeyValueStore storage,
+    Interceptor? testInterceptor,
   }) {
     assert(
       baseUrl.isNotEmpty,
@@ -62,6 +93,9 @@ class ApiClient {
         handler.next(options);
       },
     ));
+    if (testInterceptor != null) {
+      dio.interceptors.add(testInterceptor);
+    }
     return dio;
   }
 }

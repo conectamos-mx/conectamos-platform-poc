@@ -171,9 +171,16 @@ class _Topbar extends ConsumerWidget {
           const Spacer(),
 
           // [E] KPI chips
-          kpiAsync.whenOrNull(
-            data: (kpis) => kpis.isEmpty ? null : _KpiChips(kpis: kpis),
-          ) ?? const SizedBox.shrink(),
+          kpiAsync.when(
+            data: (kpis) => kpis.isEmpty
+                ? const SizedBox.shrink()
+                : _KpiChips(kpis: kpis),
+            loading: () => const SizedBox.shrink(),
+            error: (e, st) => const Tooltip(
+              message: 'Error al cargar KPIs',
+              child: Icon(Icons.error_outline, size: 16, color: AppColors.ctDanger),
+            ),
+          ),
           const SizedBox(width: 8),
 
           // [F] Tenant selector
