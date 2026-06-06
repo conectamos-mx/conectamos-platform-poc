@@ -799,7 +799,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
           const Spacer(),
           if (_lastFetch != null)
             Text(
-              'Act. ${elapsedSince(_lastFetch!)}',
+              'Act. ${fmtRelative(_lastFetch!.toUtc().toIso8601String(), compact: true, showSeconds: true)}',
               style: AppFonts.geist(fontSize: 11, color: AppColors.ctText3),
             ),
           const SizedBox(width: 4),

@@ -1,25 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-String _timeAgo(String? raw) {
-  if (raw == null || raw.isEmpty) return '';
-  try {
-    final dt   = DateTime.parse(raw).toLocal();
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1)  return 'ahora';
-    if (diff.inMinutes < 60) return 'hace ${diff.inMinutes}m';
-    if (diff.inHours < 24)   return 'hace ${diff.inHours}h';
-    if (diff.inDays < 7)     return 'hace ${diff.inDays}d';
-    final d = dt.day.toString().padLeft(2, '0');
-    final m = dt.month.toString().padLeft(2, '0');
-    return '$d/$m/${dt.year}';
-  } catch (_) {
-    return '';
-  }
-}
+import '../../../core/utils/relative_time.dart';
 
 // ── Status chip ───────────────────────────────────────────────────────────────
 
@@ -154,7 +136,7 @@ class EscalacionListTile extends StatelessWidget {
                   EscalacionStatusChip(status: status),
                   const SizedBox(height: 4),
                   Text(
-                    _timeAgo(openedAt),
+                    fmtRelative(openedAt, compact: true, absoluteAfterDays: 7, nullLabel: ''),
                     style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                   ),
                 ],
