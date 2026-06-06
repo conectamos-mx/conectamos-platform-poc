@@ -38,7 +38,8 @@ final authStateProvider = StreamProvider<AuthState>((ref) {
 final currentUserProvider = Provider<User?>((ref) {
   if (kMockMode) return null; // no se usa en mock
   ref.watch(authStateProvider); // invalidate on auth events so signedIn propagates
-  return Supabase.instance.client.auth.currentUser;
+  final client = ref.watch(supabaseClientProvider);
+  return client.auth.currentUser;
 });
 
 // ── Provider unificado de email (mock o real) ─────────────────────────────────
