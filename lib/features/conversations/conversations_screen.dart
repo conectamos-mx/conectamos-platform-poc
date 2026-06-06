@@ -23,6 +23,7 @@ import '../../core/api/channels_api.dart';
 import '../../core/api/conversations_api.dart';
 import '../../core/api/messages_api.dart';
 import '../../core/api/operators_api.dart';
+import '../../core/utils/date_format.dart';
 import '../../core/utils/phone_normalizer.dart';
 import '../../core/api/sessions_api.dart';
 import '../../core/api/supabase_messages.dart';
@@ -508,26 +509,6 @@ class _TabOperador extends ConsumerWidget {
 
 // ── Helpers de formato ────────────────────────────────────────────────────────
 
-String _formatTime(String? iso) {
-  if (iso == null) return '';
-  try {
-    final dt = DateTime.parse(iso).toLocal();
-    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-  } catch (_) {
-    return '';
-  }
-}
-
-bool _isToday(String? iso) {
-  if (iso == null) return false;
-  try {
-    final dt = DateTime.parse(iso).toLocal();
-    final now = DateTime.now();
-    return dt.year == now.year && dt.month == now.month && dt.day == now.day;
-  } catch (_) {
-    return false;
-  }
-}
 
 String _mediaFallback(String type) {
   switch (type) {
@@ -1033,8 +1014,8 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
                         ? null
                         : (body?.isNotEmpty == true ? body! : 'Sin mensajes'),
                     mediaType: mediaType,
-                    time: _formatTime(createdAt),
-                    isToday: _isToday(createdAt),
+                    time: fmtTime(createdAt, fallback: ''),
+                    isToday: isToday(createdAt),
                     isSelected: chatId == selectedChatId,
                     unreadCount: unread,
                     isWindowOpen: windowOpen,
@@ -1296,7 +1277,7 @@ class _ArchivedPanelState extends ConsumerState<_ArchivedPanel> {
                       ),
                     ),
                     Text(
-                      _formatTime(at),
+                      fmtTime(at, fallback: ''),
                       style: AppTextStyles.caption,
                     ),
                   ],
@@ -2745,7 +2726,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
     return _ApiMessageBubble(
       key: ValueKey(msgId),
       body: _msgBody(msg),
-      time: _formatTime(msg['received_at'] as String?),
+      time: fmtTime(msg['received_at'] as String?, fallback: ''),
       senderName: isOutbound
           ? _outboundSenderName(msg)
           : (msg['from_name'] as String? ??

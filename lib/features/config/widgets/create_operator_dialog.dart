@@ -11,6 +11,7 @@ import '../../../core/api/operator_roles_api.dart';
 import '../../../core/api/operators_api.dart';
 import '../../../core/providers/tenant_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/date_format.dart';
 import '../../../shared/widgets/app_alert_banner.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_dropdown.dart';
@@ -442,7 +443,7 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
     final opId = op['id'] as String? ?? '';
     final deletedAt = op['deleted_at'] as String?;
     final deletedLabel = deletedAt != null
-        ? _formatDate(deletedAt)
+        ? fmtDateOnly(deletedAt)
         : 'fecha desconocida';
     final tuId = tenantUser?['id'] as String?;
     final tuName = tenantUser?['nombre'] as String?;
@@ -557,17 +558,6 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
           _errorMsg = 'Error al restaurar. Intenta de nuevo.';
         });
       }
-    }
-  }
-
-  static String _formatDate(String iso) {
-    try {
-      final dt = DateTime.parse(iso).toLocal();
-      final d = dt.day.toString().padLeft(2, '0');
-      final m = dt.month.toString().padLeft(2, '0');
-      return '$d/$m/${dt.year}';
-    } catch (_) {
-      return iso;
     }
   }
 

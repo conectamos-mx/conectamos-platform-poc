@@ -14,6 +14,8 @@ import '../../core/api/executions_api.dart';
 import '../../core/api/operators_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/date_format.dart';
+import '../../core/utils/relative_time.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_shell.dart';
 
@@ -46,13 +48,6 @@ double _colWidth(String id) => switch (id) {
   _          => 100,
 };
 
-String _fmtElapsed(int? seconds) {
-  if (seconds == null) return '—';
-  if (seconds < 60) return '${seconds}s';
-  if (seconds < 3600) return '${seconds ~/ 60}m ${seconds % 60}s';
-  return '${seconds ~/ 3600}h ${(seconds % 3600) ~/ 60}m';
-}
-
 String _dateGroupLabel(DateTime dt) {
   final now   = DateTime.now();
   final local = dt.toLocal();
@@ -72,12 +67,6 @@ String _dateGroupLabel(DateTime dt) {
   return '${local.day} ${meses[local.month - 1]} ${local.year}';
 }
 
-String _elapsedSince(DateTime t) {
-  final d = DateTime.now().difference(t);
-  if (d.inSeconds < 60) return 'hace ${d.inSeconds}s';
-  if (d.inMinutes < 60) return 'hace ${d.inMinutes}m';
-  return 'hace ${d.inHours}h';
-}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -524,17 +513,6 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     _              => r,
   };
 
-  String _formatDateTimeShort(String isoStr) {
-    try {
-      final dt = DateTime.parse(isoStr).toLocal();
-      final d = '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
-      final h = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-      return '$d $h';
-    } catch (_) {
-      return isoStr;
-    }
-  }
-
   // ── Sort ──────────────────────────────────────────────────────────────────
 
   void _onSort(String apiCol) {
@@ -839,7 +817,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
           const Spacer(),
           if (_lastFetch != null)
             Text(
-              'Act. ${_elapsedSince(_lastFetch!)}',
+              'Act. ${elapsedSince(_lastFetch!)}',
               style: AppFonts.geist(fontSize: 11, color: AppColors.ctText3),
             ),
           const SizedBox(width: 4),
@@ -1454,9 +1432,9 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
       if (_filterDateRange == 'custom' &&
           (_filterDateFrom != null || _filterDateTo != null)) {
         final from = _filterDateFrom != null
-            ? _formatDateTimeShort(_filterDateFrom!) : '?';
+            ? fmtDateTimeCompact(_filterDateFrom!) : '?';
         final to = _filterDateTo != null
-            ? _formatDateTimeShort(_filterDateTo!) : '?';
+            ? fmtDateTimeCompact(_filterDateTo!) : '?';
         dateLabel = '$fieldLabel: $from → $to';
       } else {
         dateLabel = '$fieldLabel: ${_dateRangeLabel(_filterDateRange ?? '')}';
@@ -2051,7 +2029,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
         );
       case 'elapsed':
         return Text(
-          _fmtElapsed(elapsedSec),
+          fmtElapsedSeconds(elapsedSec),
           style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2),
         );
       case 'progress':

@@ -13,6 +13,8 @@ import '../../core/api/operators_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/date_format.dart' as dtfmt;
+import '../../core/utils/week_math.dart' as wm;
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_row.dart';
 import '../../shared/widgets/screen_header.dart';
@@ -20,27 +22,6 @@ import '../../shared/widgets/screen_header.dart';
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
 const _kWeekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-const _kMonths = [
-  'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-  'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
-];
-
-DateTime _mondayOf(DateTime d) {
-  final diff = d.weekday - 1;
-  return DateTime(d.year, d.month, d.day - diff);
-}
-
-String _isoDate(DateTime d) =>
-    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-String _weekRangeLabel(DateTime monday) {
-  final sunday = monday.add(const Duration(days: 6));
-  if (monday.month == sunday.month) {
-    return '${monday.day}–${sunday.day} ${_kMonths[monday.month - 1]} ${monday.year}';
-  }
-  return '${monday.day} ${_kMonths[monday.month - 1]} – '
-      '${sunday.day} ${_kMonths[sunday.month - 1]} ${monday.year}';
-}
 
 // ── Scope helpers ─────────────────────────────────────────────────────────────
 
@@ -67,10 +48,6 @@ String _weekRangeLabel(DateTime monday) {
 
 final _dateFmt = DateFormat('d MMM', 'es_MX');
 final _timeFmt = DateFormat('HH:mm');
-String _formatDt(DateTime dt) {
-  final local = dt.toLocal();
-  return '${_dateFmt.format(local)} ${local.year} · ${_timeFmt.format(local)}';
-}
 
 String _formatWindow(String? raw) {
   final (lo, hi) = _parseScope(raw);
@@ -148,7 +125,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
 
   DateTime get _today => DateTime.now();
   DateTime get _currentMonday =>
-      _mondayOf(_today).add(Duration(days: _weekOffset * 7));
+      wm.mondayOf(_today).add(Duration(days: _weekOffset * 7));
 
   @override
   void initState() {
@@ -168,7 +145,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
         final day = monday.add(Duration(days: i));
         return AssignmentsApi.listAssignments(
           tenantId: tenantId,
-          scopeDate: _isoDate(day),
+          scopeDate: wm.isoDate(day),
         );
       });
       final operatorsFuture = OperatorsApi.listOperators();
@@ -471,7 +448,7 @@ class _Toolbar extends StatelessWidget {
             _IconBtn(icon: Icons.chevron_left, onTap: onWeekBack),
             const SizedBox(width: 8),
             Text(
-              _weekRangeLabel(currentMonday),
+              wm.weekRangeLabel(currentMonday),
               style: AppFonts.geist(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -2446,7 +2423,7 @@ class _DateTimePickerBtn extends StatelessWidget {
                     : AppColors.ctText2),
             const SizedBox(width: 8),
             Text(
-              value != null ? _formatDt(value!) : hint,
+              value != null ? dtfmt.fmtDateIntl(value!) : hint,
               style: AppFonts.geist(
                   fontSize: 13,
                   color: value != null

@@ -7,24 +7,8 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/screen_header.dart';
+import '../../core/utils/relative_time.dart';
 import 'new_catalog_wizard.dart';
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-String _formatLastSync(String? iso) {
-  if (iso == null) return 'Nunca';
-  try {
-    final dt = DateTime.parse(iso).toLocal();
-    final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 60) return 'Hace ${diff.inSeconds}s';
-    if (diff.inMinutes < 60) return 'Hace ${diff.inMinutes} min';
-    if (diff.inHours < 24) return 'Hace ${diff.inHours}h';
-    if (diff.inDays == 1) return 'Ayer';
-    return 'Hace ${diff.inDays} días';
-  } catch (_) {
-    return '—';
-  }
-}
 
 // ── Detail placeholder (ID-136) ───────────────────────────────────────────────
 
@@ -492,7 +476,7 @@ class _CatalogRowState extends State<_CatalogRow> {
             Expanded(
               flex: 2,
               child: Text(
-                _formatLastSync(lastSyncedAt),
+                fmtRelative(lastSyncedAt, nullLabel: 'Nunca', showSeconds: true),
                 style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2),
               ),
             ),
