@@ -25,8 +25,7 @@ class OverviewScreen extends ConsumerStatefulWidget {
 class _OverviewScreenState extends ConsumerState<OverviewScreen> {
   Map<String, dynamic>? _kpis;
   bool _kpisLoading = false;
-  // ignore: unused_field
-  bool _kpisError   = false;
+  String? _kpisErrorMsg;
   bool _initialized = false;
   DateTime? _lastUpdated;
   int _reloadKey = 0;
@@ -43,7 +42,7 @@ class _OverviewScreenState extends ConsumerState<OverviewScreen> {
 
   Future<void> _fetchKpis(String tenantId) async {
     if (tenantId.isEmpty) return;
-    setState(() { _kpisLoading = true; _kpisError = false; });
+    setState(() { _kpisLoading = true; _kpisErrorMsg = null; });
     try {
       final data = await OverviewApi.getKpis(tenantId: tenantId);
       setState(() {
@@ -52,8 +51,12 @@ class _OverviewScreenState extends ConsumerState<OverviewScreen> {
         _initialized = true;
         _lastUpdated = DateTime.now();
       });
-    } catch (_) {
-      setState(() { _kpisLoading = false; _kpisError = true; _initialized = true; });
+    } catch (e) {
+      setState(() {
+        _kpisLoading = false;
+        _kpisErrorMsg = e.toString();
+        _initialized = true;
+      });
     }
   }
 
@@ -99,7 +102,12 @@ class _OverviewScreenState extends ConsumerState<OverviewScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _HeroBand(kpis: _kpis, loading: _kpisLoading),
+                _HeroBand(
+                  kpis: _kpis,
+                  loading: _kpisLoading,
+                  error: _kpisErrorMsg,
+                  onRetry: _reload,
+                ),
                 // const SizedBox(height: 14),
                 // _KpiRow(kpis: _kpis, loading: _kpisLoading, error: _kpisError),
                 const SizedBox(height: 14),
@@ -348,10 +356,17 @@ String _formatHeroDate(DateTime d) {
 }
 
 class _HeroBand extends StatelessWidget {
-  const _HeroBand({required this.kpis, required this.loading});
+  const _HeroBand({
+    required this.kpis,
+    required this.loading,
+    this.error,
+    this.onRetry,
+  });
 
   final Map<String, dynamic>? kpis;
   final bool loading;
+  final String? error;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -410,6 +425,32 @@ class _HeroBand extends StatelessWidget {
                   child: CircularProgressIndicator(
                     color: Colors.white,
                     strokeWidth: 3,
+                  ),
+                )
+              : error != null
+              ? Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.ctRedBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.ctDanger),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.error_outline, color: AppColors.ctRedText, size: 16),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(error!, style: AppFonts.geist(fontSize: 12, color: AppColors.ctRedText)),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: onRetry,
+                          child: Text('Reintentar', style: AppFonts.geist(fontSize: 12, color: AppColors.ctRedText, fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
                   ),
                 )
               : Row(
