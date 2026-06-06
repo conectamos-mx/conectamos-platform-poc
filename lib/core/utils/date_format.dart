@@ -3,6 +3,7 @@
 // Fallback on invalid zone: UTC + visible "(UTC)" marker — NEVER silent.
 
 import 'package:intl/intl.dart';
+import 'relative_time.dart';
 import 'tz_format.dart';
 
 // ── Shared DateFormat instances ──────────────────────────────────────────────
@@ -139,6 +140,39 @@ String fmtDateGroupLabel(DateTime utcInstant) {
   if (day == yesterday) return 'Ayer$suffix';
   final label = '${_dMmm.format(tzR.dt)} ${tzR.dt.year}';
   return '$label$suffix';
+}
+
+// ── Cell: date + relative ───────────────────────────────────────────────────
+
+/// Two-line cell for execution tables: "Hoy, 09:07" + "Ahora".
+/// Uses toZone()/nowInZone() for tenant timezone, delegates relative to
+/// fmtRelative. Preserves comma separator from original inline layout.
+({String dateLine, String relativeLine}) fmtCreatedCell(String? iso) {
+  const empty = (dateLine: '—', relativeLine: '');
+  if (iso == null) return empty;
+  try {
+    final dt = DateTime.parse(iso);
+    final tzR = toZone(dt);
+    final nowR = nowInZone();
+    final today = DateTime(nowR.now.year, nowR.now.month, nowR.now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final day = DateTime(tzR.dt.year, tzR.dt.month, tzR.dt.day);
+    final time = _hhmm.format(tzR.dt);
+    String datePart;
+    if (day == today) {
+      datePart = 'Hoy';
+    } else if (day == yesterday) {
+      datePart = 'Ayer';
+    } else {
+      datePart = _dMmm.format(tzR.dt);
+    }
+    final suffix = tzR.utcFallback ? ' (UTC)' : '';
+    final dateLine = '$datePart, $time$suffix';
+    final relativeLine = fmtRelative(iso);
+    return (dateLine: dateLine, relativeLine: relativeLine);
+  } catch (_) {
+    return empty;
+  }
 }
 
 // ── Predicate ───────────────────────────────────────────────────────────────

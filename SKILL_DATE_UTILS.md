@@ -65,6 +65,7 @@ Todas las funciones delegan al global de zona activa. **Sin parametro `zone:`.**
 | `fmtExecutionDate` | `String fmtExecutionDate(String? iso)` | ISO string | Hoy/Ayer/`dd/MM · HH:mm` | `"Hoy 09:07"` | Lista de ejecuciones pendientes. |
 | `isToday` | `bool isToday(String? iso)` | ISO string | `bool` | `true` | Predicado para badges "hoy". |
 | `fmtDateGroupLabel` | `String fmtDateGroupLabel(DateTime utcInstant)` | DateTime | Hoy/Ayer/`d mmm yyyy` | `"Hoy"`, `"5 ene 2026"` | Separadores de grupo por fecha (chat, ejecuciones). |
+| `fmtCreatedCell` | `({String dateLine, String relativeLine}) fmtCreatedCell(String? iso)` | ISO string | `Hoy, HH:mm` + `Ahora` | `("Hoy, 09:07", "Ahora")` | Celda de tabla con fecha+hora y tiempo relativo. Delega relativeLine a fmtRelative. |
 
 ### Desambiguacion rapida
 
@@ -77,6 +78,7 @@ Todas las funciones delegan al global de zona activa. **Sin parametro `zone:`.**
 - Separador Hoy/Ayer/fecha (grupo)? -> `fmtDateGroupLabel`
 - Fecha + hora con locale intl (picker)? -> `fmtDateIntl`
 - "Hoy"/"Ayer"/fecha? -> `fmtExecutionDate`
+- Celda fecha+relativo (tabla)? -> `fmtCreatedCell`
 
 ---
 

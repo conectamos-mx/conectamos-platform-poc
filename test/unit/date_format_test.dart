@@ -308,6 +308,59 @@ void main() {
     });
   });
 
+  // ── fmtCreatedCell ─────────────────────────────────────────────────────────
+
+  group('fmtCreatedCell', () {
+    setUp(() => setActiveZone('America/Mexico_City'));
+
+    test('null returns dash dateLine and empty relativeLine', () {
+      final r = fmtCreatedCell(null);
+      expect(r.dateLine, '—');
+      expect(r.relativeLine, '');
+    });
+
+    test('today returns Hoy, HH:mm + Ahora', () {
+      final iso = DateTime.now().toUtc().toIso8601String();
+      final r = fmtCreatedCell(iso);
+      expect(r.dateLine, startsWith('Hoy, '));
+      expect(r.dateLine, matches(RegExp(r'^Hoy, \d{2}:\d{2}$')));
+      expect(r.relativeLine, 'Ahora');
+    });
+
+    test('yesterday returns Ayer, HH:mm', () {
+      final yesterday = DateTime.now().subtract(const Duration(hours: 25));
+      final iso = yesterday.toUtc().toIso8601String();
+      final r = fmtCreatedCell(iso);
+      expect(r.dateLine, startsWith('Ayer, '));
+    });
+
+    test('old date returns d mmm, HH:mm with comma', () {
+      final r = fmtCreatedCell('2026-01-15T18:00:00Z');
+      // Mexico City: 12:00
+      expect(r.dateLine, contains(','));
+      expect(r.dateLine, contains('12:00'));
+    });
+
+    test('uses tenant timezone not browser timezone', () {
+      // 2026-01-01T04:00:00Z → Dec 31 22:00 in Mexico City
+      final r = fmtCreatedCell('2026-01-01T04:00:00Z');
+      expect(r.dateLine, contains('31'));
+      expect(r.dateLine, contains('22:00'));
+    });
+
+    test('invalid zone appends (UTC)', () {
+      setActiveZone('Invalid/Zone');
+      final r = fmtCreatedCell('2026-06-15T12:00:00Z');
+      expect(r.dateLine, contains('(UTC)'));
+    });
+
+    test('relativeLine delegates to fmtRelative', () {
+      final dt = DateTime.now().subtract(const Duration(minutes: 5));
+      final r = fmtCreatedCell(dt.toUtc().toIso8601String());
+      expect(r.relativeLine, 'Hace 5 min');
+    });
+  });
+
   // ── Initial state (before setActiveZone) ──────────────────────────────────
 
   group('initial UTC state', () {
