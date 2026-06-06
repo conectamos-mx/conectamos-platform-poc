@@ -1,14 +1,15 @@
-// ADR-413 — Extracted date/time formatting helpers (pure functions).
-// TZ handling preserved byte-identical from each original source.
-// String output standardised to DateFormat with locale es_MX.
+// ADR-413 + ADR-414 — Timezone-aware date/time formatting helpers.
+// All functions delegate to the global active zone in tz_format.dart.
+// Fallback on invalid zone: UTC + visible "(UTC)" marker — NEVER silent.
 
 import 'package:intl/intl.dart';
+import 'tz_format.dart';
 
 // ── Shared DateFormat instances ──────────────────────────────────────────────
 
 final _hhmm = DateFormat('HH:mm');
-final _ddMmmHm = DateFormat("dd MMM '·' HH:mm", 'es_MX');
-final _ddMmmHms = DateFormat("dd MMM '·' HH:mm:ss", 'es_MX');
+final _ddMmmHm = DateFormat("dd MMM '\u00b7' HH:mm", 'es_MX');
+final _ddMmmHms = DateFormat("dd MMM '\u00b7' HH:mm:ss", 'es_MX');
 final _slashFull = DateFormat('dd/MM/yyyy HH:mm');
 final _slashDate = DateFormat('dd/MM/yyyy');
 final _slashCompact = DateFormat('dd/MM HH:mm');
@@ -18,97 +19,105 @@ final _ddMm = DateFormat('dd/MM');
 
 // ── Absolute format: ISO string → localised string ──────────────────────────
 
-/// "HH:mm" from ISO string. Applies `.toLocal()`.
-/// [fallback] returned on null or parse error (conv uses '', dash uses '—').
+/// "HH:mm" from ISO string in active tenant timezone.
+/// [fallback] returned on null or parse error.
 String fmtTime(String? iso, {String fallback = '\u2014'}) {
   if (iso == null) return fallback;
   try {
-    final dt = DateTime.parse(iso).toLocal();
-    return _hhmm.format(dt);
+    final dt = DateTime.parse(iso);
+    return formatInTimeZone(dt, _hhmm).text;
   } catch (_) {
     return fallback;
   }
 }
 
-/// "dd MMM · HH:mm" from ISO string. Applies `.toLocal()`.
+/// "dd MMM · HH:mm" from ISO string in active tenant timezone.
 String fmtDateShort(String? iso) {
   if (iso == null || iso.isEmpty) return '\u2014';
   try {
-    final dt = DateTime.parse(iso).toLocal();
-    return _ddMmmHm.format(dt);
+    final dt = DateTime.parse(iso);
+    return formatInTimeZone(dt, _ddMmmHm).text;
   } catch (_) {
     return iso;
   }
 }
 
-/// "dd/MM/yyyy HH:mm" from ISO string. Applies `.toLocal()`.
+/// "dd/MM/yyyy HH:mm" from ISO string in active tenant timezone.
 String fmtDateSlash(String? iso) {
   if (iso == null) return '\u2014';
   try {
-    final dt = DateTime.parse(iso).toLocal();
-    return _slashFull.format(dt);
+    final dt = DateTime.parse(iso);
+    return formatInTimeZone(dt, _slashFull).text;
   } catch (_) {
     return iso;
   }
 }
 
-/// "dd MMM · HH:mm:ss" from ISO string. Applies `.toLocal()`.
+/// "dd MMM · HH:mm:ss" from ISO string in active tenant timezone.
 String fmtDateTimeSeconds(String? iso) {
   if (iso == null) return '\u2014';
   try {
-    final dt = DateTime.parse(iso).toLocal();
-    return _ddMmmHms.format(dt);
+    final dt = DateTime.parse(iso);
+    return formatInTimeZone(dt, _ddMmmHms).text;
   } catch (_) {
     return iso;
   }
 }
 
-/// "dd/MM/yyyy" from ISO string. Applies `.toLocal()`.
+/// "dd/MM/yyyy" from ISO string in active tenant timezone.
 String fmtDateOnly(String? iso) {
   if (iso == null) return '\u2014';
   try {
-    final dt = DateTime.parse(iso).toLocal();
-    return _slashDate.format(dt);
+    final dt = DateTime.parse(iso);
+    return formatInTimeZone(dt, _slashDate).text;
   } catch (_) {
     return iso;
   }
 }
 
-/// "dd/MM HH:mm" from ISO string. Applies `.toLocal()`.
+/// "dd/MM HH:mm" from ISO string in active tenant timezone.
 String fmtDateTimeCompact(String? iso) {
   if (iso == null) return '\u2014';
   try {
-    final dt = DateTime.parse(iso).toLocal();
-    return _slashCompact.format(dt);
+    final dt = DateTime.parse(iso);
+    return formatInTimeZone(dt, _slashCompact).text;
   } catch (_) {
     return iso;
   }
 }
 
-/// Full Spanish long date from DateTime. Naive — no TZ conversion.
-/// Caller must pass an already-local DateTime (e.g. DateTime.now()).
-String fmtDateLongEs(DateTime d) => _heroFmt.format(d);
+/// Full Spanish long date in active tenant timezone.
+String fmtDateLongEs(DateTime d) {
+  final r = toZone(d);
+  final text = _heroFmt.format(r.dt);
+  return r.utcFallback ? '$text (UTC)' : text;
+}
 
-/// "d MMM yyyy · HH:mm" from DateTime. Applies `.toLocal()`.
+/// "d MMM yyyy · HH:mm" in active tenant timezone.
 String fmtDateIntl(DateTime dt) {
-  final local = dt.toLocal();
-  return '${_dMmm.format(local)} ${local.year} · ${_hhmm.format(local)}';
+  final r = toZone(dt);
+  final local = r.dt;
+  final text = '${_dMmm.format(local)} ${local.year} \u00b7 ${_hhmm.format(local)}';
+  return r.utcFallback ? '$text (UTC)' : text;
 }
 
 /// "Hoy HH:mm" / "Ayer HH:mm" / "dd/MM · HH:mm" from ISO string.
-/// Applies `.toLocal()`. Hybrid format+relative.
+/// Both the parsed date and "now" are in active tenant timezone.
 String fmtExecutionDate(String? iso) {
   if (iso == null) return '';
   try {
-    final dt = DateTime.parse(iso).toLocal();
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+    final dt = DateTime.parse(iso);
+    final timeR = formatInTimeZone(dt, _hhmm);
+    final tzR = toZone(dt);
+    final nowR = nowInZone();
+    final today = DateTime(nowR.now.year, nowR.now.month, nowR.now.day);
     final yesterday = today.subtract(const Duration(days: 1));
-    final day = DateTime(dt.year, dt.month, dt.day);
-    final time = _hhmm.format(dt);
-    if (day == today) return 'Hoy $time';
-    if (day == yesterday) return 'Ayer $time';
-    return '${_ddMm.format(dt)} \u00b7 $time';
+    final day = DateTime(tzR.dt.year, tzR.dt.month, tzR.dt.day);
+    final suffix = timeR.utcFallback ? ' (UTC)' : '';
+    if (day == today) return 'Hoy ${timeR.text}$suffix';
+    if (day == yesterday) return 'Ayer ${timeR.text}$suffix';
+    final compactR = formatInTimeZone(dt, _ddMm);
+    return '${compactR.text} \u00b7 ${timeR.text}$suffix';
   } catch (_) {
     return iso;
   }
@@ -116,13 +125,16 @@ String fmtExecutionDate(String? iso) {
 
 // ── Predicate ───────────────────────────────────────────────────────────────
 
-/// True if [iso] parses to today in local time. Applies `.toLocal()`.
+/// True if [iso] parses to today in active tenant timezone.
 bool isToday(String? iso) {
   if (iso == null) return false;
   try {
-    final dt = DateTime.parse(iso).toLocal();
-    final now = DateTime.now();
-    return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    final dt = DateTime.parse(iso);
+    final tzR = toZone(dt);
+    final nowR = nowInZone();
+    return tzR.dt.year == nowR.now.year &&
+        tzR.dt.month == nowR.now.month &&
+        tzR.dt.day == nowR.now.day;
   } catch (_) {
     return false;
   }

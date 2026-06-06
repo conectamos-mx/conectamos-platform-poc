@@ -10,6 +10,7 @@ import 'core/router/app_router.dart';
 import 'core/storage/key_value_store.dart';
 import 'core/storage/web_key_value_store.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/tz_format.dart';
 
 const supabaseUrl = String.fromEnvironment(
   'SUPABASE_URL',
@@ -27,6 +28,7 @@ Future<void> main() async {
 
   await initializeDateFormatting('es_MX', null);
   await initializeDateFormatting('es', null);
+  initTz();
 
   assert(supabaseUrl.isNotEmpty, 'SUPABASE_URL no está definida. Usa run_dev.sh.');
   assert(supabaseAnonKey.isNotEmpty, 'SUPABASE_ANON_KEY no está definida. Usa run_dev.sh.');

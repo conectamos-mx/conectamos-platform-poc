@@ -1,12 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conectamos_platform/core/utils/relative_time.dart';
+import 'package:conectamos_platform/core/utils/tz_format.dart';
 
 void main() {
+  setUpAll(() {
+    initTz();
+  });
+
   // ── fmtRelative ─────────────────────────────────────────────────────────────
 
   group('fmtRelative', () {
+    setUp(() => setActiveZone('America/Mexico_City'));
+
     test('null returns default dash', () {
-      expect(fmtRelative(null), '\u2014');
+      expect(fmtRelative(null), '—');
     });
 
     test('null returns custom nullLabel', () {
@@ -14,7 +21,7 @@ void main() {
     });
 
     test('invalid string returns dash', () {
-      expect(fmtRelative('bad'), '\u2014');
+      expect(fmtRelative('bad'), '—');
     });
 
     test('just now returns Ahora (showSeconds=false)', () {
@@ -31,26 +38,28 @@ void main() {
 
     test('5 minutes ago returns Hace 5 min', () {
       final dt = DateTime.now().subtract(const Duration(minutes: 5));
-      final iso = dt.toUtc().toIso8601String();
-      expect(fmtRelative(iso), 'Hace 5 min');
+      expect(fmtRelative(dt.toUtc().toIso8601String()), 'Hace 5 min');
     });
 
     test('3 hours ago returns Hace 3h', () {
       final dt = DateTime.now().subtract(const Duration(hours: 3));
-      final iso = dt.toUtc().toIso8601String();
-      expect(fmtRelative(iso), 'Hace 3h');
+      expect(fmtRelative(dt.toUtc().toIso8601String()), 'Hace 3h');
     });
 
     test('exactly 1 day ago returns Ayer', () {
       final dt = DateTime.now().subtract(const Duration(hours: 25));
-      final iso = dt.toUtc().toIso8601String();
-      expect(fmtRelative(iso), 'Ayer');
+      expect(fmtRelative(dt.toUtc().toIso8601String()), 'Ayer');
     });
 
-    test('7 days ago returns Hace 7 dias', () {
+    test('7 days ago returns Hace 7 días', () {
       final dt = DateTime.now().subtract(const Duration(days: 7));
-      final iso = dt.toUtc().toIso8601String();
-      expect(fmtRelative(iso), contains('7'));
+      expect(fmtRelative(dt.toUtc().toIso8601String()), contains('7'));
+    });
+
+    test('works with invalid zone (fallback UTC)', () {
+      setActiveZone('Invalid/Zone');
+      final iso = DateTime.now().toUtc().toIso8601String();
+      expect(fmtRelative(iso), isNotEmpty);
     });
   });
 
@@ -58,7 +67,7 @@ void main() {
 
   group('fmtElapsedSeconds', () {
     test('null returns dash', () {
-      expect(fmtElapsedSeconds(null), '\u2014');
+      expect(fmtElapsedSeconds(null), '—');
     });
 
     test('45 seconds', () {
@@ -93,6 +102,8 @@ void main() {
   // ── elapsedSince ────────────────────────────────────────────────────────────
 
   group('elapsedSince', () {
+    setUp(() => setActiveZone('America/Mexico_City'));
+
     test('just now returns hace 0s', () {
       expect(elapsedSince(DateTime.now()), 'hace 0s');
     });
@@ -110,6 +121,12 @@ void main() {
     test('2 hours ago returns hace 2h', () {
       final t = DateTime.now().subtract(const Duration(hours: 2));
       expect(elapsedSince(t), 'hace 2h');
+    });
+
+    test('works with invalid zone (fallback UTC)', () {
+      setActiveZone('Invalid/Zone');
+      final t = DateTime.now().subtract(const Duration(minutes: 3));
+      expect(elapsedSince(t), contains('hace'));
     });
   });
 }

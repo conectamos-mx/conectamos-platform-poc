@@ -1,50 +1,57 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:conectamos_platform/core/utils/week_math.dart';
+import 'package:conectamos_platform/core/utils/tz_format.dart';
 
 void main() {
   setUpAll(() async {
     await initializeDateFormatting('es_MX', null);
+    initTz();
   });
 
   // ── mondayOf ────────────────────────────────────────────────────────────────
 
   group('mondayOf', () {
+    setUp(() => setActiveZone('America/Mexico_City'));
+
     test('Monday returns same day', () {
-      final mon = DateTime(2026, 1, 5); // Monday
-      final result = mondayOf(mon);
+      final result = mondayOf(DateTime(2026, 1, 5));
       expect(result.weekday, DateTime.monday);
       expect(result.day, 5);
     });
 
     test('Wednesday returns Monday of same week', () {
-      final wed = DateTime(2026, 1, 7); // Wednesday
-      final result = mondayOf(wed);
+      final result = mondayOf(DateTime(2026, 1, 7));
       expect(result.weekday, DateTime.monday);
       expect(result.day, 5);
     });
 
     test('Sunday returns Monday of same week', () {
-      final sun = DateTime(2026, 1, 11); // Sunday
-      final result = mondayOf(sun);
+      final result = mondayOf(DateTime(2026, 1, 11));
       expect(result.weekday, DateTime.monday);
       expect(result.day, 5);
     });
 
     test('cross-month boundary', () {
-      // Saturday Jan 3 2026 → Monday Dec 29 2025
-      final sat = DateTime(2026, 1, 3);
-      final result = mondayOf(sat);
+      final result = mondayOf(DateTime(2026, 1, 3));
       expect(result.weekday, DateTime.monday);
       expect(result.month, 12);
       expect(result.day, 29);
       expect(result.year, 2025);
+    });
+
+    test('invalid zone falls back to UTC', () {
+      setActiveZone('Invalid/Zone');
+      final result = mondayOf(DateTime.utc(2026, 1, 7, 12, 0));
+      expect(result.weekday, DateTime.monday);
     });
   });
 
   // ── isoDate ─────────────────────────────────────────────────────────────────
 
   group('isoDate', () {
+    setUp(() => setActiveZone('America/Mexico_City'));
+
     test('pads month and day', () {
       expect(isoDate(DateTime(2026, 1, 5)), '2026-01-05');
     });
@@ -52,15 +59,20 @@ void main() {
     test('double-digit month and day', () {
       expect(isoDate(DateTime(2026, 12, 25)), '2026-12-25');
     });
+
+    test('invalid zone falls back to UTC', () {
+      setActiveZone('Invalid/Zone');
+      expect(isoDate(DateTime.utc(2026, 6, 15)), '2026-06-15');
+    });
   });
 
   // ── weekRangeLabel ──────────────────────────────────────────────────────────
 
   group('weekRangeLabel', () {
+    setUp(() => setActiveZone('America/Mexico_City'));
+
     test('same-month range', () {
-      final mon = DateTime(2026, 6, 1); // Monday Jun 1
-      final result = weekRangeLabel(mon);
-      // "1–7 jun 2026" (lowercase, intl es_MX)
+      final result = weekRangeLabel(DateTime(2026, 6, 1));
       expect(result, contains('1'));
       expect(result, contains('7'));
       expect(result, contains('2026'));
@@ -68,8 +80,7 @@ void main() {
     });
 
     test('cross-month range', () {
-      final mon = DateTime(2025, 12, 29); // Monday Dec 29
-      final result = weekRangeLabel(mon);
+      final result = weekRangeLabel(DateTime(2025, 12, 29));
       expect(result, contains('29'));
       expect(result, contains('dic'));
       expect(result, contains('ene'));
@@ -77,11 +88,14 @@ void main() {
     });
 
     test('months are lowercase (intl convention)', () {
-      final mon = DateTime(2026, 1, 5);
-      final result = weekRangeLabel(mon);
+      final result = weekRangeLabel(DateTime(2026, 1, 5));
       expect(result, contains('ene'));
-      // Ensure it's NOT title-case
       expect(result.contains('Ene'), false);
+    });
+
+    test('invalid zone does not throw', () {
+      setActiveZone('Invalid/Zone');
+      expect(weekRangeLabel(DateTime.utc(2026, 1, 5)), isNotEmpty);
     });
   });
 }

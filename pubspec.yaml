@@ -34,6 +34,9 @@ dependencies:
   # Date formatting
   intl: ^0.20.2
 
+  # Timezone-aware formatting (ADR-414)
+  timezone: ^0.10.0
+
   # File picker & drag-drop (multimedia)
   file_picker: ^8.0.0
   desktop_drop: ^0.4.4

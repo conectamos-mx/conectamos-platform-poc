@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../api/tenants_api.dart';
 import '../storage/key_value_store.dart';
+import '../utils/tz_format.dart' as tzf;
 import 'auth_provider.dart';
 
 // ── Modelo ────────────────────────────────────────────────────────────────────
@@ -13,12 +14,14 @@ class TenantInfo {
     required this.slug,
     required this.displayName,
     this.logoUrl,
+    this.ianaZone = 'America/Mexico_City',
   });
 
   final String id;
   final String slug;
   final String displayName;
   final String? logoUrl;
+  final String ianaZone;
 
   factory TenantInfo.fromMap(Map<String, dynamic> m) => TenantInfo(
         id: (m['id'] as String? ?? '').trim(),
@@ -28,6 +31,7 @@ class TenantInfo {
             m['slug'] as String? ??
             '',
         logoUrl: m['logo_url'] as String?,
+        ianaZone: m['timezone'] as String? ?? 'America/Mexico_City',
       );
 }
 
@@ -120,6 +124,20 @@ final activeTenantIdProvider = Provider<String>((ref) {
 /// Display name del tenant activo — para mostrar en UI.
 final activeTenantDisplayProvider = Provider<String>((ref) {
   return ref.watch(activeTenantInfoProvider)?.displayName ?? '';
+});
+
+/// IANA timezone del tenant activo — para formateo de fechas (ADR-414).
+/// Source of truth for the active timezone. The global in tz_format.dart is
+/// a read-only mirror kept in sync by [tenantZoneSyncProvider].
+final activeTenantZoneProvider = Provider<String>((ref) {
+  return ref.watch(activeTenantInfoProvider)?.ianaZone ?? 'America/Mexico_City';
+});
+
+/// Keeps the tz_format.dart global in sync with [activeTenantZoneProvider].
+/// Watch this provider once from a high-level widget (e.g. AppShell).
+final tenantZoneSyncProvider = Provider<void>((ref) {
+  final zone = ref.watch(activeTenantZoneProvider);
+  tzf.setActiveZone(zone);
 });
 
 /// Lista completa de tenants cargados.

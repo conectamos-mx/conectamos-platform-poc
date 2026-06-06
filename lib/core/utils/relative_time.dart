@@ -1,10 +1,12 @@
-// ADR-413 — Extracted relative-time helpers (pure functions).
-// TZ handling preserved byte-identical from each original source.
+// ADR-413 + ADR-414 — Timezone-aware relative-time helpers.
+// fmtRelative and elapsedSince use the global active zone via nowInZone/toZone.
+
+import 'tz_format.dart';
 
 /// "Ahora" / "Hace Xm" / "Hace Xh" / "Ayer" / "Hace X dias"
-/// from ISO string. Applies `.toLocal()`.
+/// from ISO string. Both parsed date and "now" are in active tenant timezone.
 ///
-/// [nullLabel] returned when [iso] is null ('—' for operators, 'Nunca' for catalogs).
+/// [nullLabel] returned when [iso] is null.
 /// [showSeconds] when true, shows "Hace Xs" for < 60s instead of "Ahora".
 String fmtRelative(
   String? iso, {
@@ -13,8 +15,10 @@ String fmtRelative(
 }) {
   if (iso == null) return nullLabel;
   try {
-    final dt = DateTime.parse(iso).toLocal();
-    final diff = DateTime.now().difference(dt);
+    final dt = DateTime.parse(iso);
+    final tzR = toZone(dt);
+    final nowR = nowInZone();
+    final diff = nowR.now.difference(tzR.dt);
     if (showSeconds) {
       if (diff.inSeconds < 60) return 'Hace ${diff.inSeconds}s';
     } else {
@@ -38,9 +42,10 @@ String fmtElapsedSeconds(int? seconds) {
 }
 
 /// "hace Xs" / "hace Xm" / "hace Xh" from DateTime.
-/// Naive — diffs against DateTime.now(), no TZ conversion.
+/// Uses nowInZone for "now" in active tenant timezone.
 String elapsedSince(DateTime t) {
-  final d = DateTime.now().difference(t);
+  final nowR = nowInZone();
+  final d = nowR.now.difference(t);
   if (d.inSeconds < 60) return 'hace ${d.inSeconds}s';
   if (d.inMinutes < 60) return 'hace ${d.inMinutes}m';
   return 'hace ${d.inHours}h';

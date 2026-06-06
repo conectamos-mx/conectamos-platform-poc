@@ -72,6 +72,33 @@ void main() {
     });
   });
 
+  // ── TenantInfo.fromMap — ianaZone (ADR-414) ────────────────────────────────
+
+  group('TenantInfo.fromMap — ianaZone', () {
+    test('parses timezone from map', () {
+      final t = TenantInfo.fromMap({
+        'id': 'x',
+        'slug': 's',
+        'timezone': 'America/Bogota',
+      });
+      expect(t.ianaZone, 'America/Bogota');
+    });
+
+    test('defaults to America/Mexico_City when timezone is null', () {
+      final t = TenantInfo.fromMap({'id': 'x', 'slug': 's'});
+      expect(t.ianaZone, 'America/Mexico_City');
+    });
+
+    test('defaults to America/Mexico_City when timezone key is absent', () {
+      final t = TenantInfo.fromMap({
+        'id': 'x',
+        'slug': 's',
+        'display_name': 'Test',
+      });
+      expect(t.ianaZone, 'America/Mexico_City');
+    });
+  });
+
   // ── TenantInfo.fromMap — empty / minimal map ──────────────────────────────
 
   group('TenantInfo.fromMap — edge cases', () {
