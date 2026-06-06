@@ -48,24 +48,6 @@ double _colWidth(String id) => switch (id) {
   _          => 100,
 };
 
-String _dateGroupLabel(DateTime dt) {
-  final now   = DateTime.now();
-  final local = dt.toLocal();
-
-  final todayMidnight = DateTime(now.year, now.month, now.day);
-  final dtMidnight    = DateTime(local.year, local.month, local.day);
-
-  final diff = todayMidnight.difference(dtMidnight).inDays;
-
-  if (diff == 0) return 'Hoy';
-  if (diff == 1) return 'Ayer';
-
-  const meses = [
-    'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
-  ];
-  return '${local.day} ${meses[local.month - 1]} ${local.year}';
-}
 
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -1755,7 +1737,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
       case 'date':
         final raw = exec['created_at'] as String?;
         if (raw == null) return '—';
-        try { return _dateGroupLabel(DateTime.parse(raw)); } catch (_) { return '—'; }
+        try { return fmtDateGroupLabel(DateTime.parse(raw)); } catch (_) { return '—'; }
       case 'flow':
         return exec['flow_name'] as String?
             ?? (exec['flow_definition'] as Map?)?['name'] as String?

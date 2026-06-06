@@ -64,6 +64,7 @@ Todas las funciones delegan al global de zona activa. **Sin parametro `zone:`.**
 | `fmtDateIntl` | `String fmtDateIntl(DateTime dt)` | DateTime | `d MMM yyyy · HH:mm` | `"5 ene 2026 · 09:07"` | Datetime pickers en assignments. |
 | `fmtExecutionDate` | `String fmtExecutionDate(String? iso)` | ISO string | Hoy/Ayer/`dd/MM · HH:mm` | `"Hoy 09:07"` | Lista de ejecuciones pendientes. |
 | `isToday` | `bool isToday(String? iso)` | ISO string | `bool` | `true` | Predicado para badges "hoy". |
+| `fmtDateGroupLabel` | `String fmtDateGroupLabel(DateTime utcInstant)` | DateTime | Hoy/Ayer/`d mmm yyyy` | `"Hoy"`, `"5 ene 2026"` | Separadores de grupo por fecha (chat, ejecuciones). |
 
 ### Desambiguacion rapida
 
@@ -73,6 +74,7 @@ Todas las funciones delegan al global de zona activa. **Sin parametro `zone:`.**
 - Fecha completa sin hora? -> `fmtDateOnly`
 - Fecha compacta dd/MM + hora (chip)? -> `fmtDateTimeCompact`
 - Fecha larga en espanol (hero)? -> `fmtDateLongEs`
+- Separador Hoy/Ayer/fecha (grupo)? -> `fmtDateGroupLabel`
 - Fecha + hora con locale intl (picker)? -> `fmtDateIntl`
 - "Hoy"/"Ayer"/fecha? -> `fmtExecutionDate`
 
@@ -120,7 +122,5 @@ Los call-sites NO necesitan acceso a `ref` ni a `activeTenantZoneProvider`.
 
 ## NO consolidadas (y por que)
 
-| Funcion | Archivo | Razon |
-|---|---|---|
-| `_chatFormatDate` | `conversations_screen.dart` | Recibe DateTime ya convertido. Convencion de input divergente — sprint aparte. |
-| `_dateGroupLabel` | `all_executions_screen.dart` | Convencion opuesta a `_chatFormatDate`. Ambas producen "Hoy"/"Ayer"/fecha con flujo TZ distinto. |
+Ninguna pendiente en este momento. `_chatFormatDate`, `_formatDate` y `_dateGroupLabel` fueron
+consolidadas en `fmtDateGroupLabel` (PLA-65).
