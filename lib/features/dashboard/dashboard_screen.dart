@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api/flows_api.dart';
+import '../../core/utils/date_format.dart' as dtfmt;
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_dashboard_table.dart';
@@ -769,18 +770,6 @@ class _RecentActivityWidget extends StatelessWidget {
   final Map<String, dynamic> config;
   final List<Map<String, dynamic>>? activityData;
 
-  String _formatTime(String? isoString) {
-    if (isoString == null) return '—';
-    try {
-      final dt = DateTime.parse(isoString).toLocal();
-      final h = dt.hour.toString().padLeft(2, '0');
-      final m = dt.minute.toString().padLeft(2, '0');
-      return '$h:$m';
-    } catch (_) {
-      return '—';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final items = activityData ?? [];
@@ -855,7 +844,7 @@ class _RecentActivityWidget extends StatelessWidget {
                         style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: isDelivery ? AppColors.ctOk : AppColors.ctDanger),
                       ),
                       Text(
-                        _formatTime(completedAt),
+                        dtfmt.fmtTime(completedAt),
                         style: AppTextStyles.bodySmall,
                       ),
                     ],

@@ -7,30 +7,8 @@ import '../../core/api/flows_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../core/utils/date_format.dart';
 import '../../shared/widgets/screen_header.dart';
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-String _formatDate(String? raw) {
-  if (raw == null) return '';
-  try {
-    final dt = DateTime.parse(raw).toLocal();
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final day = DateTime(dt.year, dt.month, dt.day);
-    final time = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    if (day == today) return 'Hoy $time';
-    if (day == yesterday) return 'Ayer $time';
-    final d = dt.day.toString().padLeft(2, '0');
-    final m = dt.month.toString().padLeft(2, '0');
-    return '$d/$m · $time';
-  } catch (e, st) {
-    debugPrint('FORMAT_DATE ERROR: $e | input: $raw');
-    debugPrint('FORMAT_DATE STACK: $st');
-    return raw;
-  }
-}
 
 String _dioError(Object e) {
   if (e is DioException) {
@@ -308,7 +286,7 @@ class _ExecutionCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _formatDate(createdAt),
+                      fmtExecutionDate(createdAt),
                       style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                     ),
                   ],

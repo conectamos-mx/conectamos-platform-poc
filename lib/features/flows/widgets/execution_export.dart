@@ -8,6 +8,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../../core/utils/date_format.dart';
+
 // ── Color constants ────────────────────────────────────────────────────────────
 
 const _navy    = PdfColor(0.043, 0.075, 0.169);   // #0B132B
@@ -29,18 +31,6 @@ const _months = [
   'ene', 'feb', 'mar', 'abr', 'may', 'jun',
   'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
 ];
-
-String _fmtShort(String? iso) {
-  if (iso == null || iso.isEmpty) return '—';
-  try {
-    final d = DateTime.parse(iso).toLocal();
-    final hh = d.hour.toString().padLeft(2, '0');
-    final mm = d.minute.toString().padLeft(2, '0');
-    return '${d.day.toString().padLeft(2, '0')} ${_months[d.month - 1]} · $hh:$mm';
-  } catch (_) {
-    return iso;
-  }
-}
 
 PdfColor _eventColor(String type) => switch (type) {
   'flujo_iniciado'       => _teal,
@@ -329,8 +319,8 @@ Future<void> exportExecutionPdf(
               pw.TableRow(
                 children: [
                   _metaCell('Operador', opName, geistFont, rightBorder: true),
-                  _metaCell('Iniciada', _fmtShort(startedAt), geistFont, rightBorder: true),
-                  _metaCell('Finalizada', _fmtShort(completedAt), geistFont, rightBorder: true),
+                  _metaCell('Iniciada', fmtDateShort(startedAt), geistFont, rightBorder: true),
+                  _metaCell('Finalizada', fmtDateShort(completedAt), geistFont, rightBorder: true),
                   _metaCell('Progreso', '$filled / $total campos', geistFont),
                 ],
               ),
@@ -439,7 +429,7 @@ Future<void> exportExecutionPdf(
                               ),
                             ),
                             pw.Text(
-                              _fmtShort(
+                              fmtDateShort(
                                 g.items.first['timestamp'] as String? ??
                                 g.items.first['created_at'] as String?,
                               ),
@@ -683,7 +673,7 @@ Future<void> exportExecutionXls(
           _resolveFieldValue(fv, fieldTypeMap[fv['field_key']] ?? 'text'),
           fieldTypeMap[fv['field_key']] ?? '',
           fv['source']?.toString() ?? 'captured',
-          _fmtShort(fv['captured_at'] as String? ?? fv['created_at'] as String?),
+          fmtDateShort(fv['captured_at'] as String? ?? fv['created_at'] as String?),
         ],
     ];
 
@@ -695,8 +685,8 @@ Future<void> exportExecutionXls(
       ['Operador', opName],
       ['Canal', channelName],
       ['Status', exec['status']?.toString() ?? '—'],
-      ['Iniciada', _fmtShort(exec['created_at'] as String?)],
-      ['Finalizada', _fmtShort(exec['completed_at'] as String?)],
+      ['Iniciada', fmtDateShort(exec['created_at'] as String?)],
+      ['Finalizada', fmtDateShort(exec['completed_at'] as String?)],
     ];
 
     // ── Cronología rows ────────────────────────────────────────────────────

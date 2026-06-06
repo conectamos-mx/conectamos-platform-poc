@@ -8,6 +8,7 @@ import '../../core/api/flows_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/date_format.dart';
 import '../../shared/widgets/app_button.dart';
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -393,7 +394,7 @@ class _IntegrationCard extends StatelessWidget {
                 if (createdAt.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(
-                    'Creado: ${_formatDate(createdAt)}',
+                    'Creado: ${fmtDateSlash(createdAt)}',
                     style: AppFonts.geist(
                         fontSize: 11, color: AppColors.ctText3),
                   ),
@@ -999,20 +1000,6 @@ String _typeLabel(String type) {
       return 'n8n';
     default:
       return type;
-  }
-}
-
-String _formatDate(String iso) {
-  try {
-    final dt = DateTime.parse(iso).toLocal();
-    final dd = dt.day.toString().padLeft(2, '0');
-    final mm = dt.month.toString().padLeft(2, '0');
-    final yyyy = dt.year.toString();
-    final hh = dt.hour.toString().padLeft(2, '0');
-    final min = dt.minute.toString().padLeft(2, '0');
-    return '$dd/$mm/$yyyy $hh:$min';
-  } catch (_) {
-    return iso;
   }
 }
 

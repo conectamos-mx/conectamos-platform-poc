@@ -10,6 +10,7 @@ import '../../core/api/operators_api.dart';
 import '../../core/api/overview_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/date_format.dart';
 import '../../shared/widgets/operator_avatar.dart';
 import '../../shared/widgets/screen_header.dart';
 
@@ -348,13 +349,6 @@ class KpiCard extends StatelessWidget {
 
 // ── _HeroBand ─────────────────────────────────────────────────────────────────
 
-String _formatHeroDate(DateTime d) {
-  const dias  = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
-  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-                 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-  return '${dias[d.weekday - 1]}, ${d.day} de ${meses[d.month - 1]} de ${d.year}';
-}
-
 class _HeroBand extends StatelessWidget {
   const _HeroBand({
     required this.kpis,
@@ -474,7 +468,7 @@ class _HeroBand extends StatelessWidget {
                           Align(
                             alignment: Alignment.topRight,
                             child: Text(
-                              _formatHeroDate(DateTime.now()),
+                              fmtDateLongEs(DateTime.now()),
                               style: AppFonts.geist(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
