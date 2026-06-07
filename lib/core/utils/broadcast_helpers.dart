@@ -1,6 +1,10 @@
 // Pure helpers for broadcast template resolution and WhatsApp error parsing.
 // Extracted from broadcast_screen.dart and conversations_screen.dart (PLA-67).
 
+import 'package:intl/intl.dart';
+import 'date_format.dart';
+import 'tz_format.dart';
+
 /// Standard free-text variable chips shown in the broadcast compose UI.
 const kBroadcastFreeVars = [
   (key: '{nombre}', label: 'nombre'),
@@ -83,4 +87,43 @@ String parseWhatsAppErrorMessage(dynamic error) {
   } catch (_) {
     return 'Error al enviar el mensaje. Intenta de nuevo.';
   }
+}
+
+final _hhmmBcast = DateFormat('HH:mm');
+final _slashDateBcast = DateFormat('dd/MM/yyyy');
+
+/// Resolves broadcast free-text placeholders using tenant timezone.
+///
+/// Replaces {nombre}, {telefono}, {flujo}, {hora}, {dia}, {fecha}, {tenant}
+/// with values from [op] and the active tenant timezone (via [nowInZone]).
+///
+/// When [now] is provided it is used as-is (assumed already in tenant zone);
+/// when omitted, [nowInZone()] supplies the current tenant-local time.
+String resolveFreeText(
+    String text, Map<String, dynamic>? op, String tenantName,
+    {DateTime? now}) {
+  if (text.isEmpty) return text;
+  now ??= nowInZone().now;
+  String flowName = 'Sin flujo';
+  if (op != null) {
+    final flows = op['flows'];
+    if (flows is List && flows.isNotEmpty) {
+      final first = flows.first;
+      flowName = first is Map
+          ? (first['name']?.toString() ?? 'Sin flujo')
+          : first.toString();
+    }
+  }
+  return text
+      .replaceAll(
+          '{nombre}',
+          op?['display_name']?.toString() ??
+              op?['name']?.toString() ??
+              'Operador')
+      .replaceAll('{telefono}', op?['phone']?.toString() ?? '')
+      .replaceAll('{flujo}', flowName)
+      .replaceAll('{hora}', _hhmmBcast.format(now))
+      .replaceAll('{dia}', fmtWeekdayEs(now))
+      .replaceAll('{fecha}', _slashDateBcast.format(now))
+      .replaceAll('{tenant}', tenantName);
 }
