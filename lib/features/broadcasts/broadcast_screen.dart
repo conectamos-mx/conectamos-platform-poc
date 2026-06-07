@@ -15,44 +15,6 @@ import '../../shared/widgets/app_button.dart';
 
 enum _BroadcastResultType { success, warning, error }
 
-String _resolveFreeText(
-    String text, Map<String, dynamic>? op, String tenantName) {
-  if (text.isEmpty) return text;
-  final now = DateTime.now();
-  const days = [
-    'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'
-  ];
-  String flowName = 'Sin flujo';
-  if (op != null) {
-    final flows = op['flows'];
-    if (flows is List && flows.isNotEmpty) {
-      final first = flows.first;
-      flowName = first is Map
-          ? (first['name']?.toString() ?? 'Sin flujo')
-          : first.toString();
-    }
-  }
-  return text
-      .replaceAll(
-          '{nombre}',
-          op?['display_name']?.toString() ??
-              op?['name']?.toString() ??
-              'Operador')
-      .replaceAll('{telefono}', op?['phone']?.toString() ?? '')
-      .replaceAll('{flujo}', flowName)
-      .replaceAll(
-          '{hora}',
-          '${now.hour.toString().padLeft(2, '0')}:'
-          '${now.minute.toString().padLeft(2, '0')}')
-      .replaceAll('{dia}', days[now.weekday - 1])
-      .replaceAll(
-          '{fecha}',
-          '${now.day.toString().padLeft(2, '0')}/'
-          '${now.month.toString().padLeft(2, '0')}/'
-          '${now.year}')
-      .replaceAll('{tenant}', tenantName);
-}
-
 // ── Providers ─────────────────────────────────────────────────────────────────
 
 final _bcastOperatorsProvider =
@@ -241,7 +203,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                 : null;
         if (firstOp != null && firstOp.isNotEmpty) {
           final tenantDisplayName = ref.read(activeTenantDisplayProvider);
-          resolvedText = _resolveFreeText(resolvedText, firstOp, tenantDisplayName);
+          resolvedText = resolveFreeText(resolvedText, firstOp, tenantDisplayName);
         }
       }
 
@@ -1020,7 +982,7 @@ class _PreviewColumn extends StatelessWidget {
       previewText = resolveTemplatePreview(selectedTemplate!);
     } else if (!useTemplate) {
       // FIX 3: resolver variables estándar
-      previewText = _resolveFreeText(msgCtrl.text, firstSelectedOp, tenantName);
+      previewText = resolveFreeText(msgCtrl.text, firstSelectedOp, tenantName);
     }
 
     // FIX 1: título dinámico

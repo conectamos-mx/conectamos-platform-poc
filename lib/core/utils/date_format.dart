@@ -17,6 +17,7 @@ final _slashCompact = DateFormat('dd/MM HH:mm');
 final _heroFmt = DateFormat("EEEE, d 'de' MMMM 'de' yyyy", 'es_MX');
 final _dMmm = DateFormat('d MMM', 'es_MX');
 final _ddMm = DateFormat('dd/MM');
+final _weekday = DateFormat('EEEE', 'es_MX');
 
 // ── Absolute format: ISO string → localised string ──────────────────────────
 
@@ -92,6 +93,13 @@ String fmtDateLongEs(DateTime d) {
   final r = toZone(d);
   final text = _heroFmt.format(r.dt);
   return r.utcFallback ? '$text (UTC)' : text;
+}
+
+/// Capitalised weekday name in Spanish (e.g. "Jueves").
+/// [dt] should already be in the desired timezone.
+String fmtWeekdayEs(DateTime dt) {
+  final raw = _weekday.format(dt);
+  return raw[0].toUpperCase() + raw.substring(1);
 }
 
 /// "d MMM yyyy · HH:mm" in active tenant timezone.
