@@ -18,6 +18,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/flows_api.dart';
+import '../../core/utils/broadcast_helpers.dart';
 import '../broadcasts/broadcast_screen.dart';
 import '../../core/api/channels_api.dart';
 import '../../core/api/conversations_api.dart';
@@ -6276,25 +6277,10 @@ class _NewMessageDialogState extends ConsumerState<_NewMessageDialog> {
     } on DioException catch (e) {
       debugPrint('[_send] DioException: status=${e.response?.statusCode} data=${e.response?.data}');
       final raw = e.response?.data?.toString() ?? e.message ?? '';
-      if (mounted) setState(() { _sending = false; _sendError = _parseErrorMessage(raw); });
+      if (mounted) setState(() { _sending = false; _sendError = parseWhatsAppErrorMessage(raw); });
     } catch (e) {
       debugPrint('[_send] Exception: $e');
-      if (mounted) setState(() { _sending = false; _sendError = _parseErrorMessage(e.toString()); });
-    }
-  }
-
-  String _parseErrorMessage(dynamic error) {
-    try {
-      final detail = error.toString();
-      if (detail.contains('131037') || detail.contains('display name')) {
-        return 'El número aún no tiene el nombre de perfil aprobado por Meta. Por favor espera la aprobación antes de iniciar nuevas conversaciones.';
-      }
-      if (detail.contains('131026') || detail.contains('not in whitelist')) {
-        return 'Este número no está registrado como destinatario de prueba.';
-      }
-      return 'Error al enviar el mensaje. Intenta de nuevo.';
-    } catch (_) {
-      return 'Error al enviar el mensaje. Intenta de nuevo.';
+      if (mounted) setState(() { _sending = false; _sendError = parseWhatsAppErrorMessage(e.toString()); });
     }
   }
 
