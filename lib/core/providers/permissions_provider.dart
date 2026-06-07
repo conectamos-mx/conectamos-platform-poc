@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
 import '../config.dart';
+import '../utils/toggle_permission.dart';
 import 'auth_provider.dart';
 import 'tenant_provider.dart';
 
@@ -293,39 +294,17 @@ class RolePermissionsNotifier extends StateNotifier<RolePermState> {
   }
 
   /// Toggles a permission and returns cascade description strings (for toast).
+  /// Wrapper delgado sobre togglePermission() pura (PLA-70).
   List<String> toggle(String module, String action) {
-    final key     = '$module.$action';
-    final current = state.grants[key] ?? false;
-    final newGrants = Map<String, bool>.from(state.grants);
-    final cascades  = <String>[];
-
-    if (!current) {
-      // Activating: also activate prerequisite if needed
-      newGrants[key] = true;
-      final prereq = _kPrerequisites[key];
-      if (prereq != null && !(newGrants[prereq] ?? false)) {
-        newGrants[prereq] = true;
-        cascades.add(
-          'Se activó también "${kPermLabels[prereq] ?? prereq}" '
-          'porque es requerido por "${kPermLabels[key] ?? key}".',
-        );
-      }
-    } else {
-      // Deactivating: also deactivate dependents
-      newGrants[key] = false;
-      for (final entry in _kPrerequisites.entries) {
-        if (entry.value == key && (newGrants[entry.key] ?? false)) {
-          newGrants[entry.key] = false;
-          cascades.add(
-            'Se desactivó también "${kPermLabels[entry.key] ?? entry.key}" '
-            'porque requiere "${kPermLabels[key] ?? key}".',
-          );
-        }
-      }
-    }
-
-    state = state.copyWith(grants: newGrants);
-    return cascades;
+    final result = togglePermission(
+      currentGrants: state.grants,
+      module: module,
+      action: action,
+      prerequisites: _kPrerequisites,
+      labels: kPermLabels,
+    );
+    state = state.copyWith(grants: result.grants);
+    return result.cascadeMessages;
   }
 
   /// Saves diff to backend. Returns null on success or an error message.

@@ -26,6 +26,7 @@ import '../../core/api/conversations_api.dart';
 import '../../core/api/messages_api.dart';
 import '../../core/api/operators_api.dart';
 import '../../core/utils/date_format.dart';
+import '../../core/utils/whatsapp_window.dart';
 import '../../core/utils/tz_format.dart';
 import '../../core/utils/phone_normalizer.dart';
 import '../../core/api/sessions_api.dart';
@@ -940,8 +941,7 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
                   final createdAt  = lastMsg?['created_at'] as String?;
                   final unread     = _unreadOverride[chatId]
                       ?? (conv['unread_count'] as int? ?? 0);
-                  // Use backend-provided window_open; fallback true is
-                  // conservative (non-WA channels have no 24h restriction).
+                  // No usa whatsAppWindowOpen: window_open lo pre-calcula el backend (PLA-91).
                   final windowOpen = conv['window_open'] as bool? ?? true;
                   return _ApiConvoItem(
                     name: name,
@@ -2297,20 +2297,16 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
       }
       if (recent.length < 50) _hasMoreMessages = false;
 
-      // Compute window state
+      // Compute window state via whatsAppWindowOpen (PLA-91)
       final lastInbound = messages
           .where((m) => (m['direction'] as String?) != 'outbound')
           .lastOrNull;
-      final receivedAt = lastInbound != null
-          ? DateTime.tryParse(lastInbound['received_at'] as String? ?? '')
-          : null;
       final channelType = ref.read(selectedChannelTypeProvider);
       final operatorId  = ref.read(selectedConvOperatorIdProvider);
-      final hasRecentInbound = receivedAt != null &&
-          DateTime.now().toUtc().difference(receivedAt.toUtc()).inHours < 24;
       final computed = operatorId == null
           ? true
-          : (channelType != 'whatsapp') || hasRecentInbound;
+          : (channelType != 'whatsapp') ||
+              whatsAppWindowOpen(lastInbound?['received_at'] as String?);
 
       _ConvoListState.setLastRead(
           chatId, DateTime.now().toUtc(), ref.read(activeTenantIdProvider));
@@ -2341,18 +2337,15 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
       // Dedup: skip if already in list
       if (id != null && _apiMessages.any((m) => m['id'] == id)) return;
 
-      // Update window state
+      // Update window state via whatsAppWindowOpen (PLA-91)
       if ((newMsg['direction'] as String?) != 'outbound') {
-        final ra = DateTime.tryParse(newMsg['received_at'] as String? ?? '');
-        if (ra != null) {
-          final channelType = ref.read(selectedChannelTypeProvider);
-          final operatorId  = ref.read(selectedConvOperatorIdProvider);
-          final fresh = DateTime.now().toUtc().difference(ra.toUtc()).inHours < 24;
-          final computed = operatorId == null
-              ? true
-              : (channelType != 'whatsapp') || fresh;
-          _windowOpen = computed;
-        }
+        final channelType = ref.read(selectedChannelTypeProvider);
+        final operatorId  = ref.read(selectedConvOperatorIdProvider);
+        final computed = operatorId == null
+            ? true
+            : (channelType != 'whatsapp') ||
+                whatsAppWindowOpen(newMsg['received_at'] as String?);
+        _windowOpen = computed;
       }
 
       _ConvoListState.setLastRead(
@@ -6112,6 +6105,7 @@ class _NewMessageDialogState extends ConsumerState<_NewMessageDialog> {
       final phone = recipient['phone'] as String? ?? '';
       final chatId = PhoneNormalizer.toChatId(phone);
       final db = Supabase.instance.client;
+      // No usa whatsAppWindowOpen: filtro server-side por diseno (PLA-91). Cutoff en UTC canonico.
       final cutoff = DateTime.now().toUtc().subtract(const Duration(hours: 24)).toIso8601String();
       final rows = await db
           .from('wa_messages')

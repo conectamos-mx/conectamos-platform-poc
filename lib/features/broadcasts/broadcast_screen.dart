@@ -9,6 +9,7 @@ import '../../core/utils/broadcast_helpers.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/whatsapp_window.dart';
 import '../../shared/widgets/app_button.dart';
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
@@ -148,13 +149,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     }).toList();
   }
 
-  static bool _windowOpen(Map<String, dynamic> op) {
-    final raw = op['last_inbound_at'] as String?;
-    if (raw == null) return false;
-    final dt = DateTime.tryParse(raw);
-    if (dt == null) return false;
-    return DateTime.now().difference(dt).inHours < 24;
-  }
+  // _windowOpen eliminada — usar whatsAppWindowOpen (PLA-91).
 
   Future<void> _sendBroadcast(
     List<Map<String, dynamic>> filteredOps,
@@ -350,7 +345,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     // null last_inbound_at → _windowOpen retorna false (ventana cerrada)
     final closedWindowCount = isTelegram
         ? 0
-        : selectedOperators.where((op) => !_windowOpen(op)).length;
+        : selectedOperators.where((op) => !whatsAppWindowOpen(op['last_inbound_at'] as String?)).length;
 
     // Flujos únicos en todos los operadores
     final allFlows   = <String>{};
@@ -1070,7 +1065,7 @@ class _PreviewColumn extends StatelessWidget {
 
                   // windowOpen: bool (false = cerrada), solo chip en WA
                   final bool? windowOpen = isWa
-                      ? _BroadcastScreenState._windowOpen(op)
+                      ? whatsAppWindowOpen(op['last_inbound_at'] as String?)
                       : null;
                   final isClosed = windowOpen == false;
 
