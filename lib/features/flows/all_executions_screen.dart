@@ -15,6 +15,7 @@ import '../../core/api/operators_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/date_format.dart';
+import '../../core/utils/execution_labels.dart';
 import '../../core/utils/relative_time.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_shell.dart';
@@ -471,18 +472,6 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     if (_filterDateTo != null)   'date_to':   _filterDateTo,
     if (_searchText.isNotEmpty)             'search':         _searchText,
     if (_activeFieldSearches.isNotEmpty)    'field_searches': _activeFieldSearches,
-  };
-
-  String _statusLabel(String s) => switch (s) {
-    'active' || 'in_progress'               => 'Activa',
-    'completed'                             => 'Completada',
-    'pending'                               => 'Pendiente',
-    'pending_dashboard' || 'pending_review' => 'En revisión',
-    'paused'                                => 'Pausada',
-    'abandoned'                             => 'Abandonada',
-    'cancelled'                             => 'Cancelada',
-    'failed' || 'error'                     => 'Error',
-    _                                       => s,
   };
 
   String _dateRangeLabel(String r) => switch (r) {
@@ -1383,7 +1372,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
 
     for (final s in _filterStatus) {
       chips.add(_FilterChip(
-        label: _statusLabel(s),
+        label: executionStatusLabel(s),
         onRemove: () {
           setState(() {
             _filterStatus = _filterStatus.where((x) => x != s).toList();
@@ -1757,7 +1746,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
             ?? '—';
       case 'status':
         final s = exec['status'] as String? ?? 'unknown';
-        return _statusLabel(s);
+        return executionStatusLabel(s);
       default:
         return '';
     }
@@ -2117,7 +2106,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
       parts.add('Workers: $names');
     }
     if (_filterStatus.isNotEmpty) {
-      parts.add('Estado: ${_filterStatus.map(_statusLabel).join(', ')}');
+      parts.add('Estado: ${_filterStatus.map(executionStatusLabel).join(', ')}');
     }
     if (_filterFlowIds.isNotEmpty) {
       final names = _filterFlowIds.map((id) {
