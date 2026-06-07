@@ -66,3 +66,35 @@ void setActiveZone(String iana) {
   }
   return (dt: tz.TZDateTime.from(instant, _activeLocation!), utcFallback: false);
 }
+
+/// Start of calendar day (00:00:00.000) in active tenant timezone.
+/// [instant] is converted to tenant zone first to determine the calendar day.
+({DateTime dt, bool utcFallback}) startOfDay(DateTime instant) {
+  if (_activeLocation == null) {
+    final u = instant.toUtc();
+    return (dt: DateTime.utc(u.year, u.month, u.day), utcFallback: true);
+  }
+  final inZone = tz.TZDateTime.from(instant, _activeLocation!);
+  return (
+    dt: tz.TZDateTime(_activeLocation!, inZone.year, inZone.month, inZone.day),
+    utcFallback: false,
+  );
+}
+
+/// End of calendar day (23:59:59.999) in active tenant timezone.
+/// [instant] is converted to tenant zone first to determine the calendar day.
+({DateTime dt, bool utcFallback}) endOfDay(DateTime instant) {
+  if (_activeLocation == null) {
+    final u = instant.toUtc();
+    return (
+      dt: DateTime.utc(u.year, u.month, u.day, 23, 59, 59, 999),
+      utcFallback: true,
+    );
+  }
+  final inZone = tz.TZDateTime.from(instant, _activeLocation!);
+  return (
+    dt: tz.TZDateTime(
+        _activeLocation!, inZone.year, inZone.month, inZone.day, 23, 59, 59, 999),
+    utcFallback: false,
+  );
+}

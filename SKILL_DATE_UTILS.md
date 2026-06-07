@@ -26,6 +26,8 @@ el global y las funciones formatean en la zona del tenant.
 | `formatInTimeZone` | `({String text, bool utcFallback}) formatInTimeZone(DateTime utcInstant, DateFormat fmt)` | Formatea `utcInstant` en zona activa. Fallback: UTC + " (UTC)". |
 | `nowInZone` | `({DateTime now, bool utcFallback}) nowInZone()` | `DateTime.now()` en zona activa. Fallback: UTC. |
 | `toZone` | `({DateTime dt, bool utcFallback}) toZone(DateTime instant)` | Convierte cualquier DateTime a zona activa. Fallback: UTC. |
+| `startOfDay` | `({DateTime dt, bool utcFallback}) startOfDay(DateTime instant)` | 00:00:00.000 del dia calendario del instante en zona activa. DST-aware. Fallback: UTC. |
+| `endOfDay` | `({DateTime dt, bool utcFallback}) endOfDay(DateTime instant)` | 23:59:59.999 del dia calendario del instante en zona activa. DST-aware. Fallback: UTC. |
 
 ### Contrato de fallback (ADR-415)
 

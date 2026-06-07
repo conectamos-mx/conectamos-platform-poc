@@ -4607,20 +4607,30 @@ class _TabFeedState extends ConsumerState<_TabFeed> {
     DateTime? fromDate;
     DateTime? toDate;
     if (_dateRange != null) {
-      fromDate = DateTime(
-        _dateRange!.start.year, _dateRange!.start.month, _dateRange!.start.day,
-        _fromTime?.hour ?? 0, _fromTime?.minute ?? 0,
+      final sod = startOfDay(_dateRange!.start).dt;
+      final eod = endOfDay(_dateRange!.end).dt;
+      fromDate = sod.copyWith(
+        hour: _fromTime?.hour ?? 0,
+        minute: _fromTime?.minute ?? 0,
       );
-      toDate = DateTime(
-        _dateRange!.end.year, _dateRange!.end.month, _dateRange!.end.day,
-        _toTime?.hour ?? 23, _toTime?.minute ?? 59, 59,
+      toDate = eod.copyWith(
+        hour: _toTime?.hour ?? 23,
+        minute: _toTime?.minute ?? 59,
+        second: 59,
       );
     } else if (_fromTime != null || _toTime != null) {
-      final now = DateTime.now();
-      fromDate = DateTime(now.year, now.month, now.day,
-          _fromTime?.hour ?? 0, _fromTime?.minute ?? 0);
-      toDate = DateTime(now.year, now.month, now.day,
-          _toTime?.hour ?? 23, _toTime?.minute ?? 59, 59);
+      final tzNow = nowInZone().now;
+      final sod = startOfDay(tzNow).dt;
+      final eod = endOfDay(tzNow).dt;
+      fromDate = sod.copyWith(
+        hour: _fromTime?.hour ?? 0,
+        minute: _fromTime?.minute ?? 0,
+      );
+      toDate = eod.copyWith(
+        hour: _toTime?.hour ?? 23,
+        minute: _toTime?.minute ?? 59,
+        second: 59,
+      );
     }
 
     _feedSub = SupabaseMessages.streamFeed(
@@ -4681,29 +4691,28 @@ class _TabFeedState extends ConsumerState<_TabFeed> {
     final receivedAt =
         DateTime.tryParse(msg['received_at'] as String? ?? '');
     if (receivedAt == null) return false;
-    final local = receivedAt.toLocal();
+    final tzMsg = toZone(receivedAt).dt;
     if (_dateRange != null) {
-      if (local.isBefore(_dateRange!.start)) { return false; }
-      if (local.isAfter(
-          _dateRange!.end.add(const Duration(days: 1)))) { return false; }
+      final rangeStart = startOfDay(_dateRange!.start).dt;
+      final rangeEnd = endOfDay(_dateRange!.end).dt;
+      if (tzMsg.isBefore(rangeStart)) return false;
+      if (tzMsg.isAfter(rangeEnd)) return false;
     } else if (_fromTime != null || _toTime != null) {
-      // Sin rango de fecha explícito la UI muestra "Hoy HH:MM–HH:MM":
-      // restringir al día actual antes de evaluar la hora.
-      final now = DateTime.now();
-      final isToday = local.year == now.year &&
-          local.month == now.month &&
-          local.day == now.day;
-      if (!isToday) return false;
+      final tzNow = nowInZone().now;
+      final isTodayTz = tzMsg.year == tzNow.year &&
+          tzMsg.month == tzNow.month &&
+          tzMsg.day == tzNow.day;
+      if (!isTodayTz) return false;
     }
     if (_fromTime != null) {
       final fromMinutes = _fromTime!.hour * 60 + _fromTime!.minute;
-      final msgMinutes = local.hour * 60 + local.minute;
-      if (msgMinutes < fromMinutes) { return false; }
+      final msgMinutes = tzMsg.hour * 60 + tzMsg.minute;
+      if (msgMinutes < fromMinutes) return false;
     }
     if (_toTime != null) {
       final toMinutes = _toTime!.hour * 60 + _toTime!.minute;
-      final msgMinutes = local.hour * 60 + local.minute;
-      if (msgMinutes > toMinutes) { return false; }
+      final msgMinutes = tzMsg.hour * 60 + tzMsg.minute;
+      if (msgMinutes > toMinutes) return false;
     }
     return true;
   }
