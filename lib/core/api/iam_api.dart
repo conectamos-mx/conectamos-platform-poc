@@ -117,12 +117,10 @@ class IamApi {
   static Future<void> acceptInvitation(
     String token, {
     required String password,
-    required String nombre,
-    required String telefono,
   }) async {
     await ApiClient.instance.post(
       '/iam/invite/$token/accept',
-      data: {'password': password, 'nombre': nombre, 'telefono': telefono},
+      data: {'password': password},
     );
   }
 
