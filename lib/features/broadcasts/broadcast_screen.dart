@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/utils/broadcast_helpers.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -13,18 +14,6 @@ import '../../shared/widgets/app_button.dart';
 // ── Enums ─────────────────────────────────────────────────────────────────────
 
 enum _BroadcastResultType { success, warning, error }
-
-// ── Variables estándar de texto libre ─────────────────────────────────────────
-
-const _kFreeVars = [
-  (key: '{nombre}',   label: 'nombre'),
-  (key: '{telefono}', label: 'teléfono'),
-  (key: '{flujo}',    label: 'flujo'),
-  (key: '{hora}',     label: 'hora'),
-  (key: '{dia}',      label: 'día'),
-  (key: '{fecha}',    label: 'fecha'),
-  (key: '{tenant}',   label: 'tenant'),
-];
 
 String _resolveFreeText(
     String text, Map<String, dynamic>? op, String tenantName) {
@@ -124,57 +113,6 @@ final _bcastHistoryProvider =
     }
   },
 );
-
-// ── Helper: resuelve preview de plantilla ─────────────────────────────────────
-
-String _resolvePreview(Map<String, dynamic> template) {
-  const examples = <String, String>{
-    'nombre_operador':   'José Miguel',
-    'telefono_operador': '5215559537449',
-    'nombre_tenant':     'TMR-Prixz',
-    'fecha_hoy':         '14/04/2026',
-    'hora_actual':       '10:30 AM',
-  };
-  String preview = template['body_text']?.toString() ?? '';
-  final vars = template['variables'];
-  if (vars is List) {
-    for (final v in vars) {
-      if (v is! Map) continue;
-      final slot = v['slot'] as int? ?? 0;
-      final type = v['type'] as String? ?? 'free';
-      final key  = v['key']  as String? ?? '';
-      final val  = type == 'system'
-          ? (examples[key] ?? '[$key]')
-          : (key.isNotEmpty ? '[$key]' : '{{$slot}}');
-      if (slot > 0) preview = preview.replaceAll('{{$slot}}', val);
-    }
-  }
-  return preview;
-}
-
-List<String> _resolveTemplateVariables(Map<String, dynamic> template) {
-  const examples = <String, String>{
-    'nombre_operador':   'José Miguel',
-    'telefono_operador': '5215559537449',
-    'nombre_tenant':     'TMR-Prixz',
-    'fecha_hoy':         '14/04/2026',
-    'hora_actual':       '10:30 AM',
-  };
-  final vars = template['variables'];
-  if (vars is! List || vars.isEmpty) return [];
-  final sorted = vars
-      .whereType<Map>()
-      .map((e) => Map<String, dynamic>.from(e))
-      .toList()
-    ..sort((a, b) =>
-        ((a['slot'] as int?) ?? 0).compareTo((b['slot'] as int?) ?? 0));
-  return sorted.map((v) {
-    final type = v['type'] as String? ?? 'free';
-    final key  = v['key']  as String? ?? '';
-    if (type == 'system') return examples[key] ?? '[$key]';
-    return key.isNotEmpty ? '[$key]' : '[variable]';
-  }).toList();
-}
 
 // ── Pantalla ──────────────────────────────────────────────────────────────────
 
@@ -313,7 +251,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         'message_text':       _useTemplate ? null : resolvedText,
         'template_id':        _useTemplate ? _selectedTemplateId : null,
         'template_variables': _useTemplate && selectedTemplate != null
-            ? _resolveTemplateVariables(selectedTemplate)
+            ? resolveTemplateVariables(selectedTemplate)
             : <String>[],
       };
 
@@ -377,7 +315,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
       setState(() {
         _sending      = false;
         _confirming   = false;
-        _result       = _parseErrorMessage(raw ?? e.message ?? '');
+        _result       = parseWhatsAppErrorMessage(raw ?? e.message ?? '');
         _resultType   = _BroadcastResultType.error;
         _resultErrors = [];
       });
@@ -386,26 +324,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
       setState(() {
         _sending      = false;
         _confirming   = false;
-        _result       = _parseErrorMessage(e.toString());
+        _result       = parseWhatsAppErrorMessage(e.toString());
         _resultType   = _BroadcastResultType.error;
         _resultErrors = [];
       });
-    }
-  }
-
-  String _parseErrorMessage(dynamic error) {
-    try {
-      final detail = error.toString();
-      if (detail.contains('131037') || detail.contains('display name')) {
-        return 'El número aún no tiene el nombre de perfil aprobado por Meta. '
-            'Por favor espera la aprobación antes de iniciar nuevas conversaciones.';
-      }
-      if (detail.contains('131026') || detail.contains('not in whitelist')) {
-        return 'Este número no está registrado como destinatario de prueba.';
-      }
-      return 'Error al enviar el mensaje. Intenta de nuevo.';
-    } catch (_) {
-      return 'Error al enviar el mensaje. Intenta de nuevo.';
     }
   }
 
@@ -897,7 +819,7 @@ class _FormColumn extends StatelessWidget {
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
-                  children: _kFreeVars.map((v) => _VarChip(
+                  children: kBroadcastFreeVars.map((v) => _VarChip(
                     label: v.label,
                     onTap: () => onInsertVariable(v.key),
                   )).toList(),
@@ -1095,7 +1017,7 @@ class _PreviewColumn extends StatelessWidget {
     // FIX 1: previewText se resuelve con variables del primer destinatario
     String previewText = '';
     if (useTemplate && selectedTemplate != null) {
-      previewText = _resolvePreview(selectedTemplate!);
+      previewText = resolveTemplatePreview(selectedTemplate!);
     } else if (!useTemplate) {
       // FIX 3: resolver variables estándar
       previewText = _resolveFreeText(msgCtrl.text, firstSelectedOp, tenantName);
