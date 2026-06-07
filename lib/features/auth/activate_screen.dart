@@ -1,20 +1,22 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/iam_api.dart';
 import '../../core/theme/text_styles.dart';
 import 'auth_shared.dart';
 
-class ActivateScreen extends StatefulWidget {
+class ActivateScreen extends ConsumerStatefulWidget {
   const ActivateScreen({super.key, required this.token});
   final String token;
 
   @override
-  State<ActivateScreen> createState() => _ActivateScreenState();
+  ConsumerState<ActivateScreen> createState() => _ActivateScreenState();
 }
 
-class _ActivateScreenState extends State<ActivateScreen> {
+class _ActivateScreenState extends ConsumerState<ActivateScreen> {
   bool _loadingToken = true;
   String? _tokenError;
   Map<String, dynamic>? _inviteData;
@@ -26,6 +28,8 @@ class _ActivateScreenState extends State<ActivateScreen> {
   bool _success = false;
 
   String? _renderFallbackMsg;
+
+  Dio get _dio => ref.read(apiClientProvider).dio;
 
   @override
   void initState() {
@@ -42,7 +46,7 @@ class _ActivateScreenState extends State<ActivateScreen> {
 
   Future<void> _validateToken() async {
     try {
-      final data = await IamApi.getInvitation(widget.token);
+      final data = await IamApi.getInvitation(widget.token, dio: _dio);
       if (!mounted) return;
       setState(() { _inviteData = data; _loadingToken = false; });
     } on DioException catch (e) {
@@ -90,6 +94,7 @@ class _ActivateScreenState extends State<ActivateScreen> {
       await IamApi.acceptInvitation(
         widget.token,
         password: pass,
+        dio: _dio,
       );
       if (!mounted) return;
       setState(() { _submitting = false; _success = true; });
@@ -205,9 +210,10 @@ class _ActivateScreenState extends State<ActivateScreen> {
   }
 
   Widget _buildSuccess() {
-    return const Column(
+    return Column(
+      key: const Key('activate_success'),
       mainAxisSize: MainAxisSize.min,
-      children: [
+      children: const [
         AuthCardHead(title: 'Activa tu cuenta'),
         AuthSuccessBlock(
           title: 'Bienvenido a bordo',
@@ -278,15 +284,16 @@ class _ActivateScreenState extends State<ActivateScreen> {
 
         // Read-only confirmation of invitation data
         if (nombre.isNotEmpty)
-          _ReadOnlyRow(icon: Icons.person_outline_rounded, label: nombre),
+          _ReadOnlyRow(key: const Key('activate_name'), icon: Icons.person_outline_rounded, label: nombre),
         if (telefono.isNotEmpty) ...[
           if (nombre.isNotEmpty) const SizedBox(height: 10),
-          _ReadOnlyRow(icon: Icons.phone_outlined, label: telefono),
+          _ReadOnlyRow(key: const Key('activate_phone'), icon: Icons.phone_outlined, label: telefono),
         ],
         if (nombre.isNotEmpty || telefono.isNotEmpty)
           const SizedBox(height: 16),
 
         AuthField(
+          key: const Key('activate_password'),
           label: 'Contraseña',
           controller: _passCtrl,
           placeholder: '••••••••',
@@ -297,6 +304,7 @@ class _ActivateScreenState extends State<ActivateScreen> {
         ),
         const SizedBox(height: 16),
         AuthField(
+          key: const Key('activate_confirm'),
           label: 'Confirmar contraseña',
           controller: _confirmCtrl,
           placeholder: '••••••••',
@@ -307,6 +315,7 @@ class _ActivateScreenState extends State<ActivateScreen> {
         const SizedBox(height: 16),
 
         AuthPrimaryButton(
+          key: const Key('activate_submit'),
           label: 'Activar cuenta',
           loading: _submitting,
           onTap: _submitting ? null : _submit,
@@ -319,8 +328,8 @@ class _ActivateScreenState extends State<ActivateScreen> {
           decoration: const BoxDecoration(
             border: Border(top: BorderSide(color: Color(0xFFF1F1F1))),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Wrap(
+            alignment: WrapAlignment.center,
             children: [
               const Text(
                 '¿Ya tienes cuenta? ',
@@ -355,7 +364,7 @@ class _ActivateScreenState extends State<ActivateScreen> {
 
 /// Non-editable row showing invitation data as read-only confirmation.
 class _ReadOnlyRow extends StatelessWidget {
-  const _ReadOnlyRow({required this.icon, required this.label});
+  const _ReadOnlyRow({super.key, required this.icon, required this.label});
   final IconData icon;
   final String label;
 

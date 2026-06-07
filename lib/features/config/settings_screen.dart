@@ -1765,7 +1765,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
       if (_phoneE164.isNotEmpty) {
         payload['telefono'] = _phoneE164;
       }
-      await IamApi.inviteUser(payload);
+      await IamApi.inviteUser(payload, dio: ref.read(apiClientProvider).dio);
       if (!mounted) return;
       widget.onInvited();
       Navigator.pop(context);
@@ -1811,6 +1811,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
               ),
               const SizedBox(height: 20),
               _Field(
+                key: const Key('invite_name'),
                 label: 'Nombre completo',
                 ctrl: _nombreCtrl,
                 placeholder: 'Juan García',
@@ -1822,6 +1823,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
                   const Text('Email', style: AppTextStyles.formLabel),
                   const SizedBox(height: 6),
                   TextField(
+                    key: const Key('invite_email'),
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
                     onChanged: (_) {
@@ -1859,6 +1861,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
               ),
               const SizedBox(height: 12),
               PhoneFieldWidget(
+                key: const Key('invite_phone'),
                 label: 'Teléfono (opcional)',
                 onChanged: (e164) => _phoneE164 = e164,
               ),
@@ -1892,6 +1895,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
+                          key: const Key('invite_role'),
                           value: _availableRoles.any(
                                   (r) => r['id']?.toString() == _roleId)
                               ? _roleId
@@ -1927,6 +1931,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   AppButton(
+                    key: const Key('invite_cancel'),
                     label: 'Cancelar',
                     onPressed: () => Navigator.pop(context),
                     variant: AppButtonVariant.outline,
@@ -1934,6 +1939,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
                   ),
                   const SizedBox(width: 10),
                   AppButton(
+                    key: const Key('invite_submit'),
                     label: 'Enviar invitación',
                     onPressed: _send,
                     variant: AppButtonVariant.teal,
@@ -2439,6 +2445,7 @@ class _Row2 extends StatelessWidget {
 
 class _Field extends StatelessWidget {
   const _Field({
+    super.key,
     required this.label,
     required this.ctrl,
     required this.placeholder,

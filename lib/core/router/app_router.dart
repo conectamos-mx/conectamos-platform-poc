@@ -57,9 +57,12 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresher,
     redirect: (context, state) {
       if (kMockMode) {
-        if (state.matchedLocation == '/login') return null;
-        if (state.matchedLocation == '/overview') return null;
-        if (state.matchedLocation == '/') return '/overview';
+        final loc = state.matchedLocation;
+        if (loc == '/login') return null;
+        if (loc == '/overview') return null;
+        if (loc.startsWith('/activate')) return null;
+        if (loc.startsWith('/settings')) return null;
+        if (loc == '/') return '/overview';
         return '/overview';
       }
 

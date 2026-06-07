@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import 'package:conectamos_platform/core/api/api_client.dart';
 
 class IamApi {
@@ -37,8 +39,8 @@ class IamApi {
     await ApiClient.instance.post('/iam/users/$id/resend-invite');
   }
 
-  static Future<void> inviteUser(Map<String, dynamic> data) async {
-    await ApiClient.instance.post('/iam/invite', data: data);
+  static Future<void> inviteUser(Map<String, dynamic> data, {Dio? dio}) async {
+    await (dio ?? ApiClient.instance).post('/iam/invite', data: data);
   }
 
   static Future<void> resetPassword(String email) async {
@@ -107,8 +109,8 @@ class IamApi {
     );
   }
 
-  static Future<Map<String, dynamic>> getInvitation(String token) async {
-    final res = await ApiClient.instance.get('/iam/invite/$token');
+  static Future<Map<String, dynamic>> getInvitation(String token, {Dio? dio}) async {
+    final res = await (dio ?? ApiClient.instance).get('/iam/invite/$token');
     return res.data is Map
         ? Map<String, dynamic>.from(res.data as Map)
         : <String, dynamic>{};
@@ -117,8 +119,9 @@ class IamApi {
   static Future<void> acceptInvitation(
     String token, {
     required String password,
+    Dio? dio,
   }) async {
-    await ApiClient.instance.post(
+    await (dio ?? ApiClient.instance).post(
       '/iam/invite/$token/accept',
       data: {'password': password},
     );
