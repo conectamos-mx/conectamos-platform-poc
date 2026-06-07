@@ -15,6 +15,7 @@ import '../../core/api/channels_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/display_mappers.dart' as dm;
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/page_header.dart';
 
@@ -33,15 +34,6 @@ const _kChannelTypeConfig = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-Color _hexColor(String? hex) {
-  try {
-    final h = (hex ?? '#9CA3AF').replaceAll('#', '');
-    if (h.length != 6) return const Color(0xFF9CA3AF);
-    return Color(int.parse('FF$h', radix: 16));
-  } catch (_) {
-    return const Color(0xFF9CA3AF);
-  }
-}
 
 
 String _dioError(Object e) {
@@ -1150,7 +1142,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
               avatarUrl,
               fit: BoxFit.cover,
               errorBuilder: (context2, err, stack) => Container(
-                color: _hexColor(colorHex),
+                color: dm.hexColor(colorHex),
                 alignment: Alignment.center,
                 child: Text(
                   name[0].toUpperCase(),
@@ -1164,7 +1156,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
           Container(
             width: 24, height: 24,
             decoration: BoxDecoration(
-              color: _hexColor(colorHex),
+              color: dm.hexColor(colorHex),
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,

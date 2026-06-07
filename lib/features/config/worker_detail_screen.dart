@@ -10,6 +10,7 @@ import '../../core/api/flows_api.dart';
 import '../../core/api/operator_roles_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/display_mappers.dart' as dm;
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_header.dart';
@@ -31,16 +32,6 @@ const _kTypeConfig = {
   'custom':      (label: 'Custom',   bg: Color(0xFFF3F4F6), fg: Color(0xFF374151)),
 };
 
-Color _hexColor(String hex) {
-  final h = hex.replaceAll('#', '');
-  return Color(int.parse('FF$h', radix: 16));
-}
-
-String _initials(String name) {
-  final parts = name.trim().split(RegExp(r'\s+'));
-  if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-  return name.isEmpty ? '?' : name[0].toUpperCase();
-}
 
 const _kMeses = [
   'ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic',
@@ -420,14 +411,14 @@ class _ConfigTabState extends State<_ConfigTab> {
   Widget _buildInitialsAvatar(double size) {
     final colorHex = widget.worker['catalog_color'] as String? ?? '#59E0CC';
     final name = _workerName;
-    final color = _hexColor(colorHex);
+    final color = dm.hexColor(colorHex);
     return Container(
       width: size,
       height: size,
       color: color.withValues(alpha: 0.18),
       alignment: Alignment.center,
       child: Text(
-        _initials(name),
+        dm.initials(name),
         style: AppTextStyles.formLabel.copyWith(
           fontFamily: 'Onest',
           fontWeight: FontWeight.w700,
@@ -818,12 +809,12 @@ class _IdentityCardState extends State<_IdentityCard> {
     final colorHex   = widget.worker['catalog_color'] as String? ?? '#59E0CC';
     final workerType = widget.worker['catalog_worker_type'] as String? ?? 'custom';
     final iconUrl    = widget.worker['catalog_icon_url'] as String?;
-    final workerColor = _hexColor(colorHex);
+    final workerColor = dm.hexColor(colorHex);
     final typeEntry  = _kTypeConfig[workerType] ?? _kTypeConfig['custom']!;
     final name       = widget.worker['display_name'] as String? ??
         widget.worker['catalog_name'] as String? ??
         'Worker';
-    final initials   = _initials(name);
+    final initials   = dm.initials(name);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1176,7 +1167,7 @@ class _MetricsCard extends StatelessWidget {
     final completedToday = flows.fold<int>(
         0, (sum, f) => sum + ((f['completed_today'] as int?) ?? 0));
     final colorHex   = worker['catalog_color'] as String? ?? '#59E0CC';
-    final workerColor = _hexColor(colorHex);
+    final workerColor = dm.hexColor(colorHex);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
