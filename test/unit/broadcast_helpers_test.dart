@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:timezone/timezone.dart' as tz;
 import 'package:conectamos_platform/core/utils/broadcast_helpers.dart';
 import 'package:conectamos_platform/core/utils/tz_format.dart';
 
@@ -263,17 +264,27 @@ void main() {
       expect(result, matches(RegExp(r'^\d{2}/\d{2}/\d{4}$')));
     });
 
-    test('midnight boundary: America/Mexico_City near midnight UTC', () {
-      // Set timezone to CDMX (UTC-6 in winter / UTC-5 in summer)
-      // At 04:30 UTC on Jan 2, it's 22:30 on Jan 1 in CDMX (CST, UTC-6)
-      // We can't inject a fake clock, but we verify the function uses
-      // nowInZone() (tenant TZ) by checking the format is valid.
+    test('midnight boundary: 23:30 CDMX = 05:30 UTC next day', () {
+      // 1 Jan 2026 23:30 in America/Mexico_City (CST, UTC-6)
+      // = 2 Jan 2026 05:30 UTC. If the function used UTC, {fecha} would be
+      // 02/01/2026 and {dia} would be Viernes. Tenant-local must give 01/01.
       setActiveZone('America/Mexico_City');
-      final result = resolveFreeText('{hora} {dia} {fecha}', null, 'X');
-      // Should contain HH:mm, a valid day name, and dd/MM/yyyy
-      expect(result, matches(RegExp(
-        r'^\d{2}:\d{2} (Lunes|Martes|Miércoles|Jueves|Viernes|Sábado|Domingo) \d{2}/\d{2}/\d{4}$',
-      )));
+      final cdmx = tz.getLocation('America/Mexico_City');
+      final now = tz.TZDateTime(cdmx, 2026, 1, 1, 23, 30);
+      final result = resolveFreeText('{hora} {dia} {fecha}', null, 'X', now: now);
+      expect(result, '23:30 Jueves 01/01/2026');
+    });
+
+    test('midnight boundary: 00:30 CDMX = 06:30 UTC same day', () {
+      // 1 Jan 2026 00:30 in America/Mexico_City (CST, UTC-6)
+      // = 1 Jan 2026 06:30 UTC. Same calendar day in both zones, but
+      // confirms the function formats the injected tenant-local DateTime.
+      // 1 Jan 2026 is a Thursday.
+      setActiveZone('America/Mexico_City');
+      final cdmx = tz.getLocation('America/Mexico_City');
+      final now = tz.TZDateTime(cdmx, 2026, 1, 1, 0, 30);
+      final result = resolveFreeText('{hora} {dia} {fecha}', null, 'X', now: now);
+      expect(result, '00:30 Jueves 01/01/2026');
     });
 
     test('all placeholders resolve together', () {

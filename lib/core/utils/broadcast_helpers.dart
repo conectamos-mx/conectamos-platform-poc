@@ -96,11 +96,14 @@ final _slashDateBcast = DateFormat('dd/MM/yyyy');
 ///
 /// Replaces {nombre}, {telefono}, {flujo}, {hora}, {dia}, {fecha}, {tenant}
 /// with values from [op] and the active tenant timezone (via [nowInZone]).
+///
+/// When [now] is provided it is used as-is (assumed already in tenant zone);
+/// when omitted, [nowInZone()] supplies the current tenant-local time.
 String resolveFreeText(
-    String text, Map<String, dynamic>? op, String tenantName) {
+    String text, Map<String, dynamic>? op, String tenantName,
+    {DateTime? now}) {
   if (text.isEmpty) return text;
-  final r = nowInZone();
-  final now = r.now;
+  now ??= nowInZone().now;
   String flowName = 'Sin flujo';
   if (op != null) {
     final flows = op['flows'];
