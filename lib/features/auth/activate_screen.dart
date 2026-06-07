@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/iam_api.dart';
 import '../../core/theme/text_styles.dart';
-import '../../shared/validators/phone_validator.dart';
 import 'auth_shared.dart';
 
 class ActivateScreen extends StatefulWidget {
@@ -20,8 +19,6 @@ class _ActivateScreenState extends State<ActivateScreen> {
   String? _tokenError;
   Map<String, dynamic>? _inviteData;
 
-  final _nameCtrl    = TextEditingController();
-  final _phoneCtrl   = TextEditingController();
   final _passCtrl    = TextEditingController();
   final _confirmCtrl = TextEditingController();
   bool _submitting = false;
@@ -38,8 +35,6 @@ class _ActivateScreenState extends State<ActivateScreen> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _phoneCtrl.dispose();
     _passCtrl.dispose();
     _confirmCtrl.dispose();
     super.dispose();
@@ -49,13 +44,6 @@ class _ActivateScreenState extends State<ActivateScreen> {
     try {
       final data = await IamApi.getInvitation(widget.token);
       if (!mounted) return;
-
-      // Pre-populate name & phone from invitation data seeded by admin.
-      final nombre   = data['nombre']?.toString() ?? '';
-      final telefono = data['telefono']?.toString() ?? '';
-      if (nombre.isNotEmpty)   _nameCtrl.text  = nombre;
-      if (telefono.isNotEmpty) _phoneCtrl.text = telefono;
-
       setState(() { _inviteData = data; _loadingToken = false; });
     } on DioException catch (e) {
       if (!mounted) return;
@@ -85,24 +73,9 @@ class _ActivateScreenState extends State<ActivateScreen> {
   }
 
   Future<void> _submit() async {
-    final name    = _nameCtrl.text.trim();
     final pass    = _passCtrl.text;
     final confirm = _confirmCtrl.text;
-    final phone   = _phoneCtrl.text.trim();
 
-    if (name.isEmpty) {
-      setState(() => _submitError = 'Ingresa tu nombre completo');
-      return;
-    }
-    if (phone.isEmpty) {
-      setState(() => _submitError = 'Ingresa tu número de teléfono');
-      return;
-    }
-    final phoneErr = validatePhoneE164(phone);
-    if (phoneErr != null) {
-      setState(() => _submitError = phoneErr);
-      return;
-    }
     if (pass.length < 8) {
       setState(() => _submitError = 'La contraseña debe tener al menos 8 caracteres');
       return;
@@ -117,8 +90,6 @@ class _ActivateScreenState extends State<ActivateScreen> {
       await IamApi.acceptInvitation(
         widget.token,
         password: pass,
-        nombre: name,
-        telefono: phone,
       );
       if (!mounted) return;
       setState(() { _submitting = false; _success = true; });
@@ -249,6 +220,8 @@ class _ActivateScreenState extends State<ActivateScreen> {
   Widget _buildForm() {
     final tenantName = _inviteData?['tenant_name']?.toString() ?? '';
     final role       = _roleName();
+    final nombre     = _inviteData?['nombre']?.toString() ?? '';
+    final telefono   = _inviteData?['telefono']?.toString() ?? '';
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -303,24 +276,16 @@ class _ActivateScreenState extends State<ActivateScreen> {
           const SizedBox(height: 16),
         ],
 
-        AuthField(
-          label: 'Nombre completo',
-          controller: _nameCtrl,
-          placeholder: 'Juan García',
-          icon: Icons.person_outline_rounded,
-          inputAction: TextInputAction.next,
-          autofocus: true,
-        ),
-        const SizedBox(height: 16),
-        AuthField(
-          label: 'Teléfono',
-          controller: _phoneCtrl,
-          placeholder: '+52 55 1234 5678',
-          icon: Icons.phone_outlined,
-          keyboardType: TextInputType.phone,
-          inputAction: TextInputAction.next,
-        ),
-        const SizedBox(height: 16),
+        // Read-only confirmation of invitation data
+        if (nombre.isNotEmpty)
+          _ReadOnlyRow(icon: Icons.person_outline_rounded, label: nombre),
+        if (telefono.isNotEmpty) ...[
+          if (nombre.isNotEmpty) const SizedBox(height: 10),
+          _ReadOnlyRow(icon: Icons.phone_outlined, label: telefono),
+        ],
+        if (nombre.isNotEmpty || telefono.isNotEmpty)
+          const SizedBox(height: 16),
+
         AuthField(
           label: 'Contraseña',
           controller: _passCtrl,
@@ -328,6 +293,7 @@ class _ActivateScreenState extends State<ActivateScreen> {
           icon: Icons.lock_outline_rounded,
           isPassword: true,
           inputAction: TextInputAction.next,
+          autofocus: true,
         ),
         const SizedBox(height: 16),
         AuthField(
@@ -383,6 +349,39 @@ class _ActivateScreenState extends State<ActivateScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Non-editable row showing invitation data as read-only confirmation.
+class _ReadOnlyRow extends StatelessWidget {
+  const _ReadOnlyRow({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFB),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: const Color(0xFF9CA3AF)),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'Geist',
+              fontSize: 13.5,
+              color: Color(0xFF4B5563),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
