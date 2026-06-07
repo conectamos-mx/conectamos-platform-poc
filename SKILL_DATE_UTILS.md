@@ -63,6 +63,7 @@ Todas las funciones delegan al global de zona activa. **Sin parametro `zone:`.**
 | `fmtDateOnly` | `String fmtDateOnly(String? iso)` | ISO string | `dd/MM/yyyy` | `"05/01/2026"` | Fecha sin hora (ej. fecha de baja). |
 | `fmtDateTimeCompact` | `String fmtDateTimeCompact(String? iso)` | ISO string | `dd/MM HH:mm` | `"05/01 09:07"` | Fecha compacta sin año (chips, celdas de tabla). |
 | `fmtDateLongEs` | `String fmtDateLongEs(DateTime d)` | DateTime | `EEEE, d de MMMM de yyyy` | `"lunes, 5 de enero de 2026"` | Hero date en overview. |
+| `fmtWeekdayEs` | `String fmtWeekdayEs(DateTime dt)` | DateTime (ya en zona) | `EEEE` capitalizado | `"Jueves"` | Nombre del dia en espanol, primera letra mayuscula. Usado por `resolveFreeText` en broadcast_helpers.dart. |
 | `fmtDateIntl` | `String fmtDateIntl(DateTime dt)` | DateTime | `d MMM yyyy · HH:mm` | `"5 ene 2026 · 09:07"` | Datetime pickers en assignments. |
 | `fmtExecutionDate` | `String fmtExecutionDate(String? iso)` | ISO string | Hoy/Ayer/`dd/MM · HH:mm` | `"Hoy 09:07"` | Lista de ejecuciones pendientes. |
 | `isToday` | `bool isToday(String? iso)` | ISO string | `bool` | `true` | Predicado para badges "hoy". |
@@ -77,6 +78,7 @@ Todas las funciones delegan al global de zona activa. **Sin parametro `zone:`.**
 - Fecha completa sin hora? -> `fmtDateOnly`
 - Fecha compacta dd/MM + hora (chip)? -> `fmtDateTimeCompact`
 - Fecha larga en espanol (hero)? -> `fmtDateLongEs`
+- Solo nombre del dia en espanol? -> `fmtWeekdayEs`
 - Separador Hoy/Ayer/fecha (grupo)? -> `fmtDateGroupLabel`
 - Fecha + hora con locale intl (picker)? -> `fmtDateIntl`
 - "Hoy"/"Ayer"/fecha? -> `fmtExecutionDate`
