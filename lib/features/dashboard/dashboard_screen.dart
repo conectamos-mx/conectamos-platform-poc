@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/utils/date_format.dart' as dtfmt;
+import '../../core/utils/xlsx_helpers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_dashboard_table.dart';
@@ -1198,7 +1199,7 @@ class _DataTableWidget extends ConsumerWidget {
         '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
             ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
         '<sheets>',
-        '<sheet name="${_dtXmlEscape(sheetName.isEmpty ? 'Datos' : sheetName)}" sheetId="1" r:id="rId1"/>',
+        '<sheet name="${xlsXmlEscape(sheetName.isEmpty ? 'Datos' : sheetName)}" sheetId="1" r:id="rId1"/>',
         '</sheets>',
         '</workbook>',
       ].join());
@@ -1223,7 +1224,7 @@ class _DataTableWidget extends ConsumerWidget {
         '</styleSheet>',
       ].join());
 
-      addFile('xl/worksheets/sheet1.xml', _dtSheetXml(allRows));
+      addFile('xl/worksheets/sheet1.xml', xlsSheetXml(allRows, boldFirstRow: true));
 
       final zipBytes = ZipEncoder().encode(archive)!;
       final fileName =
@@ -1345,45 +1346,6 @@ class _DataTableWidget extends ConsumerWidget {
       },
     );
   }
-}
-
-// ── XLSX helpers (data_table) ─────────────────────────────────────────────────
-
-String _dtColName(int index) {
-  var name = '';
-  var i = index;
-  do {
-    name = String.fromCharCode(65 + (i % 26)) + name;
-    i = (i ~/ 26) - 1;
-  } while (i >= 0);
-  return name;
-}
-
-String _dtXmlEscape(String s) => s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
-
-String _dtSheetXml(List<List<String>> rows) {
-  final sb = StringBuffer()
-    ..write('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>')
-    ..write('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">')
-    ..write('<sheetData>');
-  for (var r = 0; r < rows.length; r++) {
-    sb.write('<row r="${r + 1}">');
-    final bold = r == 0;
-    for (var c = 0; c < rows[r].length; c++) {
-      final cell = '${_dtColName(c)}${r + 1}';
-      final val = _dtXmlEscape(rows[r][c]);
-      final sAttr = bold ? ' s="1"' : '';
-      sb.write('<c r="$cell" t="inlineStr"$sAttr><is><t>$val</t></is></c>');
-    }
-    sb.write('</row>');
-  }
-  sb.write('</sheetData></worksheet>');
-  return sb.toString();
 }
 
 // ── Placeholder chip ──────────────────────────────────────────────────────────
