@@ -18,6 +18,7 @@ import '../../core/constants/field_types.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/display_mappers.dart' as dm;
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
 import '../config/template_create_dialog.dart';
@@ -70,15 +71,6 @@ String _slugify(String input) {
       .replaceAll(RegExp(r'^-+|-+$'), '');
 }
 
-Color _hexColor(String? hex) {
-  try {
-    final h = (hex ?? '#9CA3AF').replaceAll('#', '');
-    if (h.length != 6) return AppColors.ctText3;
-    return Color(int.parse('FF$h', radix: 16));
-  } catch (_) {
-    return AppColors.ctText3;
-  }
-}
 
 String _dioError(Object e) {
   if (e is DioException) {
@@ -1446,7 +1438,7 @@ class _InfoTabState extends State<_InfoTab> {
                     width: 10,
                     height: 10,
                     decoration: BoxDecoration(
-                      color: _hexColor(workerColor),
+                      color: dm.hexColor(workerColor),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -3440,7 +3432,7 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
                     children: widget.availableRoles.map((role) {
                       final id = role['id'] as String? ?? '';
                       final label = role['label'] as String? ?? id;
-                      final color = _hexColor(role['color'] as String?);
+                      final color = dm.hexColor(role['color'] as String?);
                       final selected = _allowedRoleIds.contains(id);
                       return FilterChip(
                         label: Text(label,

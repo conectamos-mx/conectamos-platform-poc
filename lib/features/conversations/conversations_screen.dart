@@ -19,6 +19,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/utils/broadcast_helpers.dart';
+import '../../core/utils/display_mappers.dart' as dm;
 import '../broadcasts/broadcast_screen.dart';
 import '../../core/api/channels_api.dart';
 import '../../core/api/conversations_api.dart';
@@ -438,7 +439,7 @@ class _ChannelSelectorBar extends StatelessWidget {
           final ch = channels[i];
           final chId = ch['id'] as String?;
           final isSelected = chId == selectedChannelId;
-          final color = _hexColor(ch['color'] as String?);
+          final color = dm.hexColor(ch['color'] as String?);
           final label = ch['display_name'] as String? ?? 'Canal ${i + 1}';
           return MouseRegion(
             cursor: SystemMouseCursors.click,
@@ -512,36 +513,6 @@ class _TabOperador extends ConsumerWidget {
 // ── Helpers de formato ────────────────────────────────────────────────────────
 
 
-String _mediaFallback(String type) {
-  switch (type) {
-    case 'image': return '[📷 Imagen]';
-    case 'audio': return '[🎤 Nota de voz]';
-    case 'video': return '[🎥 Video]';
-    case 'document': return '[📄 Documento]';
-    case 'sticker': return '[😊 Sticker]';
-    case 'location': return '[📍 Ubicación]';
-    default: return '[📎 Archivo]';
-  }
-}
-
-
-String _msgBody(Map<String, dynamic> msg) {
-  final raw = msg['raw_body'] as String?;
-  if (raw != null && raw.isNotEmpty) return raw;
-  return _mediaFallback(msg['message_type'] as String? ?? '');
-}
-
-/// Resuelve el nombre a mostrar para mensajes outbound.
-/// Usa from_name si está disponible; luego deriva del origin o sent_by_user_id.
-String _outboundSenderName(Map<String, dynamic> msg) {
-  final fromName = msg['from_name'] as String?;
-  if (fromName != null && fromName.isNotEmpty) return fromName;
-  final origin = msg['origin'] as String?;
-  if (origin == 'ai_worker') return 'AI Worker';
-  final sentByUserId = msg['sent_by_user_id'] as String?;
-  if (sentByUserId != null && sentByUserId.isNotEmpty) return 'Agente';
-  return 'Supervisor';
-}
 
 /// Devuelve el color del nombre y el badge de origen para mensajes outbound.
 ({Color nameColor, Widget? badge}) _outboundOriginStyle(
@@ -602,42 +573,6 @@ class _OriginBadge extends StatelessWidget {
   }
 }
 
-String _initials(String name) {
-  final parts = name.trim().split(' ').where((p) => p.isNotEmpty).toList();
-  if (parts.isEmpty) return '?';
-  if (parts.length == 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
-
-Color _hexColor(String? hex) {
-  try {
-    final h = (hex ?? '#9CA3AF').replaceAll('#', '');
-    if (h.length != 6) return AppColors.ctText3;
-    return Color(int.parse('FF$h', radix: 16));
-  } catch (_) {
-    return AppColors.ctText3;
-  }
-}
-
-IconData _mediaIcon(String mediaType) {
-  switch (mediaType) {
-    case 'image':    return Icons.image_outlined;
-    case 'video':    return Icons.videocam_outlined;
-    case 'audio':    return Icons.mic_outlined;
-    case 'document': return Icons.attach_file_rounded;
-    default:         return Icons.attach_file_rounded;
-  }
-}
-
-String _mediaLabel(String mediaType) {
-  switch (mediaType) {
-    case 'image':    return 'Imagen';
-    case 'video':    return 'Video';
-    case 'audio':    return 'Audio';
-    case 'document': return 'Archivo';
-    default:         return 'Adjunto';
-  }
-}
 
 // ── Avatar de operador con fallback a iniciales ───────────────────────────────
 
@@ -1599,13 +1534,13 @@ class _ApiConvoItemState extends State<_ApiConvoItem> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
-                                      _mediaIcon(widget.mediaType!),
+                                      dm.mediaIcon(widget.mediaType!),
                                       size: 11,
                                       color: AppColors.ctText2,
                                     ),
                                     const SizedBox(width: 3),
                                     Text(
-                                      _mediaLabel(widget.mediaType!),
+                                      dm.mediaLabel(widget.mediaType!),
                                       style: AppTextStyles.bodySmall,
                                     ),
                                   ],
@@ -2671,7 +2606,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
         // Bug 2 fix: resolve display name from original message
         final refIsOutbound = (ref_['direction'] as String?) == 'outbound';
         contextFrom = refIsOutbound
-            ? _outboundSenderName(ref_)
+            ? dm.outboundSenderName(ref_)
             : (ref_['from_name'] as String? ??
                 ref_['from_phone'] as String? ?? '');
         // Bug 3 & 4 fix: media-aware preview
@@ -2713,10 +2648,10 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
 
     return _ApiMessageBubble(
       key: ValueKey(msgId),
-      body: _msgBody(msg),
+      body: dm.msgBody(msg),
       time: fmtTime(msg['received_at'] as String?, fallback: ''),
       senderName: isOutbound
-          ? _outboundSenderName(msg)
+          ? dm.outboundSenderName(msg)
           : (msg['from_name'] as String? ??
               msg['from_phone'] as String? ?? ''),
       isOutbound: isOutbound,
@@ -4040,7 +3975,7 @@ class _ReplyBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final isOutbound = (message['direction'] as String?) == 'outbound';
     final name = isOutbound
-        ? _outboundSenderName(message)
+        ? dm.outboundSenderName(message)
         : (message['from_name'] as String? ??
             message['from_phone'] as String? ?? '');
     final raw = message['raw_body'] as String? ?? '';
@@ -5284,7 +5219,7 @@ class _FeedMessagesState extends State<_FeedMessages> {
                 final chatId = msg['chat_id'] as String? ?? '';
                 final time = fmtTime(msg['received_at'] as String?, fallback: '');
                 final waStatus = msg['wa_status'] as String?;
-                final body = _msgBody(msg);
+                final body = dm.msgBody(msg);
                 final messageType = msg['message_type'] as String?;
                 final mediaUrl = msg['media_url'] as String?;
                 final origin = msg['origin'] as String? ?? 'ai_worker';
@@ -5299,7 +5234,7 @@ class _FeedMessagesState extends State<_FeedMessages> {
                     body: body,
                     time: time,
                     toPhone: chatId,
-                    senderName: _outboundSenderName(msg),
+                    senderName: dm.outboundSenderName(msg),
                     waStatus: waStatus,
                     origin: origin,
                     channelType: widget.channelType,
@@ -5583,7 +5518,7 @@ class _FeedInboundBubble extends StatelessWidget {
             ),
             alignment: Alignment.center,
             child: Text(
-              _initials(name),
+              dm.initials(name),
               style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600, color: avatarTextColor),
             ),
           ),

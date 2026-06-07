@@ -14,6 +14,7 @@ import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/date_format.dart' as dtfmt;
+import '../../core/utils/display_mappers.dart' as dm;
 import '../../core/utils/week_math.dart' as wm;
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_row.dart';
@@ -847,14 +848,6 @@ class _AssignmentCard extends StatelessWidget {
   const _AssignmentCard({required this.assignment});
   final Map<String, dynamic> assignment;
 
-  String _initials(String name) {
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return name.isNotEmpty ? name[0].toUpperCase() : '?';
-  }
-
   @override
   Widget build(BuildContext context) {
     final name = assignment['operator_name'] as String? ?? '—';
@@ -885,7 +878,7 @@ class _AssignmentCard extends StatelessWidget {
                 radius: 18,
                 backgroundColor: color.withValues(alpha: 0.15),
                 child: Text(
-                  _initials(name),
+                  dm.initials(name),
                   style: AppFonts.geist(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
