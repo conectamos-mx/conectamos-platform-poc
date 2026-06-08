@@ -62,6 +62,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         if (loc == '/overview') return null;
         if (loc.startsWith('/activate')) return null;
         if (loc.startsWith('/settings')) return null;
+        if (loc.startsWith('/catalogs')) return null;
         if (loc == '/') return '/overview';
         return '/overview';
       }
