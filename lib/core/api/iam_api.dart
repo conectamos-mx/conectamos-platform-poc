@@ -127,8 +127,8 @@ class IamApi {
     );
   }
 
-  static Future<void> deleteUser(String id, {Dio? dio}) async {
-    await (dio ?? ApiClient.instance).delete('/iam/users/$id');
+  static Future<void> deleteUser(String id, {required Dio dio}) async {
+    await dio.delete('/iam/users/$id');
   }
 
   static Future<void> revokeInvitation(String id) async {
