@@ -1431,6 +1431,19 @@ if (formKey.currentState!.validate()) {
 | campo con `options` | AppDropdown | String |
 | otro | AppTextField (fallback) | String |
 
+**Testability Keys (integration tests):**
+
+Cada input de tipo text/number lleva `ValueKey('item_field_<fieldKey>')` donde `<fieldKey>` es el `key` del campo en `fields_schema` (ej. `'sku'`, `'nombre'`). La Key se asigna al `AppTextField` wrapper (un `Column`), no al `TextField` interno.
+
+```dart
+// En tests: localizar el TextField dentro del AppTextField keyed
+final input = find.descendant(
+  of: find.byKey(const ValueKey('item_field_sku')),
+  matching: find.byType(TextField),
+);
+await tester.enterText(input, 'ABC-123');
+```
+
 ---
 
 ### 2.19 validatePhoneE164 · `lib/shared/validators/phone_validator.dart`

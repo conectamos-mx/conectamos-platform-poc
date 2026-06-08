@@ -131,24 +131,21 @@ void main() {
       // Dialog should be open
       expect(find.text('Agregar item'), findsOneWidget);
 
-      // Fill fields — scope to the add-item dialog
-      final addDialogFinder = find.ancestor(
-        of: find.text('Agregar item'),
-        matching: find.byType(Dialog),
-      );
-      // Find TextFields in dialog — SKU (first) and Nombre (second)
-      final dialogTextFields = find.descendant(
-        of: addDialogFinder,
+      // Fill fields by stable Key (namespaced by field key from schema)
+      final skuInput = find.descendant(
+        of: find.byKey(const ValueKey('item_field_sku')),
         matching: find.byType(TextField),
       );
-      expect(dialogTextFields, findsWidgets);
-
-      // SKU field (primary key)
-      await tester.enterText(dialogTextFields.at(0), 'C300');
+      expect(skuInput, findsOneWidget);
+      await tester.enterText(skuInput, 'C300');
       await tester.pumpAndSettle();
 
-      // Nombre field
-      await tester.enterText(dialogTextFields.at(1), 'Widget C');
+      final nombreInput = find.descendant(
+        of: find.byKey(const ValueKey('item_field_nombre')),
+        matching: find.byType(TextField),
+      );
+      expect(nombreInput, findsOneWidget);
+      await tester.enterText(nombreInput, 'Widget C');
       await tester.pumpAndSettle();
 
       // Tap save
@@ -212,19 +209,13 @@ void main() {
       // Edit dialog should show "Editar item"
       expect(find.text('Editar item'), findsOneWidget);
 
-      // Edit the Nombre field — scope to the edit dialog
-      final editDialogFinder = find.ancestor(
-        of: find.text('Editar item'),
-        matching: find.byType(Dialog),
-      );
-      // Find all TextFields in the edit dialog — SKU (disabled PK) and Nombre
-      final dialogTextFields = find.descendant(
-        of: editDialogFinder,
+      // Edit the Nombre field by stable Key
+      final nombreInput = find.descendant(
+        of: find.byKey(const ValueKey('item_field_nombre')),
         matching: find.byType(TextField),
       );
-      // The second TextField is Nombre (first is SKU, disabled)
-      expect(dialogTextFields, findsWidgets);
-      await tester.enterText(dialogTextFields.at(1), 'Widget A Updated');
+      expect(nombreInput, findsOneWidget);
+      await tester.enterText(nombreInput, 'Widget A Updated');
       await tester.pumpAndSettle();
 
       // Tap save
