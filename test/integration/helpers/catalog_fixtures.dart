@@ -50,9 +50,9 @@ const kCatalogSyncLog = <Map<String, dynamic>>[
 
 const kCatalogUsages = <Map<String, dynamic>>[
   {
-    'type': 'flow',
-    'id': 'flow-001',
-    'name': 'Flujo de ventas',
+    'flow_slug': 'ventas',
+    'flow_label': 'Flujo de ventas',
+    'field_label': 'producto_id',
   },
 ];
 
@@ -132,3 +132,51 @@ const kDeletedItemResponse = <String, dynamic>{
   'id': 'item-001',
   'unlinked_assignment_resources': 0,
 };
+
+// ── Detail tabs fixtures (T4d) ──────────────────────────────────────────────
+
+const kCatalogGoogleSheets = <String, dynamic>{
+  'id': 'cat-002',
+  'slug': 'sucursales',
+  'label': 'Sucursales',
+  'name': 'Sucursales',
+  'source_type': 'google_sheets',
+  'item_count': 5,
+  'last_synced_at': '2026-06-01T10:00:00Z',
+  'sync_status': 'synced',
+  'sheet_url': 'https://docs.google.com/spreadsheets/d/abc123/edit',
+  'sheet_name': 'Sheet1',
+  'source_config': {
+    'sheet_url': 'https://docs.google.com/spreadsheets/d/abc123/edit',
+    'sheet_name': 'Sheet1',
+  },
+  'primary_key': 'id',
+  'display_field': 'nombre',
+  'fields_schema': [
+    {'key': 'id', 'label': 'ID', 'type': 'text', 'is_primary': true},
+    {'key': 'nombre', 'label': 'Nombre', 'type': 'text', 'is_primary': false},
+  ],
+};
+
+const kSyncLogRunning = <Map<String, dynamic>>[
+  {
+    'id': 'log-run-001',
+    'status': 'running',
+    'started_at': '2026-06-08T10:00:00Z',
+    'triggered_by': 'manual',
+  },
+];
+
+const kSyncLogSuccess = <Map<String, dynamic>>[
+  {
+    'id': 'log-run-001',
+    'status': 'success',
+    'started_at': '2026-06-08T10:00:00Z',
+    'finished_at': '2026-06-08T10:00:03Z',
+    'duration_ms': 3000,
+    'items_added': 2,
+    'items_updated': 1,
+    'items_deleted': 0,
+    'triggered_by': 'manual',
+  },
+];
