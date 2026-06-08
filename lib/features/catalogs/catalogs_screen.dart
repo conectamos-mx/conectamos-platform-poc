@@ -130,6 +130,7 @@ class _CatalogsScreenState extends ConsumerState<CatalogsScreen> {
           actions: [
             if (canManage)
               AppButton(
+                key: const Key('catalog_new_btn'),
                 label: '+ Nuevo catálogo',
                 variant: AppButtonVariant.teal,
                 size: AppButtonSize.sm,
@@ -332,6 +333,8 @@ class _CatalogsBodyState extends State<_CatalogsBody> {
                   return Column(
                     children: [
                       _CatalogRow(
+                        key: ValueKey(
+                            'catalog_row_${entry.value['id'] ?? ''}'),
                         cat: entry.value,
                         canManage: widget.canManage,
                         onRefresh: widget.onRefresh,
@@ -362,6 +365,7 @@ class _CatalogsBodyState extends State<_CatalogsBody> {
 
 class _CatalogRow extends StatefulWidget {
   const _CatalogRow({
+    super.key,
     required this.cat,
     required this.canManage,
     required this.onRefresh,
@@ -496,15 +500,17 @@ class _CatalogRowState extends State<_CatalogRow> {
               child: Center(
                 child: widget.canManage
                     ? _syncing
-                        ? const SizedBox(
+                        ? SizedBox(
+                            key: ValueKey('catalog_sync_loading_$id'),
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(
+                            child: const CircularProgressIndicator(
                                 strokeWidth: 2, color: AppColors.ctTeal),
                           )
                         : Tooltip(
                             message: 'Sincronizar ahora',
                             child: IconButton(
+                              key: ValueKey('catalog_sync_$id'),
                               onPressed: () => _sync(context),
                               icon: const Icon(Icons.sync_rounded,
                                   size: 18, color: AppColors.ctText2),
