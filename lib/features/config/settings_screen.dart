@@ -819,6 +819,7 @@ class _UsersTable extends StatelessWidget {
               children: [
                 if (i > 0) const Divider(height: 1, color: AppColors.ctBorder),
                 _UserRow(
+                  key: ValueKey('user_row_${u['id']}'),
                   user: u,
                   tenantId: tenantId,
                   roleMap: roleMap,
@@ -838,6 +839,7 @@ class _UsersTable extends StatelessWidget {
 
 class _UserRow extends ConsumerStatefulWidget {
   const _UserRow({
+    super.key,
     required this.user,
     required this.tenantId,
     required this.roleMap,
@@ -1056,6 +1058,7 @@ class _UserRowState extends ConsumerState<_UserRow> {
             size: AppButtonSize.sm,
           ),
           AppButton(
+            key: const Key('user_delete_confirm'),
             label: 'Eliminar',
             onPressed: () => Navigator.of(ctx).pop(true),
             variant: AppButtonVariant.danger,
@@ -1067,7 +1070,7 @@ class _UserRowState extends ConsumerState<_UserRow> {
       if (confirmed != true || _id.isEmpty) return;
       setState(() => _acting = true);
       try {
-        await IamApi.deleteUser(_id);
+        await IamApi.deleteUser(_id, dio: ref.read(apiClientProvider).dio);
         widget.onRefresh();
       } on DioException catch (e) {
         if (!mounted) return;
@@ -1286,6 +1289,7 @@ class _UserRowState extends ConsumerState<_UserRow> {
                         if (canManageUsers && _status != 'invited') {
                           items.add(const PopupMenuDivider(height: 8));
                           items.add(PopupMenuItem(
+                            key: Key('user_delete_menu_$_id'),
                             value: 'delete',
                             child: Text('Eliminar',
                                 style: AppTextStyles.body.copyWith(color: AppColors.ctDanger)),
