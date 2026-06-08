@@ -258,6 +258,10 @@ class RolePermissionsNotifier extends StateNotifier<RolePermState> {
     _load();
   }
 
+  /// Test-only: pre-seed state without triggering _load().
+  RolePermissionsNotifier.seeded(this._roleId, RolePermState initial)
+      : super(initial);
+
   final String _roleId;
 
   Future<void> _load() async {
