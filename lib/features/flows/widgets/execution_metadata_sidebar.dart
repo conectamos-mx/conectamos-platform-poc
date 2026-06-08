@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/date_format.dart';
 import '../../../shared/widgets/app_button.dart';
 
 // ── Action type maps (extend as needed) ───────────────────────────────────────
@@ -38,23 +39,6 @@ class ExecutionMetadataSidebar extends StatelessWidget {
   final Map<String, dynamic> exec;
   final Map<String, dynamic> flow;
   final List<Map<String, dynamic>> events;
-
-  static const _shortMonths = [
-    'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-    'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
-  ];
-
-  String _fmtDateLong(String? iso) {
-    if (iso == null) return '—';
-    try {
-      final d = DateTime.parse(iso).toLocal();
-      final h = d.hour.toString().padLeft(2, '0');
-      final m = d.minute.toString().padLeft(2, '0');
-      return '${d.day.toString().padLeft(2, '0')} ${_shortMonths[d.month - 1]} · $h:$m';
-    } catch (_) {
-      return iso;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -205,13 +189,13 @@ class ExecutionMetadataSidebar extends StatelessWidget {
                 _KV(
                   label: 'Iniciada',
                   copyText: startedAt,
-                  value: Text(_fmtDateLong(startedAt),
+                  value: Text(fmtDateShort(startedAt),
                       style: AppFonts.geist(fontSize: 12, color: AppColors.ctNavy)),
                 ),
                 _KV(
                   label: 'Finalizada',
                   copyText: completedAt,
-                  value: Text(_fmtDateLong(completedAt),
+                  value: Text(fmtDateShort(completedAt),
                       style: AppFonts.geist(fontSize: 12, color: AppColors.ctNavy)),
                 ),
                 _KV(

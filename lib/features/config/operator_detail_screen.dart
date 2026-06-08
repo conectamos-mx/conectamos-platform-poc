@@ -16,6 +16,7 @@ import '../../core/api/operators_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/date_format.dart';
 import '../../core/utils/identity_config.dart';
 import '../../core/utils/phone_normalizer.dart';
 import '../../shared/widgets/app_action_button.dart';
@@ -38,20 +39,6 @@ enum SectionKey { personal, roles, preferredChannels, secondaryPhones, customFie
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-
-String _fmtDate(String? iso) {
-  if (iso == null) return '—';
-  try {
-    final dt = DateTime.parse(iso).toLocal();
-    final d = dt.day.toString().padLeft(2, '0');
-    final m = dt.month.toString().padLeft(2, '0');
-    final h = dt.hour.toString().padLeft(2, '0');
-    final min = dt.minute.toString().padLeft(2, '0');
-    return '$d/$m/${dt.year} $h:$min';
-  } catch (_) {
-    return iso;
-  }
-}
 
 ({String label, Color bg, Color fg}) _statusStyle(String? status) {
   switch (status) {
@@ -1877,9 +1864,9 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
           const SizedBox(height: 16),
           const _SectionTitle('Auditoría'),
           const SizedBox(height: 12),
-          _FieldRow(label: 'Creado el',          value: _fmtDate(createdAt)),
+          _FieldRow(label: 'Creado el',          value: fmtDateSlash(createdAt)),
           _FieldRow(label: 'Creado por',          value: createdBy),
-          _FieldRow(label: 'Última modificación', value: _fmtDate(updatedAt)),
+          _FieldRow(label: 'Última modificación', value: fmtDateSlash(updatedAt)),
           _FieldRow(label: 'Modificado por',      value: updatedBy),
 
           // ── Sección: Campos personalizados (section-edit) ─────────────
@@ -2282,7 +2269,7 @@ class _HistorialTabState extends State<_HistorialTab> {
           tilePadding: EdgeInsets.zero,
           title: Text(flowName,
               style: AppTextStyles.body.copyWith(fontSize: 14, fontWeight: FontWeight.w600)),
-          subtitle: Text(_fmtDate(startedAt),
+          subtitle: Text(fmtDateSlash(startedAt),
               style: AppTextStyles.navItem),
           trailing: Container(
             padding:

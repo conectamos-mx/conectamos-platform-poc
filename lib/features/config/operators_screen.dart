@@ -6,7 +6,10 @@ import '../../core/api/operators_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/display_mappers.dart' as dm;
 import '../../core/utils/phone_normalizer.dart';
+import '../../core/utils/relative_time.dart';
+import '../../core/utils/telegram.dart';
 import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
@@ -19,68 +22,6 @@ import 'widgets/create_operator_dialog.dart';
 import 'widgets/import_operators_dialog.dart';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-bool _isTelegramExpired(String? expiresAt) {
-  if (expiresAt == null) return false;
-  try {
-    return DateTime.now().toUtc().isAfter(DateTime.parse(expiresAt).toUtc());
-  } catch (_) {
-    return false;
-  }
-}
-
-String _initials(String name) {
-  final parts = name.trim().split(' ').where((p) => p.isNotEmpty).toList();
-  if (parts.isEmpty) return '?';
-  if (parts.length == 1) return parts[0][0].toUpperCase();
-  return '${parts[0][0]}${parts.last[0]}'.toUpperCase();
-}
-
-String _formatLastEvent(String? iso) {
-  if (iso == null) return '—';
-  try {
-    final dt = DateTime.parse(iso).toLocal();
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1) return 'Ahora';
-    if (diff.inMinutes < 60) return 'Hace ${diff.inMinutes} min';
-    if (diff.inHours < 24) return 'Hace ${diff.inHours}h';
-    if (diff.inDays == 1) return 'Ayer';
-    return 'Hace ${diff.inDays} días';
-  } catch (_) {
-    return '—';
-  }
-}
-
-({String label, AppBadgeVariant variant}) _statusBadgeInfo(String? status) {
-  switch (status) {
-    case 'active':
-      return (label: 'Activo', variant: AppBadgeVariant.ok);
-    default:
-      return (label: 'Inactivo', variant: AppBadgeVariant.neutral);
-  }
-}
-
-AppBadgeVariant _telegramBadgeVariant(String status) {
-  switch (status) {
-    case 'linked':
-      return AppBadgeVariant.teal;
-    case 'pending':
-      return AppBadgeVariant.warn;
-    default: // expired
-      return AppBadgeVariant.warn;
-  }
-}
-
-String _telegramBadgeLabel(String status) {
-  switch (status) {
-    case 'linked':
-      return 'Telegram vinculado';
-    case 'pending':
-      return 'Vinculacion pendiente';
-    default:
-      return 'Invitacion expirada';
-  }
-}
 
 // ── Pantalla ──────────────────────────────────────────────────────────────────
 
@@ -254,7 +195,7 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
           phone.contains(q);
 
       final status = op['status'] as String?;
-      final st = _statusBadgeInfo(status);
+      final st = dm.statusBadgeInfo(status);
       final matchStatus =
           _filterStatus == 'Todos' || st.label == _filterStatus;
 
@@ -478,7 +419,7 @@ class _OperatorRowState extends State<_OperatorRow> {
     }).toList();
     final lastEventAt = op['last_event_at'] as String?;
     final id = op['id'] as String? ?? '';
-    final st = _statusBadgeInfo(status);
+    final st = dm.statusBadgeInfo(status);
     final metadata = op['metadata'] as Map<String, dynamic>? ?? {};
     final profilePictureUrl = op['profile_picture_url'] as String?;
     final tgStatus = metadata['telegram_link_status'] as String?;
@@ -490,14 +431,14 @@ class _OperatorRowState extends State<_OperatorRow> {
     Widget? tgBadge;
     if (hasTelegramFlow && tgStatus != null && tgStatus != 'none') {
       final expired = tgStatus == 'expired' ||
-          (tgStatus == 'pending' && _isTelegramExpired(tgExpiresAt));
+          (tgStatus == 'pending' && isTelegramExpired(tgExpiresAt));
       final effectiveStatus = expired ? 'expired' : tgStatus;
       if (effectiveStatus == 'linked' ||
           effectiveStatus == 'pending' ||
           effectiveStatus == 'expired') {
         tgBadge = AppBadge(
-          label: _telegramBadgeLabel(effectiveStatus),
-          variant: _telegramBadgeVariant(effectiveStatus),
+          label: dm.telegramBadgeLabel(effectiveStatus),
+          variant: dm.telegramBadgeVariant(effectiveStatus),
           prefixIcon: const Icon(Icons.telegram, size: 12),
         );
       }
@@ -536,7 +477,7 @@ class _OperatorRowState extends State<_OperatorRow> {
                           ),
                           alignment: Alignment.center,
                           child: Text(
-                            _initials(name),
+                            dm.initials(name),
                             style: AppTextStyles.bodySmall.copyWith(
                               fontWeight: FontWeight.w700, color: AppColors.ctTealDark),
                           ),
@@ -598,7 +539,7 @@ class _OperatorRowState extends State<_OperatorRow> {
             Expanded(
               flex: 2,
               child: Text(
-                _formatLastEvent(lastEventAt),
+                fmtRelative(lastEventAt),
                 style: AppTextStyles.navItem,
               ),
             ),

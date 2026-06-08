@@ -8,6 +8,10 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../../core/utils/date_format.dart';
+import '../../../core/utils/execution_labels.dart';
+import '../../../core/utils/xlsx_helpers.dart';
+
 // ── Color constants ────────────────────────────────────────────────────────────
 
 const _navy    = PdfColor(0.043, 0.075, 0.169);   // #0B132B
@@ -30,18 +34,6 @@ const _months = [
   'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
 ];
 
-String _fmtShort(String? iso) {
-  if (iso == null || iso.isEmpty) return '—';
-  try {
-    final d = DateTime.parse(iso).toLocal();
-    final hh = d.hour.toString().padLeft(2, '0');
-    final mm = d.minute.toString().padLeft(2, '0');
-    return '${d.day.toString().padLeft(2, '0')} ${_months[d.month - 1]} · $hh:$mm';
-  } catch (_) {
-    return iso;
-  }
-}
-
 PdfColor _eventColor(String type) => switch (type) {
   'flujo_iniciado'       => _teal,
   'flujo_completado'     => _teal,
@@ -54,65 +46,8 @@ PdfColor _eventColor(String type) => switch (type) {
   _                      => _steel,
 };
 
-String _eventLabel(String type) => switch (type) {
-  'flujo_iniciado'       => 'Flujo iniciado',
-  'flujo_completado'     => 'Flujo completado',
-  'flujo_retomado'       => 'Flujo retomado',
-  'campo_capturado'      => 'Campo capturado',
-  'campo_rechazado'      => 'Campo rechazado',
-  'worker_escaló'        => 'Worker escaló',
-  'flujo_abandonado'     => 'Flujo abandonado',
-  'supervisor_intervino' => 'Supervisor intervino',
-  'flujo_pausado'        => 'Flujo pausado',
-  _                      => type,
-};
-
-String _statusLabel(String s) => switch (s) {
-  'completed'  => 'Completado',
-  'in_progress'|| 'active' => 'En curso',
-  'paused'     => 'Pausado',
-  'abandoned'  => 'Abandonado',
-  'escalated'  => 'Escalado',
-  'failed'     => 'Fallido',
-  _            => s,
-};
-
-// Groups consecutive events of the same type (mirrors _TimelineSidebar logic).
-List<({String type, List<Map<String, dynamic>> items})> _groupEvents(
-    List<Map<String, dynamic>> sorted) {
-  final groups = <({String type, List<Map<String, dynamic>> items})>[];
-  for (final e in sorted) {
-    final type = e['type'] as String? ?? e['event_type'] as String? ?? '';
-    if (groups.isNotEmpty && groups.last.type == type) {
-      groups.last.items.add(e);
-    } else {
-      groups.add((type: type, items: [e]));
-    }
-  }
-  return groups;
-}
-
-String _resolveFieldValue(Map<String, dynamic> fv, String type) {
-  switch (type) {
-    case 'number':
-      return fv['value_numeric']?.toString() ?? '—';
-    case 'media':
-    case 'photo':
-      final jsonb = fv['value_jsonb'];
-      if (jsonb is Map) return jsonb['url']?.toString() ?? '—';
-      return fv['value_media_url']?.toString() ?? '—';
-    case 'location':
-      final jsonb = fv['value_jsonb'];
-      if (jsonb is Map) {
-        final lat = jsonb['lat'] ?? jsonb['latitude'];
-        final lng = jsonb['lng'] ?? jsonb['longitude'];
-        if (lat != null && lng != null) return '$lat, $lng';
-      }
-      return fv['value_text']?.toString() ?? '—';
-    default:
-      return fv['value_text']?.toString() ?? '—';
-  }
-}
+// Pure helpers moved to lib/core/utils/execution_labels.dart (PLA-68):
+// executionEventLabel, executionStatusLabel, groupExecutionEvents, resolveFieldValue
 
 // ── PDF ────────────────────────────────────────────────────────────────────────
 
@@ -201,7 +136,7 @@ Future<void> exportExecutionPdf(
       final tb = b['timestamp'] as String? ?? b['created_at'] as String? ?? '';
       return ta.compareTo(tb);
     });
-  final eventGroups = _groupEvents(events);
+  final eventGroups = groupExecutionEvents(events);
 
   // Messages
   final rawMessages = exec['messages'] as List? ?? [];
@@ -300,7 +235,7 @@ Future<void> exportExecutionPdf(
               // Badges row
               pw.Row(
                 children: [
-                  _pdfBadge(_statusLabel(status), _statusColor(status), geistFont),
+                  _pdfBadge(executionStatusLabel(status), _statusColor(status), geistFont),
                   pw.SizedBox(width: 6),
                   if (channelType != null) ...[
                     _pdfBadge(channelType, _steel, geistFont),
@@ -329,8 +264,8 @@ Future<void> exportExecutionPdf(
               pw.TableRow(
                 children: [
                   _metaCell('Operador', opName, geistFont, rightBorder: true),
-                  _metaCell('Iniciada', _fmtShort(startedAt), geistFont, rightBorder: true),
-                  _metaCell('Finalizada', _fmtShort(completedAt), geistFont, rightBorder: true),
+                  _metaCell('Iniciada', fmtDateShort(startedAt), geistFont, rightBorder: true),
+                  _metaCell('Finalizada', fmtDateShort(completedAt), geistFont, rightBorder: true),
                   _metaCell('Progreso', '$filled / $total campos', geistFont),
                 ],
               ),
@@ -377,7 +312,7 @@ Future<void> exportExecutionPdf(
                         children: [
                           _tableCell(fvList[i]['field_key']?.toString() ?? '—', geistFont),
                           _tableCell(
-                            _resolveFieldValue(
+                            resolveFieldValue(
                               fvList[i],
                               fieldTypeMap[fvList[i]['field_key']] ?? 'text',
                             ),
@@ -433,13 +368,13 @@ Future<void> exportExecutionPdf(
                             pw.Expanded(
                               child: pw.Text(
                                 g.items.length > 1
-                                    ? '${_eventLabel(g.type)} ×${g.items.length}'
-                                    : _eventLabel(g.type),
+                                    ? '${executionEventLabel(g.type)} ×${g.items.length}'
+                                    : executionEventLabel(g.type),
                                 style: ts(size: 10, weight: pw.FontWeight.bold),
                               ),
                             ),
                             pw.Text(
-                              _fmtShort(
+                              fmtDateShort(
                                 g.items.first['timestamp'] as String? ??
                                 g.items.first['created_at'] as String?,
                               ),
@@ -602,43 +537,6 @@ pw.Widget _tableCell(String text, pw.Font font) {
   );
 }
 
-// ── XLSX helpers ─────────────────────────────────────────────────────────────
-
-String _colName(int index) {
-  var name = '';
-  var i = index;
-  do {
-    name = String.fromCharCode(65 + (i % 26)) + name;
-    i = (i ~/ 26) - 1;
-  } while (i >= 0);
-  return name;
-}
-
-String _xmlEscape(String s) => s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
-
-String _sheetXml(List<List<String>> rows) {
-  final sb = StringBuffer()
-    ..write('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>')
-    ..write('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">')
-    ..write('<sheetData>');
-  for (var r = 0; r < rows.length; r++) {
-    sb.write('<row r="${r + 1}">');
-    for (var c = 0; c < rows[r].length; c++) {
-      final cell = '${_colName(c)}${r + 1}';
-      final val  = _xmlEscape(rows[r][c]);
-      sb.write('<c r="$cell" t="inlineStr"><is><t>$val</t></is></c>');
-    }
-    sb.write('</row>');
-  }
-  sb.write('</sheetData></worksheet>');
-  return sb.toString();
-}
-
 // ── XLS ────────────────────────────────────────────────────────────────────────
 
 Future<void> exportExecutionXls(
@@ -680,10 +578,10 @@ Future<void> exportExecutionXls(
       for (final fv in fvList)
         [
           fv['field_key']?.toString() ?? '',
-          _resolveFieldValue(fv, fieldTypeMap[fv['field_key']] ?? 'text'),
+          resolveFieldValue(fv, fieldTypeMap[fv['field_key']] ?? 'text'),
           fieldTypeMap[fv['field_key']] ?? '',
           fv['source']?.toString() ?? 'captured',
-          _fmtShort(fv['captured_at'] as String? ?? fv['created_at'] as String?),
+          fmtDateShort(fv['captured_at'] as String? ?? fv['created_at'] as String?),
         ],
     ];
 
@@ -695,8 +593,8 @@ Future<void> exportExecutionXls(
       ['Operador', opName],
       ['Canal', channelName],
       ['Status', exec['status']?.toString() ?? '—'],
-      ['Iniciada', _fmtShort(exec['created_at'] as String?)],
-      ['Finalizada', _fmtShort(exec['completed_at'] as String?)],
+      ['Iniciada', fmtDateShort(exec['created_at'] as String?)],
+      ['Finalizada', fmtDateShort(exec['completed_at'] as String?)],
     ];
 
     // ── Cronología rows ────────────────────────────────────────────────────
@@ -718,7 +616,7 @@ Future<void> exportExecutionXls(
         for (final e in events)
           [
             e['type'] as String? ?? e['event_type'] as String? ?? '',
-            _eventLabel(e['type'] as String? ?? e['event_type'] as String? ?? ''),
+            executionEventLabel(e['type'] as String? ?? e['event_type'] as String? ?? ''),
             e['timestamp'] as String? ?? e['created_at'] as String? ?? '—',
           ],
       ],
@@ -773,9 +671,9 @@ Future<void> exportExecutionXls(
       '</workbook>',
     ].join());
 
-    addFile('xl/worksheets/sheet1.xml', _sheetXml(camposRows));
-    addFile('xl/worksheets/sheet2.xml', _sheetXml(metadatosRows));
-    if (hasEvents) addFile('xl/worksheets/sheet3.xml', _sheetXml(cronologiaRows));
+    addFile('xl/worksheets/sheet1.xml', xlsSheetXml(camposRows));
+    addFile('xl/worksheets/sheet2.xml', xlsSheetXml(metadatosRows));
+    if (hasEvents) addFile('xl/worksheets/sheet3.xml', xlsSheetXml(cronologiaRows));
 
     // ── Download ──────────────────────────────────────────────────────────
     final zipBytes = ZipEncoder().encode(archive)!;

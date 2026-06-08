@@ -10,6 +10,8 @@ import '../../core/api/operators_api.dart';
 import '../../core/api/overview_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/date_format.dart';
+import '../../core/utils/relative_time.dart';
 import '../../shared/widgets/operator_avatar.dart';
 import '../../shared/widgets/screen_header.dart';
 
@@ -25,8 +27,7 @@ class OverviewScreen extends ConsumerStatefulWidget {
 class _OverviewScreenState extends ConsumerState<OverviewScreen> {
   Map<String, dynamic>? _kpis;
   bool _kpisLoading = false;
-  // ignore: unused_field
-  bool _kpisError   = false;
+  String? _kpisErrorMsg;
   bool _initialized = false;
   DateTime? _lastUpdated;
   int _reloadKey = 0;
@@ -43,7 +44,7 @@ class _OverviewScreenState extends ConsumerState<OverviewScreen> {
 
   Future<void> _fetchKpis(String tenantId) async {
     if (tenantId.isEmpty) return;
-    setState(() { _kpisLoading = true; _kpisError = false; });
+    setState(() { _kpisLoading = true; _kpisErrorMsg = null; });
     try {
       final data = await OverviewApi.getKpis(tenantId: tenantId);
       setState(() {
@@ -52,8 +53,12 @@ class _OverviewScreenState extends ConsumerState<OverviewScreen> {
         _initialized = true;
         _lastUpdated = DateTime.now();
       });
-    } catch (_) {
-      setState(() { _kpisLoading = false; _kpisError = true; _initialized = true; });
+    } catch (e) {
+      setState(() {
+        _kpisLoading = false;
+        _kpisErrorMsg = e.toString();
+        _initialized = true;
+      });
     }
   }
 
@@ -99,7 +104,12 @@ class _OverviewScreenState extends ConsumerState<OverviewScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _HeroBand(kpis: _kpis, loading: _kpisLoading),
+                _HeroBand(
+                  kpis: _kpis,
+                  loading: _kpisLoading,
+                  error: _kpisErrorMsg,
+                  onRetry: _reload,
+                ),
                 // const SizedBox(height: 14),
                 // _KpiRow(kpis: _kpis, loading: _kpisLoading, error: _kpisError),
                 const SizedBox(height: 14),
@@ -155,9 +165,7 @@ class _LastUpdatedLabelState extends State<_LastUpdatedLabel> {
   String get _label {
     final lu = widget.lastUpdated;
     if (lu == null) return 'Actualizando...';
-    final diff = DateTime.now().difference(lu);
-    if (diff.inMinutes < 1) return 'Actualizado hace ${diff.inSeconds}s';
-    return 'Actualizado hace ${diff.inMinutes}m';
+    return 'Actualizado ${fmtRelative(lu.toUtc().toIso8601String(), compact: true, showSeconds: true)}';
   }
 
   @override
@@ -340,18 +348,18 @@ class KpiCard extends StatelessWidget {
 
 // ── _HeroBand ─────────────────────────────────────────────────────────────────
 
-String _formatHeroDate(DateTime d) {
-  const dias  = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
-  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-                 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-  return '${dias[d.weekday - 1]}, ${d.day} de ${meses[d.month - 1]} de ${d.year}';
-}
-
 class _HeroBand extends StatelessWidget {
-  const _HeroBand({required this.kpis, required this.loading});
+  const _HeroBand({
+    required this.kpis,
+    required this.loading,
+    this.error,
+    this.onRetry,
+  });
 
   final Map<String, dynamic>? kpis;
   final bool loading;
+  final String? error;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -412,6 +420,32 @@ class _HeroBand extends StatelessWidget {
                     strokeWidth: 3,
                   ),
                 )
+              : error != null
+              ? Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.ctRedBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.ctDanger),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.error_outline, color: AppColors.ctRedText, size: 16),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(error!, style: AppFonts.geist(fontSize: 12, color: AppColors.ctRedText)),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: onRetry,
+                          child: Text('Reintentar', style: AppFonts.geist(fontSize: 12, color: AppColors.ctRedText, fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -433,7 +467,7 @@ class _HeroBand extends StatelessWidget {
                           Align(
                             alignment: Alignment.topRight,
                             child: Text(
-                              _formatHeroDate(DateTime.now()),
+                              fmtDateLongEs(DateTime.now()),
                               style: AppFonts.geist(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,

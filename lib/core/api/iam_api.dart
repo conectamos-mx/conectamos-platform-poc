@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import 'package:conectamos_platform/core/api/api_client.dart';
 
 class IamApi {
@@ -37,8 +39,8 @@ class IamApi {
     await ApiClient.instance.post('/iam/users/$id/resend-invite');
   }
 
-  static Future<void> inviteUser(Map<String, dynamic> data) async {
-    await ApiClient.instance.post('/iam/invite', data: data);
+  static Future<void> inviteUser(Map<String, dynamic> data, {Dio? dio}) async {
+    await (dio ?? ApiClient.instance).post('/iam/invite', data: data);
   }
 
   static Future<void> resetPassword(String email) async {
@@ -105,5 +107,31 @@ class IamApi {
     await ApiClient.instance.post(
       '/iam/users/$tenantUserId/unlink-operator',
     );
+  }
+
+  static Future<Map<String, dynamic>> getInvitation(String token, {Dio? dio}) async {
+    final res = await (dio ?? ApiClient.instance).get('/iam/invite/$token');
+    return res.data is Map
+        ? Map<String, dynamic>.from(res.data as Map)
+        : <String, dynamic>{};
+  }
+
+  static Future<void> acceptInvitation(
+    String token, {
+    required String password,
+    Dio? dio,
+  }) async {
+    await (dio ?? ApiClient.instance).post(
+      '/iam/invite/$token/accept',
+      data: {'password': password},
+    );
+  }
+
+  static Future<void> deleteUser(String id, {required Dio dio}) async {
+    await dio.delete('/iam/users/$id');
+  }
+
+  static Future<void> revokeInvitation(String id) async {
+    await ApiClient.instance.delete('/iam/invitations/$id');
   }
 }

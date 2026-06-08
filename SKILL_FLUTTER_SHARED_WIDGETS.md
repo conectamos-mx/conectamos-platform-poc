@@ -1423,3 +1423,94 @@ if (formKey.currentState!.validate()) {
 | `boolean` | AppSwitch | bool |
 | campo con `options` | AppDropdown | String |
 | otro | AppTextField (fallback) | String |
+
+---
+
+### 2.19 validatePhoneE164 · `lib/shared/validators/phone_validator.dart`
+
+Validador E.164 compartido para campos de teléfono. Retorna `null` si el valor es válido
+o vacío (el caller decide si el campo es obligatorio). Retorna un string de error
+user-facing si el formato es inválido.
+
+**Reglas:** requiere `+`, seguido de 10–15 dígitos. Acepta espacios, guiones y paréntesis
+(se limpian internamente antes de validar).
+
+```dart
+import '../../shared/validators/phone_validator.dart';
+
+// En un formulario — campo opcional
+final phoneErr = validatePhoneE164(_phoneCtrl.text);
+if (phoneErr != null) {
+  setState(() => _phoneError = phoneErr);
+  return;
+}
+
+// En un formulario — campo obligatorio
+final phone = _phoneCtrl.text.trim();
+if (phone.isEmpty) {
+  setState(() => _error = 'Ingresa tu teléfono');
+  return;
+}
+final phoneErr = validatePhoneE164(phone);
+if (phoneErr != null) {
+  setState(() => _error = phoneErr);
+  return;
+}
+```
+
+| Firma | Retorno |
+|---|---|
+| `String? validatePhoneE164(String? value)` | `null` = válido o vacío; `String` = mensaje de error |
+
+**Cuándo usarlo:** En TODOS los campos de teléfono del proyecto. No crear validadores
+locales MX-céntricos ni variantes E.164 propias — este es el único.
+
+---
+
+### 2.20 PhoneFieldWidget · `lib/shared/widgets/app_phone_field.dart`
+
+Campo de teléfono con selector de país (banderita + prefijo) y preview E.164 en tiempo real.
+Incluye `CountryPickerDialog` (dialog buscable) y la constante `kPhoneCountries` (21 países).
+Usa `PhoneNormalizer` (`lib/core/utils/phone_normalizer.dart`) internamente para formatear
+y validar.
+
+```dart
+import '../../shared/widgets/app_phone_field.dart';
+
+// Uso mínimo — campo obligatorio
+PhoneFieldWidget(
+  label: 'Teléfono',
+  onChanged: (e164) => _phoneE164 = e164,
+)
+
+// Con valor inicial (edición)
+final (iso, local) = PhoneNormalizer.parsePhone(existingPhone);
+PhoneFieldWidget(
+  label: 'Teléfono (opcional)',
+  initialLocalNumber: local,
+  initialCountryIso: iso,
+  onChanged: (e164) => _phoneE164 = e164,
+)
+
+// Deshabilitado
+PhoneFieldWidget(
+  label: 'Teléfono',
+  onChanged: (_) {},
+  enabled: false,
+  initialLocalNumber: '5512345678',
+  initialCountryIso: 'MX',
+)
+```
+
+| Prop | Tipo | Default | Descripción |
+|------|------|---------|-------------|
+| `onChanged` | `ValueChanged<String>` | requerido | Callback con el número en E.164 |
+| `label` | `String?` | null | Label sobre el campo |
+| `initialLocalNumber` | `String?` | null | Dígitos locales iniciales |
+| `initialCountryIso` | `String` | `'MX'` | ISO 3166-1 alpha-2 del país inicial |
+| `errorText` | `String?` | null | Error externo (ej. del backend) |
+| `enabled` | `bool` | true | Habilita/deshabilita el campo |
+
+**Cuándo usarlo:** En TODOS los campos de teléfono con selector de país. Reemplaza
+cualquier `TextField` manual con hint de teléfono. El caller NO necesita validar E.164
+manualmente — el widget lo formatea internamente vía `PhoneNormalizer`.

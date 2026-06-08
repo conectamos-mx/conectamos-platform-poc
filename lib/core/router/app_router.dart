@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
+import '../providers/auth_provider.dart';
 import '../providers/permissions_provider.dart';
 import '../../features/auth/activate_screen.dart';
 import '../../features/auth/forgot_password_screen.dart';
@@ -47,9 +47,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   // Refresca el router cuando cargan los permisos o cambia el estado de auth
   final refresher = ValueNotifier<int>(0);
   ref.listen(userPermissionsProvider, (prev, next) => refresher.value++);
-  final authSub = Supabase.instance.client.auth.onAuthStateChange
-      .listen((_) => refresher.value++);
-  ref.onDispose(authSub.cancel);
+  ref.listen(authStateProvider, (prev, next) => refresher.value++);
 
   // Preserva la ruta destino al redirigir al login en deep-link / reload
   String? pendingRedirect;
@@ -59,13 +57,16 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresher,
     redirect: (context, state) {
       if (kMockMode) {
-        if (state.matchedLocation == '/login') return null;
-        if (state.matchedLocation == '/overview') return null;
-        if (state.matchedLocation == '/') return '/overview';
+        final loc = state.matchedLocation;
+        if (loc == '/login') return null;
+        if (loc == '/overview') return null;
+        if (loc.startsWith('/activate')) return null;
+        if (loc.startsWith('/settings')) return null;
+        if (loc == '/') return '/overview';
         return '/overview';
       }
 
-      final user = Supabase.instance.client.auth.currentUser;
+      final user = ref.read(currentUserProvider);
       final loc = state.matchedLocation;
       final isLoggingIn = loc == '/login';
       final isActivating = loc.startsWith('/activate');

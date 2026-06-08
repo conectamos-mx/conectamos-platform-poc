@@ -1,26 +1,26 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/api/iam_api.dart';
 import '../../core/theme/text_styles.dart';
 import 'auth_shared.dart';
 
-class ActivateScreen extends StatefulWidget {
+class ActivateScreen extends ConsumerStatefulWidget {
   const ActivateScreen({super.key, required this.token});
   final String token;
 
   @override
-  State<ActivateScreen> createState() => _ActivateScreenState();
+  ConsumerState<ActivateScreen> createState() => _ActivateScreenState();
 }
 
-class _ActivateScreenState extends State<ActivateScreen> {
+class _ActivateScreenState extends ConsumerState<ActivateScreen> {
   bool _loadingToken = true;
   String? _tokenError;
   Map<String, dynamic>? _inviteData;
 
-  final _nameCtrl    = TextEditingController();
-  final _phoneCtrl   = TextEditingController();
   final _passCtrl    = TextEditingController();
   final _confirmCtrl = TextEditingController();
   bool _submitting = false;
@@ -28,6 +28,8 @@ class _ActivateScreenState extends State<ActivateScreen> {
   bool _success = false;
 
   String? _renderFallbackMsg;
+
+  Dio get _dio => ref.read(apiClientProvider).dio;
 
   @override
   void initState() {
@@ -37,8 +39,6 @@ class _ActivateScreenState extends State<ActivateScreen> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _phoneCtrl.dispose();
     _passCtrl.dispose();
     _confirmCtrl.dispose();
     super.dispose();
@@ -46,14 +46,8 @@ class _ActivateScreenState extends State<ActivateScreen> {
 
   Future<void> _validateToken() async {
     try {
-      final res = await ApiClient.instance.get('/iam/invite/${widget.token}');
+      final data = await IamApi.getInvitation(widget.token, dio: _dio);
       if (!mounted) return;
-      Map<String, dynamic> data;
-      try {
-        data = Map<String, dynamic>.from(res.data as Map);
-      } catch (_) {
-        data = {};
-      }
       setState(() { _inviteData = data; _loadingToken = false; });
     } on DioException catch (e) {
       if (!mounted) return;
@@ -73,22 +67,34 @@ class _ActivateScreenState extends State<ActivateScreen> {
     }
   }
 
+  /// Extract role name defensively: backend sends role as {id, name} map,
+  /// but handle string fallback just in case.
+  String _roleName() {
+    final role = _inviteData?['role'];
+    if (role is Map) return role['name']?.toString() ?? '';
+    if (role is String) return role;
+    return '';
+  }
+
   Future<void> _submit() async {
-    final name    = _nameCtrl.text.trim();
     final pass    = _passCtrl.text;
     final confirm = _confirmCtrl.text;
-    final phone   = _phoneCtrl.text.trim();
 
-    if (name.isEmpty) { setState(() => _submitError = 'Ingresa tu nombre completo'); return; }
-    if (phone.isEmpty) { setState(() => _submitError = 'Ingresa tu número de teléfono'); return; }
-    if (pass.length < 8) { setState(() => _submitError = 'La contraseña debe tener al menos 8 caracteres'); return; }
-    if (pass != confirm) { setState(() => _submitError = 'Las contraseñas no coinciden'); return; }
+    if (pass.length < 8) {
+      setState(() => _submitError = 'La contraseña debe tener al menos 8 caracteres');
+      return;
+    }
+    if (pass != confirm) {
+      setState(() => _submitError = 'Las contraseñas no coinciden');
+      return;
+    }
 
     setState(() { _submitting = true; _submitError = null; });
     try {
-      await ApiClient.instance.post(
-        '/iam/invite/${widget.token}/accept',
-        data: {'password': pass, 'nombre': name, 'telefono': phone},
+      await IamApi.acceptInvitation(
+        widget.token,
+        password: pass,
+        dio: _dio,
       );
       if (!mounted) return;
       setState(() { _submitting = false; _success = true; });
@@ -204,9 +210,10 @@ class _ActivateScreenState extends State<ActivateScreen> {
   }
 
   Widget _buildSuccess() {
-    return const Column(
+    return Column(
+      key: const Key('activate_success'),
       mainAxisSize: MainAxisSize.min,
-      children: [
+      children: const [
         AuthCardHead(title: 'Activa tu cuenta'),
         AuthSuccessBlock(
           title: 'Bienvenido a bordo',
@@ -218,7 +225,9 @@ class _ActivateScreenState extends State<ActivateScreen> {
 
   Widget _buildForm() {
     final tenantName = _inviteData?['tenant_name']?.toString() ?? '';
-    final role       = _inviteData?['role']?.toString() ?? '';
+    final role       = _roleName();
+    final nombre     = _inviteData?['nombre']?.toString() ?? '';
+    final telefono   = _inviteData?['telefono']?.toString() ?? '';
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -273,34 +282,29 @@ class _ActivateScreenState extends State<ActivateScreen> {
           const SizedBox(height: 16),
         ],
 
+        // Read-only confirmation of invitation data
+        if (nombre.isNotEmpty)
+          _ReadOnlyRow(key: const Key('activate_name'), icon: Icons.person_outline_rounded, label: nombre),
+        if (telefono.isNotEmpty) ...[
+          if (nombre.isNotEmpty) const SizedBox(height: 10),
+          _ReadOnlyRow(key: const Key('activate_phone'), icon: Icons.phone_outlined, label: telefono),
+        ],
+        if (nombre.isNotEmpty || telefono.isNotEmpty)
+          const SizedBox(height: 16),
+
         AuthField(
-          label: 'Nombre completo',
-          controller: _nameCtrl,
-          placeholder: 'Juan García',
-          icon: Icons.person_outline_rounded,
-          inputAction: TextInputAction.next,
-          autofocus: true,
-        ),
-        const SizedBox(height: 16),
-        AuthField(
-          label: 'Teléfono',
-          controller: _phoneCtrl,
-          placeholder: '+52 55 1234 5678',
-          icon: Icons.phone_outlined,
-          keyboardType: TextInputType.phone,
-          inputAction: TextInputAction.next,
-        ),
-        const SizedBox(height: 16),
-        AuthField(
+          key: const Key('activate_password'),
           label: 'Contraseña',
           controller: _passCtrl,
           placeholder: '••••••••',
           icon: Icons.lock_outline_rounded,
           isPassword: true,
           inputAction: TextInputAction.next,
+          autofocus: true,
         ),
         const SizedBox(height: 16),
         AuthField(
+          key: const Key('activate_confirm'),
           label: 'Confirmar contraseña',
           controller: _confirmCtrl,
           placeholder: '••••••••',
@@ -311,6 +315,7 @@ class _ActivateScreenState extends State<ActivateScreen> {
         const SizedBox(height: 16),
 
         AuthPrimaryButton(
+          key: const Key('activate_submit'),
           label: 'Activar cuenta',
           loading: _submitting,
           onTap: _submitting ? null : _submit,
@@ -323,8 +328,8 @@ class _ActivateScreenState extends State<ActivateScreen> {
           decoration: const BoxDecoration(
             border: Border(top: BorderSide(color: Color(0xFFF1F1F1))),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Wrap(
+            alignment: WrapAlignment.center,
             children: [
               const Text(
                 '¿Ya tienes cuenta? ',
@@ -353,6 +358,39 @@ class _ActivateScreenState extends State<ActivateScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Non-editable row showing invitation data as read-only confirmation.
+class _ReadOnlyRow extends StatelessWidget {
+  const _ReadOnlyRow({super.key, required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFB),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: const Color(0xFF9CA3AF)),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'Geist',
+              fontSize: 13.5,
+              color: Color(0xFF4B5563),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

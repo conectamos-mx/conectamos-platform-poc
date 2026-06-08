@@ -4,10 +4,11 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/text_styles.dart';
 import 'auth_shared.dart';
@@ -55,7 +56,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         if (mounted) context.go('/');
         return;
       }
-      await Supabase.instance.client.auth.signInWithPassword(
+      await ref.read(supabaseClientProvider).auth.signInWithPassword(
         email: email,
         password: pass,
       );
@@ -210,6 +211,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
           // Fields
           AuthField(
+            key: const Key('login_email'),
             label: 'Correo electrónico',
             controller: _emailCtrl,
             placeholder: 'tu@empresa.com',
@@ -221,6 +223,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
           const SizedBox(height: 16),
           AuthField(
+            key: const Key('login_password'),
             label: 'Contraseña',
             controller: _passCtrl,
             placeholder: '••••••••',
@@ -263,6 +266,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           const SizedBox(height: 16),
 
           AuthPrimaryButton(
+            key: const Key('login_submit'),
             label: 'Iniciar sesión',
             loading: _loading,
             onTap: _loading ? null : _signIn,

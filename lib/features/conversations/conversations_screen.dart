@@ -18,11 +18,16 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/flows_api.dart';
+import '../../core/utils/broadcast_helpers.dart';
+import '../../core/utils/display_mappers.dart' as dm;
 import '../broadcasts/broadcast_screen.dart';
 import '../../core/api/channels_api.dart';
 import '../../core/api/conversations_api.dart';
 import '../../core/api/messages_api.dart';
 import '../../core/api/operators_api.dart';
+import '../../core/utils/date_format.dart';
+import '../../core/utils/whatsapp_window.dart';
+import '../../core/utils/tz_format.dart';
 import '../../core/utils/phone_normalizer.dart';
 import '../../core/api/sessions_api.dart';
 import '../../core/api/supabase_messages.dart';
@@ -435,7 +440,7 @@ class _ChannelSelectorBar extends StatelessWidget {
           final ch = channels[i];
           final chId = ch['id'] as String?;
           final isSelected = chId == selectedChannelId;
-          final color = _hexColor(ch['color'] as String?);
+          final color = dm.hexColor(ch['color'] as String?);
           final label = ch['display_name'] as String? ?? 'Canal ${i + 1}';
           return MouseRegion(
             cursor: SystemMouseCursors.click,
@@ -508,57 +513,7 @@ class _TabOperador extends ConsumerWidget {
 
 // ── Helpers de formato ────────────────────────────────────────────────────────
 
-String _formatTime(String? iso) {
-  if (iso == null) return '';
-  try {
-    final dt = DateTime.parse(iso).toLocal();
-    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-  } catch (_) {
-    return '';
-  }
-}
 
-bool _isToday(String? iso) {
-  if (iso == null) return false;
-  try {
-    final dt = DateTime.parse(iso).toLocal();
-    final now = DateTime.now();
-    return dt.year == now.year && dt.month == now.month && dt.day == now.day;
-  } catch (_) {
-    return false;
-  }
-}
-
-String _mediaFallback(String type) {
-  switch (type) {
-    case 'image': return '[📷 Imagen]';
-    case 'audio': return '[🎤 Nota de voz]';
-    case 'video': return '[🎥 Video]';
-    case 'document': return '[📄 Documento]';
-    case 'sticker': return '[😊 Sticker]';
-    case 'location': return '[📍 Ubicación]';
-    default: return '[📎 Archivo]';
-  }
-}
-
-
-String _msgBody(Map<String, dynamic> msg) {
-  final raw = msg['raw_body'] as String?;
-  if (raw != null && raw.isNotEmpty) return raw;
-  return _mediaFallback(msg['message_type'] as String? ?? '');
-}
-
-/// Resuelve el nombre a mostrar para mensajes outbound.
-/// Usa from_name si está disponible; luego deriva del origin o sent_by_user_id.
-String _outboundSenderName(Map<String, dynamic> msg) {
-  final fromName = msg['from_name'] as String?;
-  if (fromName != null && fromName.isNotEmpty) return fromName;
-  final origin = msg['origin'] as String?;
-  if (origin == 'ai_worker') return 'AI Worker';
-  final sentByUserId = msg['sent_by_user_id'] as String?;
-  if (sentByUserId != null && sentByUserId.isNotEmpty) return 'Agente';
-  return 'Supervisor';
-}
 
 /// Devuelve el color del nombre y el badge de origen para mensajes outbound.
 ({Color nameColor, Widget? badge}) _outboundOriginStyle(
@@ -619,42 +574,6 @@ class _OriginBadge extends StatelessWidget {
   }
 }
 
-String _initials(String name) {
-  final parts = name.trim().split(' ').where((p) => p.isNotEmpty).toList();
-  if (parts.isEmpty) return '?';
-  if (parts.length == 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
-
-Color _hexColor(String? hex) {
-  try {
-    final h = (hex ?? '#9CA3AF').replaceAll('#', '');
-    if (h.length != 6) return AppColors.ctText3;
-    return Color(int.parse('FF$h', radix: 16));
-  } catch (_) {
-    return AppColors.ctText3;
-  }
-}
-
-IconData _mediaIcon(String mediaType) {
-  switch (mediaType) {
-    case 'image':    return Icons.image_outlined;
-    case 'video':    return Icons.videocam_outlined;
-    case 'audio':    return Icons.mic_outlined;
-    case 'document': return Icons.attach_file_rounded;
-    default:         return Icons.attach_file_rounded;
-  }
-}
-
-String _mediaLabel(String mediaType) {
-  switch (mediaType) {
-    case 'image':    return 'Imagen';
-    case 'video':    return 'Video';
-    case 'audio':    return 'Audio';
-    case 'document': return 'Archivo';
-    default:         return 'Adjunto';
-  }
-}
 
 // ── Avatar de operador con fallback a iniciales ───────────────────────────────
 
@@ -1022,8 +941,7 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
                   final createdAt  = lastMsg?['created_at'] as String?;
                   final unread     = _unreadOverride[chatId]
                       ?? (conv['unread_count'] as int? ?? 0);
-                  // Use backend-provided window_open; fallback true is
-                  // conservative (non-WA channels have no 24h restriction).
+                  // No usa whatsAppWindowOpen: window_open lo pre-calcula el backend (PLA-91).
                   final windowOpen = conv['window_open'] as bool? ?? true;
                   return _ApiConvoItem(
                     name: name,
@@ -1033,8 +951,8 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
                         ? null
                         : (body?.isNotEmpty == true ? body! : 'Sin mensajes'),
                     mediaType: mediaType,
-                    time: _formatTime(createdAt),
-                    isToday: _isToday(createdAt),
+                    time: fmtTime(createdAt, fallback: ''),
+                    isToday: isToday(createdAt),
                     isSelected: chatId == selectedChatId,
                     unreadCount: unread,
                     isWindowOpen: windowOpen,
@@ -1296,7 +1214,7 @@ class _ArchivedPanelState extends ConsumerState<_ArchivedPanel> {
                       ),
                     ),
                     Text(
-                      _formatTime(at),
+                      fmtTime(at, fallback: ''),
                       style: AppTextStyles.caption,
                     ),
                   ],
@@ -1616,13 +1534,13 @@ class _ApiConvoItemState extends State<_ApiConvoItem> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
-                                      _mediaIcon(widget.mediaType!),
+                                      dm.mediaIcon(widget.mediaType!),
                                       size: 11,
                                       color: AppColors.ctText2,
                                     ),
                                     const SizedBox(width: 3),
                                     Text(
-                                      _mediaLabel(widget.mediaType!),
+                                      dm.mediaLabel(widget.mediaType!),
                                       style: AppTextStyles.bodySmall,
                                     ),
                                   ],
@@ -1750,20 +1668,6 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
     if (pos.pixels >= pos.maxScrollExtent - 200) {
       _loadOlderMessages();
     }
-  }
-
-  String _chatFormatDate(DateTime dt) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final d = DateTime(dt.year, dt.month, dt.day);
-    if (d == today) return 'Hoy';
-    if (d == yesterday) return 'Ayer';
-    const months = [
-      '', 'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-      'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
-    ];
-    return '${dt.day} ${months[dt.month]} ${dt.year}';
   }
 
   Widget _chatDateSepChip(String label) => Center(
@@ -2393,20 +2297,16 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
       }
       if (recent.length < 50) _hasMoreMessages = false;
 
-      // Compute window state
+      // Compute window state via whatsAppWindowOpen (PLA-91)
       final lastInbound = messages
           .where((m) => (m['direction'] as String?) != 'outbound')
           .lastOrNull;
-      final receivedAt = lastInbound != null
-          ? DateTime.tryParse(lastInbound['received_at'] as String? ?? '')
-          : null;
       final channelType = ref.read(selectedChannelTypeProvider);
       final operatorId  = ref.read(selectedConvOperatorIdProvider);
-      final hasRecentInbound = receivedAt != null &&
-          DateTime.now().toUtc().difference(receivedAt.toUtc()).inHours < 24;
       final computed = operatorId == null
           ? true
-          : (channelType != 'whatsapp') || hasRecentInbound;
+          : (channelType != 'whatsapp') ||
+              whatsAppWindowOpen(lastInbound?['received_at'] as String?);
 
       _ConvoListState.setLastRead(
           chatId, DateTime.now().toUtc(), ref.read(activeTenantIdProvider));
@@ -2437,18 +2337,15 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
       // Dedup: skip if already in list
       if (id != null && _apiMessages.any((m) => m['id'] == id)) return;
 
-      // Update window state
+      // Update window state via whatsAppWindowOpen (PLA-91)
       if ((newMsg['direction'] as String?) != 'outbound') {
-        final ra = DateTime.tryParse(newMsg['received_at'] as String? ?? '');
-        if (ra != null) {
-          final channelType = ref.read(selectedChannelTypeProvider);
-          final operatorId  = ref.read(selectedConvOperatorIdProvider);
-          final fresh = DateTime.now().toUtc().difference(ra.toUtc()).inHours < 24;
-          final computed = operatorId == null
-              ? true
-              : (channelType != 'whatsapp') || fresh;
-          _windowOpen = computed;
-        }
+        final channelType = ref.read(selectedChannelTypeProvider);
+        final operatorId  = ref.read(selectedConvOperatorIdProvider);
+        final computed = operatorId == null
+            ? true
+            : (channelType != 'whatsapp') ||
+                whatsAppWindowOpen(newMsg['received_at'] as String?);
+        _windowOpen = computed;
       }
 
       _ConvoListState.setLastRead(
@@ -2702,7 +2599,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
         // Bug 2 fix: resolve display name from original message
         final refIsOutbound = (ref_['direction'] as String?) == 'outbound';
         contextFrom = refIsOutbound
-            ? _outboundSenderName(ref_)
+            ? dm.outboundSenderName(ref_)
             : (ref_['from_name'] as String? ??
                 ref_['from_phone'] as String? ?? '');
         // Bug 3 & 4 fix: media-aware preview
@@ -2744,10 +2641,10 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
 
     return _ApiMessageBubble(
       key: ValueKey(msgId),
-      body: _msgBody(msg),
-      time: _formatTime(msg['received_at'] as String?),
+      body: dm.msgBody(msg),
+      time: fmtTime(msg['received_at'] as String?, fallback: ''),
       senderName: isOutbound
-          ? _outboundSenderName(msg)
+          ? dm.outboundSenderName(msg)
           : (msg['from_name'] as String? ??
               msg['from_phone'] as String? ?? ''),
       isOutbound: isOutbound,
@@ -2926,11 +2823,12 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
                 for (final msg in visibleMessages) {
                   final iso = msg['received_at'] as String?;
                   DateTime? dt;
-                  if (iso != null) dt = DateTime.tryParse(iso)?.toLocal();
+                  if (iso != null) dt = DateTime.tryParse(iso);
                   if (dt != null) {
-                    final day = DateTime(dt.year, dt.month, dt.day);
+                    final tz = toZone(dt).dt;
+                    final day = DateTime(tz.year, tz.month, tz.day);
                     if (lastDay == null || day != lastDay) {
-                      groups.add((label: _chatFormatDate(dt), msgs: []));
+                      groups.add((label: fmtDateGroupLabel(dt), msgs: []));
                       lastDay = day;
                     }
                   } else if (groups.isEmpty) {
@@ -4070,7 +3968,7 @@ class _ReplyBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final isOutbound = (message['direction'] as String?) == 'outbound';
     final name = isOutbound
-        ? _outboundSenderName(message)
+        ? dm.outboundSenderName(message)
         : (message['from_name'] as String? ??
             message['from_phone'] as String? ?? '');
     final raw = message['raw_body'] as String? ?? '';
@@ -4638,20 +4536,30 @@ class _TabFeedState extends ConsumerState<_TabFeed> {
     DateTime? fromDate;
     DateTime? toDate;
     if (_dateRange != null) {
-      fromDate = DateTime(
-        _dateRange!.start.year, _dateRange!.start.month, _dateRange!.start.day,
-        _fromTime?.hour ?? 0, _fromTime?.minute ?? 0,
+      final sod = startOfDay(_dateRange!.start).dt;
+      final eod = endOfDay(_dateRange!.end).dt;
+      fromDate = sod.copyWith(
+        hour: _fromTime?.hour ?? 0,
+        minute: _fromTime?.minute ?? 0,
       );
-      toDate = DateTime(
-        _dateRange!.end.year, _dateRange!.end.month, _dateRange!.end.day,
-        _toTime?.hour ?? 23, _toTime?.minute ?? 59, 59,
+      toDate = eod.copyWith(
+        hour: _toTime?.hour ?? 23,
+        minute: _toTime?.minute ?? 59,
+        second: 59,
       );
     } else if (_fromTime != null || _toTime != null) {
-      final now = DateTime.now();
-      fromDate = DateTime(now.year, now.month, now.day,
-          _fromTime?.hour ?? 0, _fromTime?.minute ?? 0);
-      toDate = DateTime(now.year, now.month, now.day,
-          _toTime?.hour ?? 23, _toTime?.minute ?? 59, 59);
+      final tzNow = nowInZone().now;
+      final sod = startOfDay(tzNow).dt;
+      final eod = endOfDay(tzNow).dt;
+      fromDate = sod.copyWith(
+        hour: _fromTime?.hour ?? 0,
+        minute: _fromTime?.minute ?? 0,
+      );
+      toDate = eod.copyWith(
+        hour: _toTime?.hour ?? 23,
+        minute: _toTime?.minute ?? 59,
+        second: 59,
+      );
     }
 
     _feedSub = SupabaseMessages.streamFeed(
@@ -4712,29 +4620,28 @@ class _TabFeedState extends ConsumerState<_TabFeed> {
     final receivedAt =
         DateTime.tryParse(msg['received_at'] as String? ?? '');
     if (receivedAt == null) return false;
-    final local = receivedAt.toLocal();
+    final tzMsg = toZone(receivedAt).dt;
     if (_dateRange != null) {
-      if (local.isBefore(_dateRange!.start)) { return false; }
-      if (local.isAfter(
-          _dateRange!.end.add(const Duration(days: 1)))) { return false; }
+      final rangeStart = startOfDay(_dateRange!.start).dt;
+      final rangeEnd = endOfDay(_dateRange!.end).dt;
+      if (tzMsg.isBefore(rangeStart)) return false;
+      if (tzMsg.isAfter(rangeEnd)) return false;
     } else if (_fromTime != null || _toTime != null) {
-      // Sin rango de fecha explícito la UI muestra "Hoy HH:MM–HH:MM":
-      // restringir al día actual antes de evaluar la hora.
-      final now = DateTime.now();
-      final isToday = local.year == now.year &&
-          local.month == now.month &&
-          local.day == now.day;
-      if (!isToday) return false;
+      final tzNow = nowInZone().now;
+      final isTodayTz = tzMsg.year == tzNow.year &&
+          tzMsg.month == tzNow.month &&
+          tzMsg.day == tzNow.day;
+      if (!isTodayTz) return false;
     }
     if (_fromTime != null) {
       final fromMinutes = _fromTime!.hour * 60 + _fromTime!.minute;
-      final msgMinutes = local.hour * 60 + local.minute;
-      if (msgMinutes < fromMinutes) { return false; }
+      final msgMinutes = tzMsg.hour * 60 + tzMsg.minute;
+      if (msgMinutes < fromMinutes) return false;
     }
     if (_toTime != null) {
       final toMinutes = _toTime!.hour * 60 + _toTime!.minute;
-      final msgMinutes = local.hour * 60 + local.minute;
-      if (msgMinutes > toMinutes) { return false; }
+      final msgMinutes = tzMsg.hour * 60 + tzMsg.minute;
+      if (msgMinutes > toMinutes) return false;
     }
     return true;
   }
@@ -5178,11 +5085,12 @@ class _FeedMessagesState extends State<_FeedMessages> {
     for (final msg in widget.messages) {
       final iso = msg['received_at'] as String?;
       DateTime? dt;
-      if (iso != null) dt = DateTime.tryParse(iso)?.toLocal();
+      if (iso != null) dt = DateTime.tryParse(iso);
       if (dt != null) {
-        final day = DateTime(dt.year, dt.month, dt.day);
+        final tz = toZone(dt).dt;
+        final day = DateTime(tz.year, tz.month, tz.day);
         if (lastDay == null || day != lastDay) {
-          groups.add((label: _formatDate(dt), msgs: []));
+          groups.add((label: fmtDateGroupLabel(dt), msgs: []));
           lastDay = day;
         }
       } else if (groups.isEmpty) {
@@ -5193,29 +5101,8 @@ class _FeedMessagesState extends State<_FeedMessages> {
     return groups;
   }
 
-  String _formatDate(DateTime dt) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final d = DateTime(dt.year, dt.month, dt.day);
-    if (d == today) return 'Hoy';
-    if (d == yesterday) return 'Ayer';
-    const months = [
-      '', 'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-      'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
-    ];
-    return '${dt.day} ${months[dt.month]} ${dt.year}';
-  }
 
-  String _timeLabel(String? iso) {
-    if (iso == null) return '';
-    try {
-      final dt = DateTime.parse(iso).toLocal();
-      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return '';
-    }
-  }
+
 
   Widget _dateSepChip(String label) => Center(
         child: Container(
@@ -5323,9 +5210,9 @@ class _FeedMessagesState extends State<_FeedMessages> {
                     msg['chat_id'] as String? ?? '';
                 final name = msg['from_name'] as String? ?? phone;
                 final chatId = msg['chat_id'] as String? ?? '';
-                final time = _timeLabel(msg['received_at'] as String?);
+                final time = fmtTime(msg['received_at'] as String?, fallback: '');
                 final waStatus = msg['wa_status'] as String?;
-                final body = _msgBody(msg);
+                final body = dm.msgBody(msg);
                 final messageType = msg['message_type'] as String?;
                 final mediaUrl = msg['media_url'] as String?;
                 final origin = msg['origin'] as String? ?? 'ai_worker';
@@ -5340,7 +5227,7 @@ class _FeedMessagesState extends State<_FeedMessages> {
                     body: body,
                     time: time,
                     toPhone: chatId,
-                    senderName: _outboundSenderName(msg),
+                    senderName: dm.outboundSenderName(msg),
                     waStatus: waStatus,
                     origin: origin,
                     channelType: widget.channelType,
@@ -5624,7 +5511,7 @@ class _FeedInboundBubble extends StatelessWidget {
             ),
             alignment: Alignment.center,
             child: Text(
-              _initials(name),
+              dm.initials(name),
               style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600, color: avatarTextColor),
             ),
           ),
@@ -6218,6 +6105,7 @@ class _NewMessageDialogState extends ConsumerState<_NewMessageDialog> {
       final phone = recipient['phone'] as String? ?? '';
       final chatId = PhoneNormalizer.toChatId(phone);
       final db = Supabase.instance.client;
+      // No usa whatsAppWindowOpen: filtro server-side por diseno (PLA-91). Cutoff en UTC canonico.
       final cutoff = DateTime.now().toUtc().subtract(const Duration(hours: 24)).toIso8601String();
       final rows = await db
           .from('wa_messages')
@@ -6318,25 +6206,10 @@ class _NewMessageDialogState extends ConsumerState<_NewMessageDialog> {
     } on DioException catch (e) {
       debugPrint('[_send] DioException: status=${e.response?.statusCode} data=${e.response?.data}');
       final raw = e.response?.data?.toString() ?? e.message ?? '';
-      if (mounted) setState(() { _sending = false; _sendError = _parseErrorMessage(raw); });
+      if (mounted) setState(() { _sending = false; _sendError = parseWhatsAppErrorMessage(raw); });
     } catch (e) {
       debugPrint('[_send] Exception: $e');
-      if (mounted) setState(() { _sending = false; _sendError = _parseErrorMessage(e.toString()); });
-    }
-  }
-
-  String _parseErrorMessage(dynamic error) {
-    try {
-      final detail = error.toString();
-      if (detail.contains('131037') || detail.contains('display name')) {
-        return 'El número aún no tiene el nombre de perfil aprobado por Meta. Por favor espera la aprobación antes de iniciar nuevas conversaciones.';
-      }
-      if (detail.contains('131026') || detail.contains('not in whitelist')) {
-        return 'Este número no está registrado como destinatario de prueba.';
-      }
-      return 'Error al enviar el mensaje. Intenta de nuevo.';
-    } catch (_) {
-      return 'Error al enviar el mensaje. Intenta de nuevo.';
+      if (mounted) setState(() { _sending = false; _sendError = parseWhatsAppErrorMessage(e.toString()); });
     }
   }
 

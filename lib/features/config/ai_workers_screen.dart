@@ -7,6 +7,7 @@ import '../../core/api/ai_workers_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/display_mappers.dart' as dm;
 import '../../shared/widgets/page_header.dart';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -21,16 +22,6 @@ const _kTypeConfig = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-Color _hexColor(String hex) {
-  final h = hex.replaceAll('#', '');
-  return Color(int.parse('FF$h', radix: 16));
-}
-
-String _initials(String name) {
-  final parts = name.trim().split(RegExp(r'\s+'));
-  if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-  return name.isEmpty ? '?' : name[0].toUpperCase();
-}
 
 String _fmtDate(String? iso) {
   if (iso == null) return '—';
@@ -330,7 +321,7 @@ class _WorkerCardState extends State<_WorkerCard> {
     final runningNow  = w['execution_count'] as int? ?? 0;
     final channelCount = w['channel_count'] as int? ?? 0;
     final contractedAt = w['contracted_at'] as String?;
-    final workerColor = _hexColor(colorHex);
+    final workerColor = dm.hexColor(colorHex);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -418,12 +409,12 @@ class _WorkerCardState extends State<_WorkerCard> {
                                   fit: BoxFit.cover,
                                   errorBuilder: (context2, err, stack) => _InitialAvatar(
                                     color: workerColor,
-                                    initials: _initials(displayName),
+                                    initials: dm.initials(displayName),
                                   ),
                                 )
                               : _InitialAvatar(
                                   color: workerColor,
-                                  initials: _initials(displayName),
+                                  initials: dm.initials(displayName),
                                 ),
                         ),
                       ),
@@ -983,12 +974,12 @@ class _CatalogDialogState extends State<_CatalogDialog> {
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: _hexColor(colorHex),
+                                  color: dm.hexColor(colorHex),
                                   shape: BoxShape.circle,
                                 ),
                                 alignment: Alignment.center,
                                 child: Text(
-                                  _initials(name),
+                                  dm.initials(name),
                                   style: AppTextStyles.body.copyWith(
                                     fontWeight: FontWeight.w700, color: Colors.white),
                                 ),

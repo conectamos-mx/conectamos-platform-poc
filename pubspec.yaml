@@ -34,6 +34,9 @@ dependencies:
   # Date formatting
   intl: ^0.20.2
 
+  # Timezone-aware formatting (ADR-414)
+  timezone: ^0.10.0
+
   # File picker & drag-drop (multimedia)
   file_picker: ^8.0.0
   desktop_drop: ^0.4.4
@@ -69,6 +72,9 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: ^2.4.15
   riverpod_generator: ^2.6.5
+  integration_test:
+    sdk: flutter
+  patrol_finders: ^3.5.0
 
 flutter:
   uses-material-design: true

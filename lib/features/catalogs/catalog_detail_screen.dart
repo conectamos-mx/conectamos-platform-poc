@@ -16,24 +16,8 @@ import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/app_detail_header.dart';
+import '../../core/utils/relative_time.dart';
 import '../../shared/widgets/catalog_item_form.dart';
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-String _fmtSync(String? iso) {
-  if (iso == null) return 'Nunca';
-  try {
-    final dt = DateTime.parse(iso).toLocal();
-    final d = DateTime.now().difference(dt);
-    if (d.inSeconds < 60) return 'Hace ${d.inSeconds}s';
-    if (d.inMinutes < 60) return 'Hace ${d.inMinutes} min';
-    if (d.inHours < 24) return 'Hace ${d.inHours}h';
-    if (d.inDays == 1) return 'Ayer';
-    return 'Hace ${d.inDays} días';
-  } catch (_) {
-    return '—';
-  }
-}
 
 // ── CatalogDetailScreen ───────────────────────────────────────────────────────
 
@@ -1269,7 +1253,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
                     const SizedBox(width: 6),
                     Text(
                       lastSynced != null
-                          ? 'Último sync: ${_fmtSync(lastSynced)}'
+                          ? 'Último sync: ${fmtRelative(lastSynced, showSeconds: true)}'
                           : 'Nunca sincronizado',
                       style: AppFonts.geist(
                           fontSize: 12,
@@ -2476,7 +2460,7 @@ class _SyncLogRow extends StatelessWidget {
               ),
               const Spacer(),
               if (startedAt != null)
-                Text(_fmtSync(startedAt),
+                Text(fmtRelative(startedAt, showSeconds: true),
                     style: AppFonts.geist(
                         fontSize: 11, color: AppColors.ctText3)),
               if (durationMs != null) ...[

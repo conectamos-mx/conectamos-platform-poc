@@ -14,6 +14,9 @@ import '../../core/api/executions_api.dart';
 import '../../core/api/operators_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/date_format.dart';
+import '../../core/utils/execution_labels.dart';
+import '../../core/utils/relative_time.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_shell.dart';
 
@@ -46,38 +49,7 @@ double _colWidth(String id) => switch (id) {
   _          => 100,
 };
 
-String _fmtElapsed(int? seconds) {
-  if (seconds == null) return '—';
-  if (seconds < 60) return '${seconds}s';
-  if (seconds < 3600) return '${seconds ~/ 60}m ${seconds % 60}s';
-  return '${seconds ~/ 3600}h ${(seconds % 3600) ~/ 60}m';
-}
 
-String _dateGroupLabel(DateTime dt) {
-  final now   = DateTime.now();
-  final local = dt.toLocal();
-
-  final todayMidnight = DateTime(now.year, now.month, now.day);
-  final dtMidnight    = DateTime(local.year, local.month, local.day);
-
-  final diff = todayMidnight.difference(dtMidnight).inDays;
-
-  if (diff == 0) return 'Hoy';
-  if (diff == 1) return 'Ayer';
-
-  const meses = [
-    'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
-  ];
-  return '${local.day} ${meses[local.month - 1]} ${local.year}';
-}
-
-String _elapsedSince(DateTime t) {
-  final d = DateTime.now().difference(t);
-  if (d.inSeconds < 60) return 'hace ${d.inSeconds}s';
-  if (d.inMinutes < 60) return 'hace ${d.inMinutes}m';
-  return 'hace ${d.inHours}h';
-}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -502,18 +474,6 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     if (_activeFieldSearches.isNotEmpty)    'field_searches': _activeFieldSearches,
   };
 
-  String _statusLabel(String s) => switch (s) {
-    'active' || 'in_progress'               => 'Activa',
-    'completed'                             => 'Completada',
-    'pending'                               => 'Pendiente',
-    'pending_dashboard' || 'pending_review' => 'En revisión',
-    'paused'                                => 'Pausada',
-    'abandoned'                             => 'Abandonada',
-    'cancelled'                             => 'Cancelada',
-    'failed' || 'error'                     => 'Error',
-    _                                       => s,
-  };
-
   String _dateRangeLabel(String r) => switch (r) {
     'today'        => 'Hoy',
     'yesterday'    => 'Ayer',
@@ -523,17 +483,6 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     'custom'       => 'Rango personalizado',
     _              => r,
   };
-
-  String _formatDateTimeShort(String isoStr) {
-    try {
-      final dt = DateTime.parse(isoStr).toLocal();
-      final d = '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
-      final h = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-      return '$d $h';
-    } catch (_) {
-      return isoStr;
-    }
-  }
 
   // ── Sort ──────────────────────────────────────────────────────────────────
 
@@ -839,7 +788,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
           const Spacer(),
           if (_lastFetch != null)
             Text(
-              'Act. ${_elapsedSince(_lastFetch!)}',
+              'Act. ${fmtRelative(_lastFetch!.toUtc().toIso8601String(), compact: true, showSeconds: true)}',
               style: AppFonts.geist(fontSize: 11, color: AppColors.ctText3),
             ),
           const SizedBox(width: 4),
@@ -1423,7 +1372,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
 
     for (final s in _filterStatus) {
       chips.add(_FilterChip(
-        label: _statusLabel(s),
+        label: executionStatusLabel(s),
         onRemove: () {
           setState(() {
             _filterStatus = _filterStatus.where((x) => x != s).toList();
@@ -1454,9 +1403,9 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
       if (_filterDateRange == 'custom' &&
           (_filterDateFrom != null || _filterDateTo != null)) {
         final from = _filterDateFrom != null
-            ? _formatDateTimeShort(_filterDateFrom!) : '?';
+            ? fmtDateTimeCompact(_filterDateFrom!) : '?';
         final to = _filterDateTo != null
-            ? _formatDateTimeShort(_filterDateTo!) : '?';
+            ? fmtDateTimeCompact(_filterDateTo!) : '?';
         dateLabel = '$fieldLabel: $from → $to';
       } else {
         dateLabel = '$fieldLabel: ${_dateRangeLabel(_filterDateRange ?? '')}';
@@ -1777,7 +1726,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
       case 'date':
         final raw = exec['created_at'] as String?;
         if (raw == null) return '—';
-        try { return _dateGroupLabel(DateTime.parse(raw)); } catch (_) { return '—'; }
+        try { return fmtDateGroupLabel(DateTime.parse(raw)); } catch (_) { return '—'; }
       case 'flow':
         return exec['flow_name'] as String?
             ?? (exec['flow_definition'] as Map?)?['name'] as String?
@@ -1797,7 +1746,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
             ?? '—';
       case 'status':
         final s = exec['status'] as String? ?? 'unknown';
-        return _statusLabel(s);
+        return executionStatusLabel(s);
       default:
         return '';
     }
@@ -1912,6 +1861,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
                     worker_:     worker_,
                     status:      status,
                     channelTypes: channelTypes,
+                    createdStr:  createdStr,
                     createdDt:   createdDt,
                     elapsedSec:  elapsedSec,
                     captured:    captured,
@@ -1944,6 +1894,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     required Map<String, dynamic>? worker_,
     required String status,
     required List<String> channelTypes,
+    required String? createdStr,
     required DateTime? createdDt,
     required int? elapsedSec,
     required int captured,
@@ -2002,56 +1953,25 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
       case 'channel':
         return _ChannelBadge(channelTypes: channelTypes);
       case 'created':
-        if (createdDt == null) {
-          return Text('—',
-              style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2));
-        }
-        final now            = DateTime.now();
-        final local          = createdDt.toLocal();
-        final todayStart     = DateTime(now.year, now.month, now.day);
-        final yesterdayStart = todayStart.subtract(const Duration(days: 1));
-        String datePart;
-        if (!local.isBefore(todayStart)) {
-          datePart = 'Hoy';
-        } else if (!local.isBefore(yesterdayStart)) {
-          datePart = 'Ayer';
-        } else {
-          const meses = ['ene','feb','mar','abr','may','jun',
-                         'jul','ago','sep','oct','nov','dic'];
-          datePart = '${local.day} ${meses[local.month - 1]}';
-        }
-        final hh    = local.hour.toString().padLeft(2, '0');
-        final mm    = local.minute.toString().padLeft(2, '0');
-        final line1 = '$datePart, $hh:$mm';
-        final diff  = now.difference(local);
-        final String line2;
-        if (diff.inMinutes < 1) {
-          line2 = 'ahora';
-        } else if (diff.inMinutes < 60) {
-          line2 = 'hace ${diff.inMinutes}m';
-        } else if (diff.inHours < 24) {
-          line2 = 'hace ${diff.inHours}h';
-        } else {
-          line2 = 'hace ${diff.inDays}d';
-        }
+        final cell = fmtCreatedCell(createdStr);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment:  MainAxisAlignment.center,
           children: [
-            Text(line1,
+            Text(cell.dateLine,
                 style: AppFonts.geist(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: AppColors.ctText,
                 )),
-            Text(line2,
+            Text(cell.relativeLine,
                 style: AppFonts.geist(
                     fontSize: 11, color: AppColors.ctText2)),
           ],
         );
       case 'elapsed':
         return Text(
-          _fmtElapsed(elapsedSec),
+          fmtElapsedSeconds(elapsedSec),
           style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2),
         );
       case 'progress':
@@ -2186,7 +2106,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
       parts.add('Workers: $names');
     }
     if (_filterStatus.isNotEmpty) {
-      parts.add('Estado: ${_filterStatus.map(_statusLabel).join(', ')}');
+      parts.add('Estado: ${_filterStatus.map(executionStatusLabel).join(', ')}');
     }
     if (_filterFlowIds.isNotEmpty) {
       final names = _filterFlowIds.map((id) {
@@ -3311,19 +3231,6 @@ class _SidebarRangePickerRow extends StatelessWidget {
   final void Function(String from, String to) onRangeSelected;
   final VoidCallback onClear;
 
-  static String _fmt(String iso) {
-    try {
-      final dt = DateTime.parse(iso).toLocal();
-      final d = '${dt.day.toString().padLeft(2, '0')}/'
-                '${dt.month.toString().padLeft(2, '0')}/'
-                '${dt.year}';
-      final h = '${dt.hour.toString().padLeft(2, '0')}:'
-                '${dt.minute.toString().padLeft(2, '0')}';
-      return '$d $h';
-    } catch (_) {
-      return iso;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -3408,11 +3315,11 @@ class _SidebarRangePickerRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (filterDateFrom != null)
-                  Text('Desde: ${_fmt(filterDateFrom!)}',
+                  Text('Desde: ${fmtDateSlash(filterDateFrom!)}',
                       style: AppFonts.geist(
                           fontSize: 11, color: AppColors.ctTeal)),
                 if (filterDateTo != null)
-                  Text('Hasta: ${_fmt(filterDateTo!)}',
+                  Text('Hasta: ${fmtDateSlash(filterDateTo!)}',
                       style: AppFonts.geist(
                           fontSize: 11, color: AppColors.ctTeal)),
               ],

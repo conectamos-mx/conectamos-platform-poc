@@ -1,10 +1,10 @@
-// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
-import 'dart:html' as html;
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../api/tenants_api.dart';
+import '../storage/key_value_store.dart';
+import '../utils/tz_format.dart' as tzf;
+import 'auth_provider.dart';
 
 // ── Modelo ────────────────────────────────────────────────────────────────────
 
@@ -14,12 +14,14 @@ class TenantInfo {
     required this.slug,
     required this.displayName,
     this.logoUrl,
+    this.ianaZone = 'America/Mexico_City',
   });
 
   final String id;
   final String slug;
   final String displayName;
   final String? logoUrl;
+  final String ianaZone;
 
   factory TenantInfo.fromMap(Map<String, dynamic> m) => TenantInfo(
         id: (m['id'] as String? ?? '').trim(),
@@ -29,6 +31,7 @@ class TenantInfo {
             m['slug'] as String? ??
             '',
         logoUrl: m['logo_url'] as String?,
+        ianaZone: m['timezone'] as String? ?? 'America/Mexico_City',
       );
 }
 
@@ -47,14 +50,20 @@ class TenantState {
 // ── Notifier ──────────────────────────────────────────────────────────────────
 
 class TenantNotifier extends StateNotifier<TenantState> {
-  TenantNotifier() : super(const TenantState());
+  TenantNotifier({
+    required this.storage,
+    required this.supabaseClient,
+  }) : super(const TenantState());
+
+  final KeyValueStore storage;
+  final SupabaseClient supabaseClient;
 
   static const _kStorageKey = 'conectamos_active_tenant_id';
 
   Future<void> load(String userEmail) async {
     if (state.all.isNotEmpty) return; // already loaded
     try {
-      final supabaseUser = Supabase.instance.client.auth.currentUser;
+      final supabaseUser = supabaseClient.auth.currentUser;
       final userId = supabaseUser?.id;
       final isSuperAdmin = supabaseUser?.appMetadata['role'] == 'super_admin';
       final list = await TenantsApi.getTenants(
@@ -65,7 +74,7 @@ class TenantNotifier extends StateNotifier<TenantState> {
       TenantInfo? active;
 
       // 1. Restore from localStorage if present and valid
-      final savedId = (html.window.localStorage[_kStorageKey] ?? '').trim();
+      final savedId = (storage.getString(_kStorageKey) ?? '').trim();
       if (savedId.isNotEmpty) {
         final matches = tenants.where((t) => t.id == savedId);
         if (matches.isNotEmpty) active = matches.first;
@@ -78,7 +87,7 @@ class TenantNotifier extends StateNotifier<TenantState> {
 
       // Persist active tenant so ApiClient interceptor can read it
       if (active != null) {
-        html.window.localStorage[_kStorageKey] = active.id;
+        storage.setString(_kStorageKey, active.id);
       }
       state = state.withAll(tenants, active);
     } catch (_) {
@@ -87,7 +96,7 @@ class TenantNotifier extends StateNotifier<TenantState> {
   }
 
   void select(TenantInfo tenant) {
-    html.window.localStorage[_kStorageKey] = tenant.id;
+    storage.setString(_kStorageKey, tenant.id);
     state = state.withActive(tenant);
   }
 }
@@ -96,7 +105,10 @@ class TenantNotifier extends StateNotifier<TenantState> {
 
 final tenantNotifierProvider =
     StateNotifierProvider<TenantNotifier, TenantState>(
-  (ref) => TenantNotifier(),
+  (ref) => TenantNotifier(
+    storage: ref.watch(keyValueStoreProvider),
+    supabaseClient: ref.watch(supabaseClientProvider),
+  ),
 );
 
 /// Tenant activo completo.
@@ -112,6 +124,20 @@ final activeTenantIdProvider = Provider<String>((ref) {
 /// Display name del tenant activo — para mostrar en UI.
 final activeTenantDisplayProvider = Provider<String>((ref) {
   return ref.watch(activeTenantInfoProvider)?.displayName ?? '';
+});
+
+/// IANA timezone del tenant activo — para formateo de fechas (ADR-414).
+/// Source of truth for the active timezone. The global in tz_format.dart is
+/// a read-only mirror kept in sync by [tenantZoneSyncProvider].
+final activeTenantZoneProvider = Provider<String>((ref) {
+  return ref.watch(activeTenantInfoProvider)?.ianaZone ?? 'America/Mexico_City';
+});
+
+/// Keeps the tz_format.dart global in sync with [activeTenantZoneProvider].
+/// Watch this provider once from a high-level widget (e.g. AppShell).
+final tenantZoneSyncProvider = Provider<void>((ref) {
+  final zone = ref.watch(activeTenantZoneProvider);
+  tzf.setActiveZone(zone);
 });
 
 /// Lista completa de tenants cargados.

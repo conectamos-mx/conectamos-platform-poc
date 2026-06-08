@@ -7,41 +7,16 @@ import '../../core/api/assignments_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/scope_utils.dart';
 import '../../shared/widgets/app_button.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-(DateTime?, DateTime?) _parseScope(String? raw) {
-  if (raw == null || raw.isEmpty) return (null, null);
-  try {
-    final clean = raw
-        .replaceAll('"', '')
-        .replaceAll('[', '')
-        .replaceAll('(', '')
-        .replaceAll(']', '')
-        .replaceAll(')', '');
-    final parts = clean.split(',');
-    if (parts.length < 2) return (null, null);
-    final lower = parts[0].trim();
-    final upper = parts[1].trim();
-    if (lower.isEmpty || upper.isEmpty) return (null, null);
-    return (DateTime.parse(lower), DateTime.parse(upper));
-  } catch (_) {
-    return (null, null);
-  }
-}
+// _parseScope / _fmtScope → lib/core/utils/scope_utils.dart (PLA-70)
 
 final _dateFmt = DateFormat('d MMM', 'es');
-final _dtFmt   = DateFormat('d MMM HH:mm', 'es');
-
-String _fmtScope(String? raw) {
-  final (lo, hi) = _parseScope(raw);
-  if (lo == null || hi == null) return '—';
-  return '${_dtFmt.format(lo.toLocal())} – ${_dtFmt.format(hi.toLocal())}';
-}
 
 String _fmtCreatedAt(String? raw) {
-  if (raw == null) return '—';
+  if (raw == null) return '\u2014';
   try {
     final dt = DateTime.parse(raw).toLocal();
     return _dateFmt.format(dt);
@@ -178,7 +153,7 @@ class _InfoTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final opName  = assignment['operator_name'] as String? ?? '—';
     final opPhone = assignment['operator_phone'] as String? ?? '';
-    final scope   = _fmtScope(assignment['scope'] as String?);
+    final scope   = formatScopeCompact(assignment['scope'] as String?);
     final source  = assignment['source'] as String? ?? 'manual';
     final created = _fmtCreatedAt(assignment['created_at'] as String?);
 

@@ -27,7 +27,7 @@ firebase deploy --only hosting
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-There are no unit or widget tests in this project.
+Unit tests live in `test/unit/` — run with `flutter test test/unit/`.
 
 ---
 
@@ -373,6 +373,24 @@ Active migration in progress — do not revert these changes:
 Push to `main` → GitHub Actions → `flutter build web --release` → `firebase deploy --only hosting`.
 Production URL: `https://conectamos-platform-poc.web.app`.
 Requires `FIREBASE_TOKEN` secret in GitHub Actions.
+
+---
+
+## Formateo de fecha/hora — NUNCA crear funciones locales
+
+Toda lógica de formato, cálculo relativo o aritmética de calendario de fechas vive en
+`lib/core/utils/` (date_format.dart, relative_time.dart, week_math.dart, telegram.dart).
+
+  cat SKILL_DATE_UTILS.md   ← catálogo completo de las 17 funciones públicas
+
+**Regla:** NUNCA crees una función local `_formatX`/`_fmtX` de fecha en un feature.
+Usa las funciones de `lib/core/utils/`. Si ninguna cubre tu caso, agrega una función
+pública AHÍ + documéntala en SKILL_DATE_UTILS.md en el mismo commit.
+Prohibido duplicar arrays de meses o lógica padLeft de fecha en features.
+
+Antes de hacer commit en cualquier screen, ejecuta:
+
+  grep -c "_fmt\|_format.*Date\|_format.*Time\|padLeft.*'0'" [archivo]  → debe ser 0 para fecha/hora
 
 ---
 
