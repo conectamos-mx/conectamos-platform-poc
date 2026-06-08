@@ -4,7 +4,6 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/date_symbol_data_local.dart';
 import 'package:patrol_finders/patrol_finders.dart';
 
 import 'package:conectamos_platform/core/api/api_client.dart';
@@ -52,10 +51,7 @@ void _mockSupportingRoutes(MockApiInterceptor mock) {
 }
 
 void main() {
-  setUpAll(() async {
-    await initializeDateFormatting('es_MX', null);
-    await initializeDateFormatting('es', null);
-  });
+  setUpAll(() => initTestLocale());
 
   group('IAM invite → activate', () {
     testWidgets('invite dialog sends correct payload', (tester) async {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:conectamos_platform/core/api/api_client.dart';
@@ -13,12 +14,22 @@ import 'in_memory_key_value_store.dart';
 import 'mock_api_interceptor.dart';
 
 // Usage:
+//   await initTestLocale();                       // once per test file
 //   await tester.pumpWidget(buildTestApp());
 //   await tester.pumpAndSettle();
 //   // App starts at /overview in mock mode.
 //
 // Requires: flutter test --platform chrome \
 //   --dart-define=MOCK_MODE=true --dart-define=API_BASE_URL=http://localhost:0
+
+/// Initializes locale data required by DateFormat('es_MX'/'es') in production
+/// code. Mirrors main.dart:29-30. Idempotent — safe to call multiple times.
+/// Call in setUpAll() of every integration test file, or use
+/// [ensureTestLocale] for a fire-and-forget approach.
+Future<void> initTestLocale() async {
+  await initializeDateFormatting('es_MX', null);
+  await initializeDateFormatting('es', null);
+}
 
 /// Builds the ConectamosApp wrapped in a ProviderScope with all providers
 /// overridden so no Supabase, dart:html, or network calls occur.

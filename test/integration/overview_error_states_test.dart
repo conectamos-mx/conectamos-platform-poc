@@ -38,6 +38,8 @@ void _initApiClient(MockApiInterceptor mock) {
 }
 
 void main() {
+  setUpAll(() => initTestLocale());
+
   group('Overview KPI error states', () {
     testWidgets(
       'getKpis error → error banner visible in HeroBand',
