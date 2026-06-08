@@ -108,6 +108,47 @@ Widget buildTestAppWithMock(MockApiInterceptor mock) {
   );
 }
 
+/// Like [buildTestAppWithMock] but accepts extra provider overrides
+/// (e.g. seeded StateNotifier for family providers).
+Widget buildTestAppWithMockAndOverrides(
+  MockApiInterceptor mock, {
+  List<Override> additionalOverrides = const [],
+}) {
+  final store = InMemoryKeyValueStore();
+  final fakeClient = SupabaseClient(
+    'http://localhost:0',
+    'fake-anon-key',
+    authOptions: const AuthClientOptions(autoRefreshToken: false),
+  );
+  final client = ApiClient(
+    supabaseClient: fakeClient,
+    storage: store,
+    testInterceptor: mock,
+  );
+
+  return ProviderScope(
+    overrides: [
+      keyValueStoreProvider.overrideWithValue(store),
+      supabaseClientProvider.overrideWithValue(fakeClient),
+      authStateProvider.overrideWith(
+        (ref) => const Stream<AuthState>.empty(),
+      ),
+      activeTenantIdProvider.overrideWithValue('test-tenant-id'),
+      activeTenantDisplayProvider.overrideWithValue('Test Tenant'),
+      allTenantsProvider.overrideWithValue([
+        TenantInfo(
+          id: 'test-tenant-id',
+          slug: 'test',
+          displayName: 'Test Tenant',
+        ),
+      ]),
+      apiClientProvider.overrideWithValue(client),
+      ...additionalOverrides,
+    ],
+    child: const _TestApp(),
+  );
+}
+
 class _TestApp extends ConsumerWidget {
   const _TestApp();
 

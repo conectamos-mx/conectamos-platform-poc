@@ -184,6 +184,7 @@ class _EditableBody extends ConsumerWidget {
   const _EditableBody({required this.roleId, required this.onToggle});
   final String roleId;
   final void Function(String module, String action) onToggle;
+  String _permKey(String perm) => 'perm_${roleId}_$perm';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -215,6 +216,7 @@ class _EditableBody extends ConsumerWidget {
                 final module = parts[0];
                 final action = parts[1];
                 return _PermRow(
+                  key: Key(_permKey(key)),
                   label:    kPermLabels[key] ?? key,
                   checked:  state.grants[key] ?? false,
                   disabled: false,
@@ -258,6 +260,7 @@ class _PermGroup extends StatelessWidget {
 
 class _PermRow extends StatelessWidget {
   const _PermRow({
+    super.key,
     required this.label,
     required this.checked,
     required this.disabled,
@@ -305,6 +308,7 @@ class _SaveFooter extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.all(12),
       child: AppButton(
+        key: Key('perm_save_$roleId'),
         label: 'Guardar cambios',
         onPressed: onSave,
         isDisabled: !canSave,
