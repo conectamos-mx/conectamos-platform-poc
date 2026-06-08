@@ -78,8 +78,12 @@ void main() {
     });
 
     test('msg at 23:30 tenant-time on last day of range → INCLUDED', () {
-      // 2026-01-15 23:30 CDMX = 2026-01-16 05:30 UTC
-      final range = DateRange(DateTime(2026, 1, 14), DateTime(2026, 1, 15));
+      // Range: Jan 14–15 in CDMX. Noon-UTC lands safely on the intended day.
+      // Msg: 2026-01-16T05:30Z = 2026-01-15 23:30 CDMX → inside range.
+      final range = DateRange(
+        DateTime.utc(2026, 1, 14, 12),
+        DateTime.utc(2026, 1, 15, 12),
+      );
       expect(
         matchesDateFilter(
           msg: msg('2026-01-16T05:30:00Z'),
@@ -92,8 +96,12 @@ void main() {
     });
 
     test('msg at 00:30 tenant-time day AFTER range → EXCLUDED', () {
-      // 2026-01-16 00:30 CDMX = 2026-01-16 06:30 UTC
-      final range = DateRange(DateTime(2026, 1, 14), DateTime(2026, 1, 15));
+      // Range: Jan 14–15 in CDMX.
+      // Msg: 2026-01-16T06:30Z = 2026-01-16 00:30 CDMX → after range.
+      final range = DateRange(
+        DateTime.utc(2026, 1, 14, 12),
+        DateTime.utc(2026, 1, 15, 12),
+      );
       expect(
         matchesDateFilter(
           msg: msg('2026-01-16T06:30:00Z'),
@@ -106,8 +114,12 @@ void main() {
     });
 
     test('msg before range start → EXCLUDED', () {
-      // 2026-01-13 23:00 CDMX = 2026-01-14 05:00 UTC
-      final range = DateRange(DateTime(2026, 1, 14), DateTime(2026, 1, 15));
+      // Range: Jan 14–15 in CDMX.
+      // Msg: 2026-01-14T05:00Z = 2026-01-13 23:00 CDMX → before range.
+      final range = DateRange(
+        DateTime.utc(2026, 1, 14, 12),
+        DateTime.utc(2026, 1, 15, 12),
+      );
       expect(
         matchesDateFilter(
           msg: msg('2026-01-14T05:00:00Z'),
@@ -140,8 +152,12 @@ void main() {
     });
 
     test('time filter: msg within from-to window → INCLUDED', () {
-      // 2026-01-15 14:30 CDMX = 2026-01-15 20:30 UTC
-      final range = DateRange(DateTime(2026, 1, 15), DateTime(2026, 1, 15));
+      // Range: Jan 15 only in CDMX.
+      // Msg: 2026-01-15T20:30Z = 2026-01-15 14:30 CDMX → within 14:00–15:00.
+      final range = DateRange(
+        DateTime.utc(2026, 1, 15, 12),
+        DateTime.utc(2026, 1, 15, 12),
+      );
       expect(
         matchesDateFilter(
           msg: msg('2026-01-15T20:30:00Z'),
@@ -154,8 +170,12 @@ void main() {
     });
 
     test('time filter: msg outside from-to window → EXCLUDED', () {
-      // 2026-01-15 13:30 CDMX = 2026-01-15 19:30 UTC
-      final range = DateRange(DateTime(2026, 1, 15), DateTime(2026, 1, 15));
+      // Range: Jan 15 only in CDMX.
+      // Msg: 2026-01-15T19:30Z = 2026-01-15 13:30 CDMX → outside 14:00–15:00.
+      final range = DateRange(
+        DateTime.utc(2026, 1, 15, 12),
+        DateTime.utc(2026, 1, 15, 12),
+      );
       expect(
         matchesDateFilter(
           msg: msg('2026-01-15T19:30:00Z'),
@@ -171,7 +191,10 @@ void main() {
       expect(
         matchesDateFilter(
           msg: <String, dynamic>{},
-          dateRange: DateRange(DateTime(2026, 1, 14), DateTime(2026, 1, 15)),
+          dateRange: DateRange(
+            DateTime.utc(2026, 1, 14, 12),
+            DateTime.utc(2026, 1, 15, 12),
+          ),
           fromTime: null,
           toTime: null,
         ),
@@ -186,8 +209,12 @@ void main() {
     });
 
     test('msg mid-day in range → INCLUDED', () {
-      // 2026-01-15 12:00 CDMX = 2026-01-15 18:00 UTC
-      final range = DateRange(DateTime(2026, 1, 15), DateTime(2026, 1, 15));
+      // Range: Jan 15 only in CDMX.
+      // Msg: 2026-01-15T18:00Z = 2026-01-15 12:00 CDMX → inside range.
+      final range = DateRange(
+        DateTime.utc(2026, 1, 15, 12),
+        DateTime.utc(2026, 1, 15, 12),
+      );
       expect(
         matchesDateFilter(
           msg: msg('2026-01-15T18:00:00Z'),
@@ -200,8 +227,12 @@ void main() {
     });
 
     test('msg outside range → EXCLUDED', () {
-      final range = DateRange(DateTime(2026, 1, 15), DateTime(2026, 1, 15));
-      // 2026-01-14 12:00 CDMX = 2026-01-14 18:00 UTC
+      // Range: Jan 15 only in CDMX.
+      // Msg: 2026-01-14T18:00Z = 2026-01-14 12:00 CDMX → before range.
+      final range = DateRange(
+        DateTime.utc(2026, 1, 15, 12),
+        DateTime.utc(2026, 1, 15, 12),
+      );
       expect(
         matchesDateFilter(
           msg: msg('2026-01-14T18:00:00Z'),
