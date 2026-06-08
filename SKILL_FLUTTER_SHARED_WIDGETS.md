@@ -363,6 +363,13 @@ final confirmed = await AppConfirmDialog.show(
 | `normal` (default) | AppButton primary | Confirmaciones neutras |
 | `danger` | AppButton danger | Acciones destructivas — eliminar, revocar, desactivar |
 
+**Testability Keys (integration tests):**
+
+| Key | Widget | Uso en tests |
+|---|---|---|
+| `confirm_dialog_ok` | Botón confirmar | `find.byKey(const Key('confirm_dialog_ok'))` — tap para confirmar la acción |
+| `confirm_dialog_cancel` | Botón cancelar | `find.byKey(const Key('confirm_dialog_cancel'))` — tap para cancelar |
+
 **PROHIBIDO usar en su lugar:**
 - `showDialog` con contenido `AlertDialog` inline
 - Cualquier clase `_*Dialog` privada para confirmaciones simples

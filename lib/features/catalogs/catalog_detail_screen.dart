@@ -1629,6 +1629,7 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
             children: [
               Expanded(
                 child: TextField(
+                  key: const Key('items_search'),
                   controller: _searchCtrl,
                   onChanged: _onSearchChanged,
                   style: AppFonts.geist(
@@ -1664,6 +1665,7 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
               if (_isManual && widget.canManage) ...[
                 const SizedBox(width: 8),
                 AppButton(
+                  key: const Key('items_add_btn'),
                   label: 'Agregar',
                   variant: AppButtonVariant.teal,
                   size: AppButtonSize.sm,
@@ -1758,6 +1760,8 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                                           item['data'] as Map)
                                       : <String, dynamic>{};
                                   return _CatalogItemRow(
+                                    key: ValueKey(
+                                        'item_row_${item['id'] ?? ''}'),
                                     item: item,
                                     rawData: rawData,
                                     fields: _fields,
@@ -1907,6 +1911,7 @@ class _ItemDetailSheetState extends ConsumerState<_ItemDetailSheet> {
                   ),
                   const SizedBox(height: 8),
                   AppButton(
+                    key: const Key('item_edit_save'),
                     label: 'Guardar',
                     variant: AppButtonVariant.teal,
                     expand: true,
@@ -2013,12 +2018,14 @@ class _ItemDetailSheetState extends ConsumerState<_ItemDetailSheet> {
                 const Spacer(),
                 if (widget.canManage) ...[
                   IconButton(
+                    key: const Key('item_detail_edit'),
                     tooltip: 'Editar',
                     icon: const Icon(Icons.edit_outlined,
                         size: 18, color: AppColors.ctTeal),
                     onPressed: _openEditDialog,
                   ),
                   IconButton(
+                    key: const Key('item_detail_delete'),
                     tooltip: 'Eliminar',
                     icon: const Icon(Icons.delete_outline_rounded,
                         size: 18, color: AppColors.ctDanger),
@@ -2181,6 +2188,7 @@ class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
             ),
             const SizedBox(height: 8),
             AppButton(
+              key: const Key('item_add_save'),
               label: 'Guardar',
               variant: AppButtonVariant.teal,
               expand: true,
@@ -2197,6 +2205,7 @@ class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
 
 class _CatalogItemRow extends StatefulWidget {
   const _CatalogItemRow({
+    super.key,
     required this.item,
     required this.rawData,
     required this.fields,

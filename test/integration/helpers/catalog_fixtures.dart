@@ -84,3 +84,51 @@ const kCreatedCatalog = <String, dynamic>{
   'label': 'Productos',
   'source_type': 'manual',
 };
+
+// ── Detail + CRUD fixtures (T4c) ────────────────────────────────────────────
+
+const kCatalogWithSchema = <String, dynamic>{
+  'id': 'cat-001',
+  'slug': 'productos',
+  'label': 'Productos',
+  'name': 'Productos',
+  'source_type': 'manual',
+  'item_count': 2,
+  'last_synced_at': null,
+  'sync_status': 'manual',
+  'primary_key': 'sku',
+  'display_field': 'nombre',
+  'fields_schema': [
+    {
+      'key': 'sku',
+      'label': 'SKU',
+      'type': 'text',
+      'searchable': true,
+      'is_primary': true,
+    },
+    {
+      'key': 'nombre',
+      'label': 'Nombre',
+      'type': 'text',
+      'searchable': true,
+      'is_primary': false,
+    },
+  ],
+};
+
+const kItemsPage = <String, dynamic>{
+  'items': kCatalogItems,
+  'total': 2,
+  'page': 1,
+  'pages': 1,
+};
+
+const kCreatedItem = <String, dynamic>{
+  'id': 'item-new-001',
+  'data': {'sku': 'C300', 'nombre': 'Widget C'},
+};
+
+const kDeletedItemResponse = <String, dynamic>{
+  'id': 'item-001',
+  'unlinked_assignment_resources': 0,
+};
