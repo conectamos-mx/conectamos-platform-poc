@@ -12,6 +12,9 @@ import 'package:dio/dio.dart';
 class MockApiInterceptor extends Interceptor {
   final List<_MockRoute> _routes = [];
 
+  /// All intercepted requests, in order. Use for assertions on body/method.
+  final List<CapturedRequest> requests = [];
+
   /// Register a successful response for [pathPattern].
   /// [body] is the response data; [statusCode] defaults to 200.
   void when(String pathPattern, {Object? body, int statusCode = 200}) {
@@ -42,9 +45,18 @@ class MockApiInterceptor extends Interceptor {
     ));
   }
 
+  /// Return captured requests matching [pathPattern].
+  List<CapturedRequest> captured(String pathPattern) =>
+      requests.where((r) => _matches(pathPattern, r.path)).toList();
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final path = options.path;
+    requests.add(CapturedRequest(
+      method: options.method,
+      path: path,
+      data: options.data,
+    ));
     for (final route in _routes) {
       if (_matches(route.pattern, path)) {
         if (route.error != null) {
@@ -91,4 +103,15 @@ class _MockRoute {
   final String pattern;
   final Response? response;
   final DioException? error;
+}
+
+class CapturedRequest {
+  const CapturedRequest({
+    required this.method,
+    required this.path,
+    this.data,
+  });
+  final String method;
+  final String path;
+  final dynamic data;
 }
