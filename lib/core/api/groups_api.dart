@@ -1,4 +1,5 @@
 import 'package:conectamos_platform/core/api/api_client.dart';
+import 'package:dio/dio.dart';
 
 class GroupsApi {
   static Future<List<Map<String, dynamic>>> listGroupsByTenant() async {
@@ -94,6 +95,7 @@ class GroupsApi {
     required String displayName,
     String? description,
     required List<String> participantPhones,
+    String? iconUrl,
   }) async {
     final response = await ApiClient.instance.post(
       '/control-towers',
@@ -102,6 +104,7 @@ class GroupsApi {
         'display_name': displayName,
         if (description != null) 'description': description,
         'participant_phones': participantPhones,
+        if (iconUrl != null) 'icon_url': iconUrl,
       },
     );
     return Map<String, dynamic>.from(response.data);
@@ -150,5 +153,22 @@ class GroupsApi {
       data: {'message': message},
     );
     return Map<String, dynamic>.from(response.data);
+  }
+
+  static Future<String> uploadControlTowerIcon({
+    required List<int> fileBytes,
+    required String fileName,
+  }) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        fileBytes,
+        filename: fileName,
+      ),
+    });
+    final response = await ApiClient.instance.post(
+      '/control-towers/upload-icon',
+      data: formData,
+    );
+    return response.data['url'] as String;
   }
 }

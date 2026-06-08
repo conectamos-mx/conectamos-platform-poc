@@ -12,12 +12,16 @@ import '../../core/api/operator_roles_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import 'widgets/participants_widget.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_avatar.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_header.dart';
+import '../../shared/widgets/app_list_card.dart';
 import '../../shared/widgets/app_loading_state.dart';
 import '../../shared/widgets/app_search_bar.dart';
 import '../../shared/widgets/app_stacked_metric_card.dart';
+import '../../shared/widgets/image_picker_avatar.dart';
+import '../../shared/widgets/info_icon_button.dart';
 import 'channel_detail_screen.dart';
 import 'channels_screen.dart';
 import '../../shared/widgets/app_text_field.dart';
@@ -2468,115 +2472,54 @@ class _TowerCard extends StatelessWidget {
     final channelType = tower['channel_type'] as String? ?? 'whatsapp';
     final externalGroupId = tower['external_group_id'] as String? ?? '';
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.ctSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.ctBorder),
+    // Obtener icon_url desde config
+    final config = tower['config'] as Map<String, dynamic>? ?? {};
+    final iconUrl = config['icon_url'] as String?;
+
+    return AppListCard(
+      leadingIcon: AppAvatar(
+        imageUrl: iconUrl,
+        fallback: const Icon(
+          Icons.group,
+          size: 20,
+          color: AppColors.ctText3,
+        ),
+        size: 40,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  displayName,
-                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-              ),
-              AppBadge(
-                label: status == 'active' ? 'Activo' : 'Inactivo',
-                variant: status == 'active' ? AppBadgeVariant.ok : AppBadgeVariant.neutral,
-              ),
-            ],
-          ),
-          if (description.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(description, style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
-          ],
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(
-                channelType == 'whatsapp' ? Icons.chat : Icons.forum_outlined,
-                size: 14,
-                color: AppColors.ctText3,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                channelType.toUpperCase(),
-                style: AppTextStyles.caption.copyWith(color: AppColors.ctText3),
-              ),
-              const SizedBox(width: 12),
-              const Icon(Icons.tag, size: 14, color: AppColors.ctText3),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  externalGroupId,
-                  style: AppTextStyles.caption.copyWith(
-                    fontFamily: 'Geist',
-                    color: AppColors.ctText3,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: AppButton(
-                  label: 'Editar',
-                  variant: AppButtonVariant.ghost,
-                  size: AppButtonSize.sm,
-                  onPressed: onEdit,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: AppButton(
-                  label: status == 'inactive' ? 'Inactiva' : 'Eliminar',
-                  variant: AppButtonVariant.danger,
-                  size: AppButtonSize.sm,
-                  onPressed: onDelete,
-                  isDisabled: status == 'inactive',
-                ),
-              ),
-            ],
-          ),
-          if (status == 'inactive')
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.ctWarnBg,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppColors.ctWarn.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.warning_amber, size: 14, color: AppColors.ctWarn),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Torre inactiva - No se enviarán notificaciones',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.ctWarnText,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
+      title: displayName,
+      subtitle: description,
+      trailing: AppBadge(
+        label: status == 'active' ? 'Activo' : 'Inactivo',
+        variant: status == 'active' ? AppBadgeVariant.ok : AppBadgeVariant.neutral,
       ),
+      metadataRows: [
+        AppListCardMetadata(
+          icon: channelType == 'whatsapp' ? Icons.chat : Icons.forum_outlined,
+          text: channelType.toUpperCase(),
+        ),
+        AppListCardMetadata(
+          icon: Icons.tag,
+          text: externalGroupId,
+        ),
+      ],
+      actions: [
+        AppListCardAction(
+          icon: Icons.edit,
+          color: AppColors.ctTeal,
+          tooltip: 'Editar',
+          onPressed: onEdit,
+        ),
+        AppListCardAction(
+          icon: Icons.delete_outline,
+          color: AppColors.ctDanger,
+          tooltip: status == 'inactive' ? 'Inactiva' : 'Eliminar',
+          onPressed: onDelete,
+          isDisabled: status == 'inactive',
+        ),
+      ],
+      banner: status == 'inactive'
+          ? AppListCardBanner.warning('Torre inactiva - No se enviarán notificaciones')
+          : null,
     );
   }
 }
@@ -2601,6 +2544,7 @@ class _CreateTowerDialogState extends State<_CreateTowerDialog> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   List<String> _participants = [];
+  String? _iconUrl;
   bool _saving = false;
 
   // Palabras que disparan filtros de spam de WhatsApp
@@ -2663,6 +2607,7 @@ class _CreateTowerDialogState extends State<_CreateTowerDialog> {
         displayName: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         participantPhones: _participants,
+        iconUrl: _iconUrl,
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -2696,6 +2641,19 @@ class _CreateTowerDialogState extends State<_CreateTowerDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Avatar picker
+              Center(
+                child: ImagePickerAvatar(
+                  imageUrl: _iconUrl,
+                  fallback: const Icon(
+                    Icons.group,
+                    size: 40,
+                    color: AppColors.ctText3,
+                  ),
+                  onImageSelected: (url) => setState(() => _iconUrl = url),
+                ),
+              ),
+              const SizedBox(height: 20),
               Row(
                 children: [
                   Expanded(
@@ -2709,24 +2667,7 @@ class _CreateTowerDialogState extends State<_CreateTowerDialog> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: _showNamingGuide,
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppColors.ctTeal.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Icon(
-                          Icons.info_outline,
-                          size: 18,
-                          color: AppColors.ctTeal,
-                        ),
-                      ),
-                    ),
-                  ),
+                  InfoIconButton(onTap: _showNamingGuide),
                 ],
               ),
               const SizedBox(height: 16),
@@ -2785,7 +2726,7 @@ class _EditTowerDialogState extends State<_EditTowerDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
   late final TextEditingController _descCtrl;
-  final _iconUrlCtrl = TextEditingController();
+  String? _iconUrl;
   late String _status;
   late List<String> _participants;
   bool _saving = false;
@@ -2801,25 +2742,30 @@ class _EditTowerDialogState extends State<_EditTowerDialog> {
     );
     _status = widget.tower['status'] as String? ?? 'active';
 
-    // Cargar participantes existentes desde config
+    // Cargar participantes e icon_url existentes desde config
     final config = widget.tower['config'] as Map<String, dynamic>? ?? {};
     _participants = (config['participants'] as List?)?.cast<String>() ?? [];
+    _iconUrl = config['icon_url'] as String?;
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
     _descCtrl.dispose();
-    _iconUrlCtrl.dispose();
     super.dispose();
+  }
+
+  void _showNamingGuide() {
+    showDialog(
+      context: context,
+      builder: (context) => const _NamingGuideDialog(),
+    );
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() { _saving = true; });
-
-    final iconUrl = _iconUrlCtrl.text.trim();
 
     try {
       await GroupsApi.updateControlTower(
@@ -2828,7 +2774,7 @@ class _EditTowerDialogState extends State<_EditTowerDialog> {
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         status: _status,
         participants: _participants,
-        iconUrl: iconUrl.isEmpty ? null : iconUrl,
+        iconUrl: _iconUrl,
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -2862,13 +2808,34 @@ class _EditTowerDialogState extends State<_EditTowerDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextFormField(
-                controller: _nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre *',
-                  hintText: 'Ej: Torre Ventas',
+              // Avatar picker
+              Center(
+                child: ImagePickerAvatar(
+                  imageUrl: _iconUrl,
+                  fallback: const Icon(
+                    Icons.group,
+                    size: 40,
+                    color: AppColors.ctText3,
+                  ),
+                  onImageSelected: (url) => setState(() => _iconUrl = url),
                 ),
-                validator: (v) => (v ?? '').trim().isEmpty ? 'Requerido' : null,
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre *',
+                        hintText: 'Ej: Torre Ventas',
+                      ),
+                      validator: (v) => (v ?? '').trim().isEmpty ? 'Requerido' : null,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InfoIconButton(onTap: _showNamingGuide),
+                ],
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -2879,17 +2846,37 @@ class _EditTowerDialogState extends State<_EditTowerDialog> {
                 ),
                 maxLines: 2,
               ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _status,
-                decoration: const InputDecoration(
-                  labelText: 'Estado',
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'active', child: Text('Activa')),
-                  DropdownMenuItem(value: 'inactive', child: Text('Inactiva')),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Text(
+                    'Estado',
+                    style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    _status == 'active' ? 'Activa' : 'Inactiva',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: _status == 'active' ? AppColors.ctOkText : AppColors.ctText2,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Transform.scale(
+                    scale: 0.8,
+                    child: Switch(
+                      value: _status == 'active',
+                      onChanged: (val) => setState(() => _status = val ? 'active' : 'inactive'),
+                      activeThumbColor: AppColors.ctTeal,
+                      activeTrackColor: AppColors.ctTeal.withValues(alpha: 0.3),
+                      inactiveThumbColor: AppColors.ctBorder2,
+                      inactiveTrackColor: AppColors.ctSurface2,
+                    ),
+                  ),
                 ],
-                onChanged: (val) => setState(() => _status = val ?? 'active'),
               ),
               const SizedBox(height: 20),
               const Divider(),
@@ -2897,17 +2884,6 @@ class _EditTowerDialogState extends State<_EditTowerDialog> {
               ParticipantsWidget(
                 initial: _participants,
                 onChanged: (list) => setState(() => _participants = list),
-              ),
-              const SizedBox(height: 20),
-              const Divider(),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _iconUrlCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'URL de imagen del grupo',
-                  hintText: 'https://ejemplo.com/imagen.jpg',
-                  helperText: 'URL pública de la imagen (JPEG/PNG)',
-                ),
               ),
             ],
           ),
