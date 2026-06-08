@@ -1,0 +1,34 @@
+# PLA-100 — Quality gate for pull requests.
+# The analyze + test steps here are MIRRORED in deploy.yml (job deploy).
+# If the threshold or commands change, update both files. (PLA-100)
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  quality:
+    name: Analyze & Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.x"
+          channel: "stable"
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Unit tests
+        run: flutter test test/unit/
