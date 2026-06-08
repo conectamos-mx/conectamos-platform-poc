@@ -363,6 +363,13 @@ final confirmed = await AppConfirmDialog.show(
 | `normal` (default) | AppButton primary | Confirmaciones neutras |
 | `danger` | AppButton danger | Acciones destructivas — eliminar, revocar, desactivar |
 
+**Testability Keys (integration tests):**
+
+| Key | Widget | Uso en tests |
+|---|---|---|
+| `confirm_dialog_ok` | Botón confirmar | `find.byKey(const Key('confirm_dialog_ok'))` — tap para confirmar la acción |
+| `confirm_dialog_cancel` | Botón cancelar | `find.byKey(const Key('confirm_dialog_cancel'))` — tap para cancelar |
+
 **PROHIBIDO usar en su lugar:**
 - `showDialog` con contenido `AlertDialog` inline
 - Cualquier clase `_*Dialog` privada para confirmaciones simples
@@ -1423,6 +1430,19 @@ if (formKey.currentState!.validate()) {
 | `boolean` | AppSwitch | bool |
 | campo con `options` | AppDropdown | String |
 | otro | AppTextField (fallback) | String |
+
+**Testability Keys (integration tests):**
+
+Cada input de tipo text/number lleva `ValueKey('item_field_<fieldKey>')` donde `<fieldKey>` es el `key` del campo en `fields_schema` (ej. `'sku'`, `'nombre'`). La Key se asigna al `AppTextField` wrapper (un `Column`), no al `TextField` interno.
+
+```dart
+// En tests: localizar el TextField dentro del AppTextField keyed
+final input = find.descendant(
+  of: find.byKey(const ValueKey('item_field_sku')),
+  matching: find.byType(TextField),
+);
+await tester.enterText(input, 'ABC-123');
+```
 
 ---
 

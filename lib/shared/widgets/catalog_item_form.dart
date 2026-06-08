@@ -183,6 +183,7 @@ class CatalogItemFormState extends State<CatalogItemForm> {
       );
     } else if (type == 'number') {
       child = AppTextField(
+        key: ValueKey('item_field_$key'),
         controller: _textCtrls[key]!,
         label: label,
         hint: isPk ? '$label (clave primaria)' : label,
@@ -200,6 +201,7 @@ class CatalogItemFormState extends State<CatalogItemForm> {
       );
     } else {
       child = AppTextField(
+        key: ValueKey('item_field_$key'),
         controller: _textCtrls[key]!,
         label: label,
         hint: isPk ? '$label (clave primaria)' : label,
