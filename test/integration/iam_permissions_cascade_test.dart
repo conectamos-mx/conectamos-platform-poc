@@ -165,13 +165,11 @@ void main() {
         _expectChecked(tester, viewCheckbox, true);
 
         // Cascade message should appear in SnackBar.
-        // Cascade message should appear in SnackBar
-        expect(find.byType(SnackBar), findsOneWidget,
-            reason: 'SnackBar should be visible after cascade toggle');
+        // Cascade message should appear in SnackBar (by Key, not copy)
         expect(
-          find.textContaining('Se activó también'),
+          find.byKey(const Key('perm_cascade_msg')),
           findsOneWidget,
-          reason: 'Cascade message should describe the auto-enabled permission',
+          reason: 'Cascade SnackBar should be visible after toggle',
         );
 
         // patrol_finders assertion

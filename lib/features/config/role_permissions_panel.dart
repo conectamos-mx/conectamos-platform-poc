@@ -72,7 +72,7 @@ class _RolePermissionsPanelState extends ConsumerState<RolePermissionsPanel> {
     if (!mounted) return;
     if (cascades.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(cascades.join('\n')),
+        content: Text(cascades.join('\n'), key: const Key('perm_cascade_msg')),
         backgroundColor: AppColors.ctTeal,
         duration: const Duration(seconds: 4),
       ));
