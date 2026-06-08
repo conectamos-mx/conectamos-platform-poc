@@ -525,6 +525,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
         children: [
           if (_step > 0)
             AppButton(
+              key: const Key('wizard_back'),
               label: '← Anterior',
               variant: AppButtonVariant.ghost,
               size: AppButtonSize.sm,
@@ -533,6 +534,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
           const Spacer(),
           if (_step < 3)
             AppButton(
+              key: const Key('wizard_next'),
               label: 'Siguiente →',
               variant: AppButtonVariant.teal,
               size: AppButtonSize.sm,
@@ -541,6 +543,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
             )
           else
             AppButton(
+              key: const Key('wizard_submit'),
               label: 'Crear catálogo',
               variant: AppButtonVariant.teal,
               size: AppButtonSize.sm,
@@ -563,6 +566,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
           _WizardLabel('Nombre *'),
           const SizedBox(height: 6),
           _WizardTextField(
+            key: const Key('wizard_name'),
             controller: _nameCtrl,
             hint: 'Ej. Productos, Municipios, Tarifas…',
           ),
@@ -570,6 +574,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
           _WizardLabel('Slug *'),
           const SizedBox(height: 6),
           _WizardTextField(
+            key: const Key('wizard_slug'),
             controller: _slugCtrl,
             hint: 'ej. productos_mx',
             helperText: 'Solo letras minúsculas, números y guión bajo.',
@@ -579,6 +584,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
           _WizardLabel('Descripción'),
           const SizedBox(height: 6),
           _WizardTextField(
+            key: const Key('wizard_desc'),
             controller: _descCtrl,
             hint: 'Descripción opcional del catálogo',
             maxLines: 3,
@@ -614,6 +620,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
               children: _sourceOptions.map((opt) {
                 final active = _sourceType == opt.value;
                 return _SourceCard(
+                  key: ValueKey('wizard_source_${opt.value}'),
                   label: opt.label,
                   logoKey: opt.logoKey,
                   active: active,
@@ -1151,6 +1158,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
                 ),
               if (_canEditSchema)
                 AppButton(
+                  key: const Key('wizard_add_field'),
                   label: 'Agregar campo',
                   variant: AppButtonVariant.ghost,
                   size: AppButtonSize.sm,
@@ -1481,6 +1489,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
 
 class _SourceCard extends StatelessWidget {
   const _SourceCard({
+    super.key,
     required this.label,
     required this.logoKey,
     required this.active,
@@ -1940,6 +1949,7 @@ class _WizardLabel extends StatelessWidget {
 
 class _WizardTextField extends StatelessWidget {
   const _WizardTextField({
+    super.key,
     required this.controller,
     required this.hint,
     this.helperText,
