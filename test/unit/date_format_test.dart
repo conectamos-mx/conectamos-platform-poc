@@ -13,36 +13,35 @@ void main() {
 
   group('fmtWeekdayEs', () {
     test('Monday → Lunes', () {
-      // 2026-01-05 is a Monday
-      expect(fmtWeekdayEs(DateTime(2026, 1, 5)), 'Lunes');
+      expect(fmtWeekdayEs(DateTime.utc(2026, 1, 5, 12)), 'Lunes');
     });
 
     test('Tuesday → Martes', () {
-      expect(fmtWeekdayEs(DateTime(2026, 1, 6)), 'Martes');
+      expect(fmtWeekdayEs(DateTime.utc(2026, 1, 6, 12)), 'Martes');
     });
 
     test('Wednesday → Miércoles', () {
-      expect(fmtWeekdayEs(DateTime(2026, 1, 7)), 'Miércoles');
+      expect(fmtWeekdayEs(DateTime.utc(2026, 1, 7, 12)), 'Miércoles');
     });
 
     test('Thursday → Jueves', () {
-      expect(fmtWeekdayEs(DateTime(2026, 1, 8)), 'Jueves');
+      expect(fmtWeekdayEs(DateTime.utc(2026, 1, 8, 12)), 'Jueves');
     });
 
     test('Friday → Viernes', () {
-      expect(fmtWeekdayEs(DateTime(2026, 1, 9)), 'Viernes');
+      expect(fmtWeekdayEs(DateTime.utc(2026, 1, 9, 12)), 'Viernes');
     });
 
     test('Saturday → Sábado', () {
-      expect(fmtWeekdayEs(DateTime(2026, 1, 10)), 'Sábado');
+      expect(fmtWeekdayEs(DateTime.utc(2026, 1, 10, 12)), 'Sábado');
     });
 
     test('Sunday → Domingo', () {
-      expect(fmtWeekdayEs(DateTime(2026, 1, 11)), 'Domingo');
+      expect(fmtWeekdayEs(DateTime.utc(2026, 1, 11, 12)), 'Domingo');
     });
 
     test('first letter is uppercase', () {
-      final result = fmtWeekdayEs(DateTime(2026, 1, 5));
+      final result = fmtWeekdayEs(DateTime.utc(2026, 1, 5, 12));
       expect(result[0], result[0].toUpperCase());
     });
   });

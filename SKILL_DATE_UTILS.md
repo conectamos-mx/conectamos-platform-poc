@@ -127,6 +127,20 @@ Los call-sites NO necesitan acceso a `ref` ni a `activeTenantZoneProvider`.
 
 ---
 
+## Convencion de fechas en tests
+
+Las entradas de fecha en unit tests se construyen SIEMPRE con `DateTime.utc()`,
+nunca con `DateTime()` local. Esto garantiza determinismo independiente de la TZ
+del runner (CI corre en UTC; local puede ser America/Mexico_City).
+
+Para representar un dia calendario en la zona tenant (ej. "15 de enero en CDMX"),
+usar noon UTC como ancla segura: `DateTime.utc(2026, 1, 15, 12)`. Noon UTC cae
+en el dia correcto para cualquier timezone dentro de UTC±12.
+
+Referencia canonica: `test/unit/tz_format_test.dart` (100% UTC).
+
+---
+
 ## NO consolidadas (y por que)
 
 Ninguna pendiente en este momento. `_chatFormatDate`, `_formatDate` y `_dateGroupLabel` fueron
