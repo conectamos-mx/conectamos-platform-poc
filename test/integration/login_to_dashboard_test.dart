@@ -13,6 +13,8 @@ import 'helpers/in_memory_key_value_store.dart';
 import 'helpers/test_overrides.dart';
 
 void main() {
+  setUpAll(() => initTestLocale());
+
   setUp(() {
     final store = InMemoryKeyValueStore();
     final fakeClient = SupabaseClient(
