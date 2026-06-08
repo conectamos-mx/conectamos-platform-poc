@@ -55,3 +55,32 @@ const kCatalogUsages = <Map<String, dynamic>>[
     'name': 'Flujo de ventas',
   },
 ];
+
+// ── Wizard fixtures (T4b) ───────────────────────────────────────────────────
+
+const kFieldTypes = <Map<String, dynamic>>[
+  {'key': 'text', 'label': 'Texto', 'description': 'Campo de texto libre'},
+  {'key': 'number', 'label': 'Número', 'description': 'Valor numérico'},
+  {'key': 'boolean', 'label': 'Booleano', 'description': 'Verdadero/falso'},
+  {'key': 'date', 'label': 'Fecha', 'description': 'Fecha sin hora'},
+];
+
+const kGoogleConnected = <String, dynamic>{
+  'connected': true,
+  'email': 'test@example.com',
+  'connected_at': '2026-05-01T08:00:00Z',
+};
+
+const kMicrosoftConnected = <String, dynamic>{
+  'connections': [
+    {'provider': 'microsoft', 'status': 'active'},
+  ],
+};
+
+// Response from POST /api/v1/catalogs after wizard submit
+const kCreatedCatalog = <String, dynamic>{
+  'id': 'cat-new-001',
+  'slug': 'productos',
+  'label': 'Productos',
+  'source_type': 'manual',
+};
