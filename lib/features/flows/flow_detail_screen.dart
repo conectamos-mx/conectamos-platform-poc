@@ -5164,7 +5164,14 @@ class _ActionDialogState extends State<_ActionDialog> {
     setState(() => _checkingMicrosoftOAuth = true);
     try {
       final status = await ConnectionsApi.getMicrosoftStatus(tenantId: widget.tenantId);
-      if (mounted) setState(() => _microsoftConnected = status['connected'] == true);
+      final connections = status['connections'] as List? ?? [];
+      final msConnection = connections.firstWhere(
+        (c) => c['provider'] == 'microsoft',
+        orElse: () => {},
+      );
+      if (mounted) {
+        setState(() => _microsoftConnected = msConnection['status'] == 'active');
+      }
     } catch (_) {
       if (mounted) setState(() => _microsoftConnected = false);
     } finally {
