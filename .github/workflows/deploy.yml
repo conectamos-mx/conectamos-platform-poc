@@ -11,25 +11,43 @@ on:
         options: [production, development]
         default: production
 
-jobs:
-  deploy:
-    name: Deploy (${{ github.ref_name == 'main' && 'production' || 'development' }})
-    runs-on: ubuntu-latest
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
 
-    permissions:
-      id-token: write
-      contents: read
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.x"
+          channel: "stable"
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos
+      - run: flutter test test/unit/ --reporter=compact
+
+  deploy:
+    name: Deploy (${{ github.event.inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }})
+    needs: test
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }}
+    env:
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
 
     outputs:
-      site_url: ${{ steps.site_url.outputs.url }}
-
-    env:
-      IS_PROD: ${{ github.ref_name == 'main' || github.event.inputs.environment == 'production' }}
-      TF_WORKSPACE: ${{ (github.ref_name == 'main' || github.event.inputs.environment == 'production') && 'platform-frontend' || 'platform-frontend-dev' }}
+      site_url: ${{ steps.tf.outputs.site_url }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # ── Flutter build ─────────────────────────────────────────────────────────
       - name: Setup Flutter
@@ -54,22 +72,21 @@ jobs:
       - name: Build web
         run: |
           flutter build web --release \
-            --dart-define=API_BASE_URL=${{ env.IS_PROD == 'true' && secrets.PLATFORM_API_URL || secrets.PLATFORM_API_URL_DEV }} \
-            --dart-define=SUPABASE_URL=${{ env.IS_PROD == 'true' && secrets.DART_DEFINE_SUPABASE_URL || secrets.DART_DEFINE_SUPABASE_URL_DEV }} \
-            --dart-define=SUPABASE_ANON_KEY=${{ env.IS_PROD == 'true' && secrets.DART_DEFINE_SUPABASE_ANON_KEY || secrets.DART_DEFINE_SUPABASE_ANON_KEY_DEV }} \
+            --dart-define=API_BASE_URL=${{ vars.PLATFORM_API_URL }} \
+            --dart-define=SUPABASE_URL=${{ secrets.DART_DEFINE_SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ secrets.DART_DEFINE_SUPABASE_ANON_KEY }} \
             --dart-define=MOCK_MODE=false
 
       # ── AWS credentials (OIDC) ────────────────────────────────────────────────
-      # TODO: mover a AWS_PROD_KEY / AWS_DEV_KEY cuando esas cuentas estén bootstrappeadas.
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.AWS_AI_KEY }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
       # ── Terraform ─────────────────────────────────────────────────────────────
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.9.0
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
@@ -136,22 +153,17 @@ jobs:
             --distribution-id ${{ steps.tf.outputs.dist_id }} \
             --paths "/*"
 
-      # ── Compute service URL for notify ────────────────────────────────────────
-      - name: Compute site URL
-        id: site_url
-        run: echo "url=${{ steps.tf.outputs.site_url }}" >> $GITHUB_OUTPUT
-
   # ── Notify ────────────────────────────────────────────────────────────────────
   notify:
     name: notify
-    needs: deploy
+    needs: [test, deploy]
     if: always()
     uses: conectamos-mx/.github/.github/workflows/notification.yml@main
     with:
-      status: ${{ needs.deploy.result == 'success' && 'success' || 'failure' }}
-      environment: ${{ (github.ref_name == 'main' || github.event.inputs.environment == 'production') && 'Production' || 'Development' }}
+      status: ${{ (needs.test.result == 'success' && needs.deploy.result == 'success') && 'success' || 'failure' }}
+      environment: ${{ (github.event.inputs.environment == 'production' || (github.event.inputs.environment == '' && github.ref_name == 'main')) && 'Production' || 'Development' }}
       service_name: "conectamos-platform"
-      service_url: ${{ needs.deploy.result == 'success' && ((github.ref_name == 'main' || github.event.inputs.environment == 'production') && 'https://platform.conectamos.ai' || 'https://platform-dev.conectamos.ai') || 'N/A' }}
+      service_url: ${{ needs.deploy.result == 'success' && ((github.event.inputs.environment == 'production' || (github.event.inputs.environment == '' && github.ref_name == 'main')) && 'https://platform.conectamos.ai' || 'https://platform-dev.conectamos.ai') || 'N/A' }}
       commit_sha: ${{ github.sha }}
       actor: ${{ github.actor }}
       run_id: ${{ github.run_id }}
