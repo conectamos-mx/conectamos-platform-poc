@@ -2,6 +2,7 @@ import 'dart:html' as html;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/theme/colors.dart';
@@ -9,7 +10,7 @@ import 'app_button.dart';
 
 // ── Widget ──────────────────────────────────────────────────────────────────
 
-class AppTemplateDownload extends StatefulWidget {
+class AppTemplateDownload extends ConsumerStatefulWidget {
   const AppTemplateDownload({
     super.key,
     required this.endpoint,
@@ -24,10 +25,11 @@ class AppTemplateDownload extends StatefulWidget {
   final String? label;
 
   @override
-  State<AppTemplateDownload> createState() => _AppTemplateDownloadState();
+  ConsumerState<AppTemplateDownload> createState() =>
+      _AppTemplateDownloadState();
 }
 
-class _AppTemplateDownloadState extends State<AppTemplateDownload> {
+class _AppTemplateDownloadState extends ConsumerState<AppTemplateDownload> {
   bool _downloading = false;
 
   Future<void> _download() async {
@@ -35,7 +37,7 @@ class _AppTemplateDownloadState extends State<AppTemplateDownload> {
     setState(() => _downloading = true);
 
     try {
-      final response = await ApiClient.instance.get<List<int>>(
+      final response = await ref.read(apiClientProvider).dio.get<List<int>>(
         widget.endpoint,
         queryParameters: widget.queryParams,
         options: Options(responseType: ResponseType.bytes),
