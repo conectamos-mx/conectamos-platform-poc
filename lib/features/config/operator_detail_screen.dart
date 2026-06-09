@@ -244,7 +244,7 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
 
     try {
       final res =
-          await ApiClient.instance.delete('/operators/${widget.operatorId}');
+          await ref.read(apiClientProvider).dio.delete('/operators/${widget.operatorId}');
       final data = res.data is Map
           ? Map<String, dynamic>.from(res.data as Map)
           : <String, dynamic>{};
@@ -2188,15 +2188,15 @@ class _FlowCard extends StatelessWidget {
 
 // ── Tab HISTORIAL ──────────────────────────────────────────────────────────────
 
-class _HistorialTab extends StatefulWidget {
+class _HistorialTab extends ConsumerStatefulWidget {
   const _HistorialTab({required this.operatorId});
   final String operatorId;
 
   @override
-  State<_HistorialTab> createState() => _HistorialTabState();
+  ConsumerState<_HistorialTab> createState() => _HistorialTabState();
 }
 
-class _HistorialTabState extends State<_HistorialTab> {
+class _HistorialTabState extends ConsumerState<_HistorialTab> {
   List<Map<String, dynamic>>? _sessions;
   bool _loading = true;
 
@@ -2208,7 +2208,7 @@ class _HistorialTabState extends State<_HistorialTab> {
 
   Future<void> _load() async {
     try {
-      final res = await ApiClient.instance
+      final res = await ref.read(apiClientProvider).dio
           .get('/operators/${widget.operatorId}/sessions');
       final data = res.data;
       final List raw = data is List
