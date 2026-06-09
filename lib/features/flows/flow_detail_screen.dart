@@ -4050,7 +4050,7 @@ String _actionLabel(String? type) {
     case 'google_sheets_append_row':
       return 'Google Sheets — Agregar fila';
     case 'notify_group':
-      return 'Notificar grupo';
+      return 'Enviar notificación';
     case 'google_sheets_update_row':
       return 'Google Sheets — Actualizar fila';
     default:
@@ -4082,7 +4082,9 @@ String _actionSubtitle(Map<String, dynamic> action) {
       return '📊 $display';
     case 'notify_group':
       final gName = action['_group_display_name'] as String? ?? action['group_id'] as String? ?? '';
-      return '📢 $gName';
+      final destType = action['destination_type'] as String? ?? 'group';
+      final prefix = destType == 'control_tower' ? '🗼' : '📢';
+      return '$prefix $gName';
     case 'google_sheets_update_row':
       final uConfig = action['config'] as Map? ?? {};
       final uSid = uConfig['spreadsheet_id'] as String? ?? '';
@@ -4606,9 +4608,12 @@ class _ActionDialogState extends State<_ActionDialog> {
   bool _loadingHeaders = false;
   String? _headersError;
 
-  // notify_group
+  // notify_group / enviar notificación
+  String _notificationDestinationType = 'group'; // 'group' o 'control_tower'
   List<Map<String, dynamic>> _groups = [];
+  List<Map<String, dynamic>> _controlTowers = [];
   bool _loadingGroups = false;
+  bool _loadingControlTowers = false;
   String? _selectedGroupId;
   final _messageTemplateCtrl = TextEditingController();
   bool _workerGenerates = false;
@@ -4767,6 +4772,8 @@ class _ActionDialogState extends State<_ActionDialog> {
         _selectedCountFieldKey = a['count_field_key'] as String?;
       }
       if (_type == 'notify_group') {
+        // Nuevo campo: destination_type ('group' o 'control_tower')
+        _notificationDestinationType = a['destination_type'] as String? ?? 'group';
         _selectedGroupId = a['group_id'] as String?;
         _messageTemplateCtrl.text = a['message_template'] as String? ?? '';
         _workerGenerates = a['worker_generates'] as bool? ?? false;
@@ -4835,6 +4842,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     _loadFlows();
     _loadCatalogSchemas();
     _loadGroups();
+    _loadControlTowers();
     _loadWaChannel();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadActionTypes());
     _loadCatalogSchemas();
@@ -4857,6 +4865,16 @@ class _ActionDialogState extends State<_ActionDialog> {
       if (mounted) setState(() { _groups = data; _loadingGroups = false; });
     } catch (e) {
       if (mounted) setState(() => _loadingGroups = false);
+    }
+  }
+
+  Future<void> _loadControlTowers() async {
+    setState(() => _loadingControlTowers = true);
+    try {
+      final data = await GroupsApi.listControlTowers();
+      if (mounted) setState(() { _controlTowers = data; _loadingControlTowers = false; });
+    } catch (e) {
+      if (mounted) setState(() => _loadingControlTowers = false);
     }
   }
 
@@ -5697,13 +5715,16 @@ class _ActionDialogState extends State<_ActionDialog> {
       case 'notify_group':
         if (_selectedGroupId == null) return;
         if (_messageTemplateCtrl.text.trim().isEmpty) return;
+        updated['destination_type'] = _notificationDestinationType;
         updated['group_id'] = _selectedGroupId!;
         updated['message_template'] = _messageTemplateCtrl.text.trim();
         updated['worker_generates'] = _workerGenerates;
         // Store the display name for subtitle rendering
-        final matchedGroup = _groups.where((g) => g['id'] == _selectedGroupId).firstOrNull;
-        if (matchedGroup != null) {
-          updated['_group_display_name'] = matchedGroup['display_name'] as String? ?? '';
+        final List<Map<String, dynamic>> sourceList =
+            _notificationDestinationType == 'control_tower' ? _controlTowers : _groups;
+        final matchedItem = sourceList.where((g) => g['id'] == _selectedGroupId).firstOrNull;
+        if (matchedItem != null) {
+          updated['_group_display_name'] = matchedItem['display_name'] as String? ?? '';
         }
         // Plantilla WhatsApp (nuevo formato)
         if (_useWaTemplate && _selectedWaTemplateId != null) {
@@ -5809,7 +5830,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     ('external', 'Sistemas externos', 'Env\u00EDa datos a servicios externos', Color(0xFF3B82F6), ['webhook_out']),
     ('sheets', 'Hojas de c\u00E1lculo', 'Escribe o actualiza datos en Google Sheets', Color(0xFF10B981), ['google_sheets_append_row', 'google_sheets_update_row']),
     ('events', 'Eventos internos', 'Emite eventos para otros sistemas', Color(0xFFF59E0B), ['emit_event']),
-    ('groups', 'Notificaciones a grupos', 'Env\u00EDa un mensaje a un grupo de WhatsApp o Telegram', Color(0xFF00D1A3), ['notify_group']),
+    ('groups', 'Notificaciones push', 'Env\u00EDa notificaciones a grupos o torres de control', Color(0xFF00D1A3), ['notify_group']),
   ];
 
   static const _kActionExamples = <String, String>{
@@ -5819,7 +5840,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     'google_sheets_append_row': 'Agrega una fila nueva con los datos del flujo.',
     'google_sheets_update_row': 'Actualiza una fila existente en la hoja.',
     'emit_event': 'Emite un evento interno para otros flujos o servicios.',
-    'notify_group': 'Env\u00EDa un mensaje al grupo con los datos del flujo completado.',
+    'notify_group': 'Env\u00EDa una notificaci\u00F3n a un grupo o torre de control cuando se completa el flujo.',
   };
 
   bool _hasActionTypesInCategory(List<String> types) {
@@ -6479,57 +6500,106 @@ class _ActionDialogState extends State<_ActionDialog> {
                   placeholder: 'ej. flujo_completado',
                 ),
               ] else if (_type == 'notify_group') ...[
+                // Selector de tipo de destino
                 Text(
-                  'Grupo',
+                  'Tipo de destino',
                   style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 6),
-                if (_loadingGroups)
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: CircularProgressIndicator(
-                          color: AppColors.ctTeal, strokeWidth: 2),
+                AppDropdown<String>(
+                  value: _notificationDestinationType,
+                  items: const [
+                    AppDropdownItem<String>(
+                      value: 'group',
+                      label: 'Grupo',
                     ),
-                  )
-                else if (_groups.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.ctBorder),
-                      borderRadius: BorderRadius.circular(6),
+                    AppDropdownItem<String>(
+                      value: 'control_tower',
+                      label: 'Torre de Control',
                     ),
-                    child: Text(
-                      'No hay grupos activos en este tenant',
-                      style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
-                    ),
-                  )
-                else
-                  _DropdownContainer(
-                    child: DropdownButton<String>(
-                      value: _groups.any((g) => g['id'] == _selectedGroupId)
-                          ? _selectedGroupId
-                          : null,
-                      isExpanded: true,
-                      underline: const SizedBox.shrink(),
-                      dropdownColor: AppColors.ctSurface,
-                      hint: Text('Seleccionar grupo',
-                          style: AppTextStyles.body.copyWith(color: AppColors.ctText2)),
-                      items: _groups.map((g) {
-                        final id = g['id'] as String? ?? '';
-                        final name = g['display_name'] as String? ?? id;
-                        final chType = g['channel_type'] as String? ?? '';
-                        return DropdownMenuItem<String>(
-                          value: id,
-                          child: Text('$name ($chType)',
-                              style: AppTextStyles.body),
-                        );
-                      }).toList(),
-                      onChanged: (v) =>
-                          setState(() => _selectedGroupId = v),
-                    ),
-                  ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() {
+                        _notificationDestinationType = v;
+                        _selectedGroupId = null; // Reset selection
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Selector de grupo o torre
+                Text(
+                  _notificationDestinationType == 'control_tower'
+                      ? 'Torre de Control'
+                      : 'Grupo',
+                  style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 6),
+                Builder(builder: (context) {
+                  final isLoadingData = _notificationDestinationType == 'control_tower'
+                      ? _loadingControlTowers
+                      : _loadingGroups;
+
+                  // Solo mostrar las activas en el selector (excluir inactive)
+                  final allData = _notificationDestinationType == 'control_tower'
+                      ? _controlTowers
+                      : _groups;
+                  final dataList = allData.where((item) {
+                    final itemStatus = item['status'] as String? ?? 'active';
+                    return itemStatus == 'active';
+                  }).toList();
+
+                  final emptyMessage = _notificationDestinationType == 'control_tower'
+                      ? 'No hay torres de control activas'
+                      : 'No hay grupos activos en este tenant';
+                  final hintText = _notificationDestinationType == 'control_tower'
+                      ? 'Seleccionar torre de control'
+                      : 'Seleccionar grupo';
+
+                  if (isLoadingData) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: CircularProgressIndicator(
+                            color: AppColors.ctTeal, strokeWidth: 2),
+                      ),
+                    );
+                  }
+
+                  if (dataList.isEmpty) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.ctBorder),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        emptyMessage,
+                        style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+                      ),
+                    );
+                  }
+
+                  return AppDropdown<String>(
+                    value: dataList.any((g) => g['id'] == _selectedGroupId)
+                        ? _selectedGroupId
+                        : null,
+                    hint: hintText,
+                    items: dataList.map((g) {
+                      final id = g['id'] as String? ?? '';
+                      final name = g['display_name'] as String? ?? id;
+                      final chType = g['channel_type'] as String? ?? '';
+                      return AppDropdownItem<String>(
+                        value: id,
+                        label: '$name ($chType)',
+                      );
+                    }).toList(),
+                    onChanged: (v) => setState(() => _selectedGroupId = v),
+                  );
+                }),
                 const SizedBox(height: 16),
                 Row(
                   children: [

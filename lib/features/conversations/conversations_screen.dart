@@ -6162,7 +6162,14 @@ class _NewMessageDialogState extends ConsumerState<_NewMessageDialog> {
     debugPrint('[_send] channelId=$_selectedChannelId useTemplate=$_useTemplate templateId=$_selectedTemplateId');
     setState(() { _sending = true; _sendError = null; });
     try {
-      final channelId = _selectedChannelId ?? '';
+      // For groups, use the group's own channel_id; for operators, use the global selected channel
+      final isGroup = _selected!['is_group'] == true;
+      final channelId = isGroup
+          ? (_selected!['channel_id'] as String? ?? '')
+          : (_selectedChannelId ?? '');
+
+      debugPrint('[_send] isGroup=$isGroup resolvedChannelId=$channelId');
+
       if (channelId.isEmpty) {
         setState(() { _sending = false; _sendError = 'No se encontró canal WhatsApp para este operador.'; });
         return;
