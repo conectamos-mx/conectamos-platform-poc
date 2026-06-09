@@ -14,24 +14,11 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_action_button.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/app_detail_header.dart';
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-String _fmtSync(String? iso) {
-  if (iso == null) return 'Nunca';
-  try {
-    final dt = DateTime.parse(iso).toLocal();
-    final d = DateTime.now().difference(dt);
-    if (d.inSeconds < 60) return 'Hace ${d.inSeconds}s';
-    if (d.inMinutes < 60) return 'Hace ${d.inMinutes} min';
-    if (d.inHours < 24) return 'Hace ${d.inHours}h';
-    if (d.inDays == 1) return 'Ayer';
-    return 'Hace ${d.inDays} días';
-  } catch (_) {
-    return '—';
-  }
-}
+import '../../core/utils/relative_time.dart';
+import '../../core/utils/sync_poller.dart';
+import '../../shared/widgets/catalog_item_form.dart';
 
 // ── CatalogDetailScreen ───────────────────────────────────────────────────────
 
@@ -159,12 +146,14 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
         ),
         actions: [
           AppButton(
+            key: const Key('delete_catalog_cancel'),
             label: 'Cancelar',
             variant: AppButtonVariant.ghost,
             size: AppButtonSize.sm,
             onPressed: () => Navigator.of(ctx).pop(false),
           ),
           AppButton(
+            key: const Key('delete_catalog_confirm'),
             label: 'Eliminar',
             variant: AppButtonVariant.danger,
             size: AppButtonSize.sm,
@@ -281,6 +270,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
             actions: [
               if (_canManage)
                 AppActionButton(
+                  key: const Key('detail_delete_btn'),
                   variant: AppActionVariant.delete,
                   onPressed: _doDelete,
                   isLoading: _deleting,
@@ -289,6 +279,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
               if (_canManage && isSyncable) ...[
                 const SizedBox(width: 4),
                 AppButton(
+                  key: const Key('detail_sync_btn'),
                   label: 'Sincronizar ahora',
                   variant: AppButtonVariant.outline,
                   size: AppButtonSize.sm,
@@ -301,6 +292,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
               ],
               if (_canManage)
                 AppButton(
+                  key: const Key('detail_save_btn'),
                   label: 'Guardar',
                   variant: AppButtonVariant.teal,
                   size: AppButtonSize.sm,
@@ -1166,6 +1158,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
                     if (showReconnect) ...[
                       const SizedBox(width: 8),
                       AppButton(
+                        key: const Key('source_reconnect_btn'),
                         label: 'Reconectar ahora',
                         variant: isWarn
                             ? AppButtonVariant.outline
@@ -1267,7 +1260,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
                     const SizedBox(width: 6),
                     Text(
                       lastSynced != null
-                          ? 'Último sync: ${_fmtSync(lastSynced)}'
+                          ? 'Último sync: ${fmtRelative(lastSynced, showSeconds: true)}'
                           : 'Nunca sincronizado',
                       style: AppFonts.geist(
                           fontSize: 12,
@@ -1292,6 +1285,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
                   if (sourceType == 'google_sheets') ...[
                     if (widget.canManage) ...[
                       TextField(
+                        key: const Key('source_sheet_url'),
                         controller: _sheetUrlCtrl,
                         style: AppFonts.geist(
                             fontSize: 13, color: AppColors.ctText),
@@ -1320,6 +1314,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
                       const SizedBox(height: 12),
                       if (_availableSheets.isNotEmpty)
                         DropdownButtonFormField<String>(
+                          key: const Key('source_sheet_tab'),
                           initialValue: _selectedSheet,
                           decoration: InputDecoration(
                             labelText: 'Pestaña',
@@ -1593,16 +1588,24 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
   }
 
   Future<void> _showItemDetail(Map<String, dynamic> item) async {
-    await showModalBottomSheet(
+    final changed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.ctSurface,
       shape: const RoundedRectangleBorder(
           borderRadius:
               BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) =>
-          _ItemDetailSheet(item: item, fields: _fields),
+      builder: (_) => _ItemDetailSheet(
+        item: item,
+        fields: _fields,
+        catalog: widget.catalog,
+        canManage: _isManual && widget.canManage,
+      ),
     );
+    if (changed == true && mounted) {
+      setState(() { _page = 1; });
+      _loadPage();
+    }
   }
 
   Future<void> _showAddItem() async {
@@ -1635,6 +1638,7 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
             children: [
               Expanded(
                 child: TextField(
+                  key: const Key('items_search'),
                   controller: _searchCtrl,
                   onChanged: _onSearchChanged,
                   style: AppFonts.geist(
@@ -1670,6 +1674,7 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
               if (_isManual && widget.canManage) ...[
                 const SizedBox(width: 8),
                 AppButton(
+                  key: const Key('items_add_btn'),
                   label: 'Agregar',
                   variant: AppButtonVariant.teal,
                   size: AppButtonSize.sm,
@@ -1764,6 +1769,8 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                                           item['data'] as Map)
                                       : <String, dynamic>{};
                                   return _CatalogItemRow(
+                                    key: ValueKey(
+                                        'item_row_${item['id'] ?? ''}'),
                                     item: item,
                                     rawData: rawData,
                                     fields: _fields,
@@ -1835,16 +1842,171 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
 
 // ── Item sheets ───────────────────────────────────────────────────────────────
 
-class _ItemDetailSheet extends StatelessWidget {
-  const _ItemDetailSheet(
-      {required this.item, required this.fields});
+class _ItemDetailSheet extends ConsumerStatefulWidget {
+  const _ItemDetailSheet({
+    required this.item,
+    required this.fields,
+    required this.catalog,
+    required this.canManage,
+  });
   final Map<String, dynamic> item;
   final List<Map<String, dynamic>> fields;
+  final Map<String, dynamic> catalog;
+  final bool canManage;
+
+  @override
+  ConsumerState<_ItemDetailSheet> createState() =>
+      _ItemDetailSheetState();
+}
+
+class _ItemDetailSheetState extends ConsumerState<_ItemDetailSheet> {
+  Map<String, dynamic> get _rawData =>
+      widget.item['data'] is Map
+          ? Map<String, dynamic>.from(widget.item['data'] as Map)
+          : <String, dynamic>{};
+
+  String get _itemId => widget.item['id'] as String? ?? '';
+
+  String get _catalogId => widget.catalog['id'] as String? ?? '';
+
+  String get _primaryKeyField =>
+      widget.catalog['primary_key'] as String? ??
+      (widget.fields.isNotEmpty
+          ? (widget.fields.first['key'] as String? ?? '')
+          : '');
+
+  Future<void> _openEditDialog() async {
+    final formKey = GlobalKey<CatalogItemFormState>();
+    bool saving = false;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => Dialog(
+          backgroundColor: AppColors.ctSurface,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('Editar item',
+                          style: AppFonts.onest(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.ctText)),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded,
+                            size: 20, color: AppColors.ctText2),
+                        onPressed: () =>
+                            Navigator.of(ctx).pop(false),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  CatalogItemForm(
+                    key: formKey,
+                    fieldsSchema: widget.fields,
+                    primaryKeyField: _primaryKeyField,
+                    initialData: _rawData,
+                  ),
+                  const SizedBox(height: 8),
+                  AppButton(
+                    key: const Key('item_edit_save'),
+                    label: 'Guardar',
+                    variant: AppButtonVariant.teal,
+                    expand: true,
+                    isLoading: saving,
+                    onPressed: () async {
+                      final fs = formKey.currentState;
+                      if (fs == null || !fs.validate()) return;
+                      setDialogState(() => saving = true);
+                      try {
+                        final tenantId =
+                            ref.read(activeTenantIdProvider);
+                        await CatalogsApi.updateItem(
+                          tenantId: tenantId,
+                          catalogId: _catalogId,
+                          itemId: _itemId,
+                          data: fs.getValue(),
+                        );
+                        if (ctx.mounted) {
+                          Navigator.of(ctx).pop(true);
+                        }
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          setDialogState(() => saving = false);
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  'Error al actualizar item: $e'),
+                              backgroundColor: AppColors.ctDanger,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (ok == true && mounted) {
+      Navigator.of(context).pop(true);
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final confirmed = await AppConfirmDialog.show(
+      context: context,
+      title: 'Eliminar item',
+      body: 'Esta accion no se puede deshacer. '
+          'El item sera eliminado permanentemente.',
+      confirmLabel: 'Eliminar',
+      variant: AppConfirmDialogVariant.danger,
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final tenantId = ref.read(activeTenantIdProvider);
+      final result = await CatalogsApi.deleteItem(
+        tenantId: tenantId,
+        catalogId: _catalogId,
+        itemId: _itemId,
+      );
+      final unlinked =
+          result['unlinked_assignment_resources'] as int? ?? 0;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(unlinked > 0
+              ? 'Item eliminado. $unlinked recursos desreferenciados.'
+              : 'Item eliminado.'),
+        ));
+        Navigator.of(context).pop(true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error al eliminar item: $e'),
+          backgroundColor: AppColors.ctDanger,
+        ));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final rawData =
-        item['data'] is Map ? item['data'] as Map : null;
+    final rawData = _rawData;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.6,
@@ -1863,6 +2025,22 @@ class _ItemDetailSheet extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                         color: AppColors.ctText)),
                 const Spacer(),
+                if (widget.canManage) ...[
+                  IconButton(
+                    key: const Key('item_detail_edit'),
+                    tooltip: 'Editar',
+                    icon: const Icon(Icons.edit_outlined,
+                        size: 18, color: AppColors.ctTeal),
+                    onPressed: _openEditDialog,
+                  ),
+                  IconButton(
+                    key: const Key('item_detail_delete'),
+                    tooltip: 'Eliminar',
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        size: 18, color: AppColors.ctDanger),
+                    onPressed: _confirmDelete,
+                  ),
+                ],
                 IconButton(
                   icon: const Icon(Icons.close_rounded,
                       size: 20, color: AppColors.ctText2),
@@ -1873,20 +2051,20 @@ class _ItemDetailSheet extends StatelessWidget {
           ),
           const Divider(height: 1, color: AppColors.ctBorder),
           Expanded(
-            child: fields.isNotEmpty
+            child: widget.fields.isNotEmpty
                 ? ListView.separated(
                     controller: ctrl,
                     padding: const EdgeInsets.all(20),
-                    itemCount: fields.length,
-                    separatorBuilder: (_, _) =>
+                    itemCount: widget.fields.length,
+                    separatorBuilder: (context, index) =>
                         const Divider(
                             height: 16, color: AppColors.ctBorder),
-                    itemBuilder: (_, i) {
-                      final field = fields[i];
+                    itemBuilder: (context, i) {
+                      final field = widget.fields[i];
                       final k = field['key'] as String? ?? '';
                       final lbl =
                           field['label'] as String? ?? k;
-                      final val = item[k] ?? rawData?[k];
+                      final val = widget.item[k] ?? rawData[k];
                       return _DetailRow(
                           label: lbl,
                           value: val?.toString() ?? '—');
@@ -1895,13 +2073,13 @@ class _ItemDetailSheet extends StatelessWidget {
                 : ListView.separated(
                     controller: ctrl,
                     padding: const EdgeInsets.all(20),
-                    itemCount: item.length,
-                    separatorBuilder: (_, _) =>
+                    itemCount: widget.item.length,
+                    separatorBuilder: (context, index) =>
                         const Divider(
                             height: 16, color: AppColors.ctBorder),
-                    itemBuilder: (_, i) {
+                    itemBuilder: (context, i) {
                       final entry =
-                          item.entries.elementAt(i);
+                          widget.item.entries.elementAt(i);
                       return _DetailRow(
                           label: entry.key,
                           value:
@@ -1956,32 +2134,22 @@ class _AddItemSheet extends ConsumerStatefulWidget {
 }
 
 class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
-  final Map<String, TextEditingController> _ctrls = {};
+  final _formKey = GlobalKey<CatalogItemFormState>();
   bool _saving = false;
 
-  @override
-  void initState() {
-    super.initState();
-    for (final field in widget.fields) {
-      final key = field['key'] as String? ?? '';
-      if (key.isNotEmpty) _ctrls[key] = TextEditingController();
-    }
-  }
-
-  @override
-  void dispose() {
-    for (final ctrl in _ctrls.values) { ctrl.dispose(); }
-    super.dispose();
-  }
+  String get _primaryKeyField =>
+      widget.catalog['primary_key'] as String? ??
+      (widget.fields.isNotEmpty
+          ? (widget.fields.first['key'] as String? ?? '')
+          : '');
 
   Future<void> _submit() async {
     if (_saving) return;
+    final formState = _formKey.currentState;
+    if (formState == null || !formState.validate()) return;
     final tenantId = ref.read(activeTenantIdProvider);
     final catalogId = widget.catalog['id'] as String? ?? '';
-    final data = {
-      for (final e in _ctrls.entries)
-        if (e.value.text.isNotEmpty) e.key: e.value.text.trim(),
-    };
+    final data = formState.getValue();
     setState(() => _saving = true);
     try {
       await CatalogsApi.createItem(
@@ -2022,30 +2190,14 @@ class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
               ],
             ),
             const SizedBox(height: 12),
-            ...widget.fields.map((field) {
-              final key = field['key'] as String? ?? '';
-              final label =
-                  field['label'] as String? ?? key;
-              final ctrl = _ctrls[key];
-              if (ctrl == null || key.isEmpty) {
-                return const SizedBox.shrink();
-              }
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: TextField(
-                  controller: ctrl,
-                  style: AppFonts.geist(
-                      fontSize: 13, color: AppColors.ctText),
-                  decoration: InputDecoration(
-                    labelText: label,
-                    labelStyle: AppFonts.geist(
-                        fontSize: 12, color: AppColors.ctText2),
-                  ),
-                ),
-              );
-            }),
+            CatalogItemForm(
+              key: _formKey,
+              fieldsSchema: widget.fields,
+              primaryKeyField: _primaryKeyField,
+            ),
             const SizedBox(height: 8),
             AppButton(
+              key: const Key('item_add_save'),
               label: 'Guardar',
               variant: AppButtonVariant.teal,
               expand: true,
@@ -2062,6 +2214,7 @@ class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
 
 class _CatalogItemRow extends StatefulWidget {
   const _CatalogItemRow({
+    super.key,
     required this.item,
     required this.rawData,
     required this.fields,
@@ -2133,10 +2286,7 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
   bool _loading = true;
   String? _error;
 
-  Timer? _pollTimer;
-  static const _pollInterval = Duration(seconds: 2);
-  static const _pollTimeout  = Duration(seconds: 60);
-  DateTime? _pollStart;
+  SyncPoller? _poller;
 
   String get _catalogId => widget.catalog['id'] as String? ?? '';
 
@@ -2145,31 +2295,26 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadLogs();
-      if (widget.polling) {
-        _pollStart = DateTime.now();
-        _startPolling();
-      }
+      if (widget.polling) _startPolling();
     });
   }
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _poller?.dispose();
     super.dispose();
   }
 
   void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(_pollInterval, (_) async {
-      if (!mounted) { _pollTimer?.cancel(); return; }
-      if (DateTime.now().difference(_pollStart!) > _pollTimeout) {
-        _pollTimer?.cancel(); return;
-      }
-      await _loadLogs();
-      if (_logs.isNotEmpty && _logs.first['status'] != 'running') {
-        _pollTimer?.cancel();
-      }
-    });
+    _poller?.dispose();
+    _poller = SyncPoller(
+      poll: () async {
+        if (!mounted) return false;
+        await _loadLogs();
+        return _logs.isEmpty || _logs.first['status'] == 'running';
+      },
+    );
+    _poller!.start();
   }
 
   Future<void> _loadLogs() async {
@@ -2201,6 +2346,7 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
     }
     if (_logs.isEmpty) {
       return Center(
+        key: const Key('sync_empty_state'),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2226,6 +2372,7 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
       children: [
         if (_logs.isNotEmpty && _logs.first['status'] == 'running') ...[
           Container(
+            key: const Key('sync_running_banner'),
             margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
@@ -2253,7 +2400,13 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
             padding: const EdgeInsets.all(20),
             itemCount: _logs.length,
             separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (_, i) => _SyncLogRow(log: _logs[i]),
+            itemBuilder: (_, i) {
+              final log = _logs[i];
+              return _SyncLogRow(
+                key: ValueKey('sync_log_${log['id'] ?? i}'),
+                log: log,
+              );
+            },
           ),
         ),
       ],
@@ -2262,7 +2415,7 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
 }
 
 class _SyncLogRow extends StatelessWidget {
-  const _SyncLogRow({required this.log});
+  const _SyncLogRow({super.key, required this.log});
   final Map<String, dynamic> log;
 
   @override
@@ -2325,7 +2478,7 @@ class _SyncLogRow extends StatelessWidget {
               ),
               const Spacer(),
               if (startedAt != null)
-                Text(_fmtSync(startedAt),
+                Text(fmtRelative(startedAt, showSeconds: true),
                     style: AppFonts.geist(
                         fontSize: 11, color: AppColors.ctText3)),
               if (durationMs != null) ...[
@@ -2454,6 +2607,7 @@ class _UsoTabState extends ConsumerState<_UsoTab> {
             title: 'Flujos que usan este catálogo',
             child: _usages.isEmpty
                 ? Column(
+                    key: const Key('uso_empty_state'),
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Icon(Icons.hub_outlined, size: 36,
@@ -2468,6 +2622,8 @@ class _UsoTabState extends ConsumerState<_UsoTab> {
                 : Column(
                     children: _usages
                         .map((u) => _UsageRow(
+                              key: ValueKey(
+                                  'usage_${u['flow_slug'] ?? ''}'),
                               flowSlug: u['flow_slug'] as String? ?? '',
                               flowLabel: u['flow_label'] as String? ?? '',
                               fieldLabel: u['field_label'] as String? ?? '',
@@ -2483,6 +2639,7 @@ class _UsoTabState extends ConsumerState<_UsoTab> {
 
 class _UsageRow extends StatelessWidget {
   const _UsageRow({
+    super.key,
     required this.flowSlug,
     required this.flowLabel,
     required this.fieldLabel,

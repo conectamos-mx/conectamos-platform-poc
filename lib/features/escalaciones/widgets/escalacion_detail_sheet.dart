@@ -7,27 +7,9 @@ import '../../../core/providers/escalaciones_provider.dart';
 import '../../../core/providers/permissions_provider.dart';
 import '../../../core/providers/tenant_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/relative_time.dart';
 import '../../../shared/widgets/app_button.dart';
 import 'escalacion_list_tile.dart';
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-String _timeAgo(String? raw) {
-  if (raw == null || raw.isEmpty) return '';
-  try {
-    final dt   = DateTime.parse(raw).toLocal();
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1)  return 'ahora';
-    if (diff.inMinutes < 60) return 'hace ${diff.inMinutes}m';
-    if (diff.inHours < 24)   return 'hace ${diff.inHours}h';
-    if (diff.inDays < 7)     return 'hace ${diff.inDays}d';
-    final d = dt.day.toString().padLeft(2, '0');
-    final m = dt.month.toString().padLeft(2, '0');
-    return '$d/$m/${dt.year}';
-  } catch (_) {
-    return '';
-  }
-}
 
 String _dioError(Object e) {
   if (e is DioException) {
@@ -463,7 +445,7 @@ class _EscalacionDetailSheetState
                       ),
                       if (step.date != null && step.date!.isNotEmpty)
                         Text(
-                          _timeAgo(step.date),
+                          fmtRelative(step.date, compact: true, absoluteAfterDays: 7, nullLabel: ''),
                           style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
                         ),
                       if (step.subtitle != null && step.subtitle!.isNotEmpty)
@@ -695,7 +677,7 @@ class _MessageBubble extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              _timeAgo(receivedAt),
+              fmtRelative(receivedAt, compact: true, absoluteAfterDays: 7, nullLabel: ''),
               style: AppTextStyles.caption,
             ),
           ],

@@ -72,12 +72,14 @@ class AppConfirmDialog extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   AppButton(
+                    key: const Key('confirm_dialog_cancel'),
                     label: cancelLabel,
                     variant: AppButtonVariant.ghost,
                     onPressed: () => Navigator.of(context).pop(false),
                   ),
                   const SizedBox(width: 8),
                   AppButton(
+                    key: const Key('confirm_dialog_ok'),
                     label: confirmLabel,
                     variant: variant == AppConfirmDialogVariant.danger
                         ? AppButtonVariant.danger

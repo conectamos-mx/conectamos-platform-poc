@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/channels_api.dart';
@@ -8,7 +7,9 @@ import '../../core/api/iam_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/phone_normalizer.dart';
 import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_phone_field.dart';
 import '../../shared/widgets/page_header.dart';
 import 'role_permissions_panel.dart';
 import '../settings/operator_fields_screen.dart';
@@ -600,6 +601,54 @@ class _BillingCardState extends ConsumerState<_BillingCard> {
   }
 }
 
+// ── Validadores IAM ──────────────────────────────────────────────────────────
+
+/// Email: formato básico + normalización.
+String? _validateEmail(String? value) {
+  if (value == null || value.trim().isEmpty) return 'Ingresa un email';
+  final email = value.trim().toLowerCase();
+  if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+    return 'Formato de email inválido';
+  }
+  return null;
+}
+
+/// Parsea error_code estructurado del backend (ADR-369).
+/// Retorna mensaje amigable o null si no reconocido.
+String? _friendlyError409(DioException e) {
+  final status = e.response?.statusCode;
+  final data = e.response?.data;
+  if (data is! Map) return null;
+  final detail = data['detail'];
+  final String? code;
+  if (detail is Map) {
+    code = detail['code']?.toString() ?? detail['error_code']?.toString();
+  } else {
+    code = data['error_code']?.toString();
+  }
+  if (code == null) return null;
+
+  switch (code) {
+    case 'EMAIL_ALREADY_EXISTS':
+      return 'Ya existe un usuario con ese email en este tenant';
+    case 'PHONE_BELONGS_TO_USER':
+      return 'Ese teléfono ya está asignado a otro usuario';
+    case 'OPERATOR_PHONE_IN_USE':
+      return 'Ese teléfono ya pertenece a un operador vinculado';
+    case 'USER_NOT_FOUND_BY_PHONE':
+      return 'No encontramos un usuario con ese teléfono';
+    case 'TENANT_USER_ALREADY_LINKED':
+      return 'Este usuario ya está vinculado a otro operador';
+    case 'OPERATOR_ALREADY_LINKED':
+      return 'Este operador ya está vinculado a otro usuario';
+    case 'USER_HAS_ACTIVE_SESSIONS':
+      return 'No se puede eliminar: el usuario tiene sesiones activas';
+    default:
+      if (status == 409) return 'Conflicto: ${detail is Map ? detail['message'] ?? code : code}';
+      return null;
+  }
+}
+
 // ── FutureProviders para usuarios y roles ─────────────────────────────────────
 
 final _usersListProvider =
@@ -770,6 +819,7 @@ class _UsersTable extends StatelessWidget {
               children: [
                 if (i > 0) const Divider(height: 1, color: AppColors.ctBorder),
                 _UserRow(
+                  key: ValueKey('user_row_${u['id']}'),
                   user: u,
                   tenantId: tenantId,
                   roleMap: roleMap,
@@ -789,6 +839,7 @@ class _UsersTable extends StatelessWidget {
 
 class _UserRow extends ConsumerStatefulWidget {
   const _UserRow({
+    super.key,
     required this.user,
     required this.tenantId,
     required this.roleMap,
@@ -953,6 +1004,134 @@ class _UserRowState extends ConsumerState<_UserRow> {
     );
   }
 
+  String? get _operatorId =>
+      widget.user['operator_id']?.toString();
+
+  void _showDeleteConfirm() {
+    final hasOperator = _operatorId != null && _operatorId!.isNotEmpty;
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(
+          'Eliminar usuario',
+          style: AppTextStyles.body.copyWith(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '¿Eliminar a ${_name.isNotEmpty ? _name : _email}?',
+              style: AppTextStyles.pageSubtitle,
+            ),
+            if (hasOperator) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.ctWarnBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.ctWarnText),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Este usuario está vinculado a un operador. Al eliminarlo, el operador quedará sin usuario asociado.',
+                        style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctWarnText),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          AppButton(
+            label: 'Cancelar',
+            onPressed: () => Navigator.of(ctx).pop(false),
+            variant: AppButtonVariant.outline,
+            size: AppButtonSize.sm,
+          ),
+          AppButton(
+            key: const Key('user_delete_confirm'),
+            label: 'Eliminar',
+            onPressed: () => Navigator.of(ctx).pop(true),
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.sm,
+          ),
+        ],
+      ),
+    ).then((confirmed) async {
+      if (confirmed != true || _id.isEmpty) return;
+      setState(() => _acting = true);
+      try {
+        await IamApi.deleteUser(_id, dio: ref.read(apiClientProvider).dio);
+        widget.onRefresh();
+      } on DioException catch (e) {
+        if (!mounted) return;
+        setState(() => _acting = false);
+        final friendly = _friendlyError409(e);
+        ScaffoldMessenger.of(context).showSnackBar(
+          _errorSnack(friendly ?? 'Error al eliminar usuario'),
+        );
+      } catch (_) {
+        if (mounted) setState(() => _acting = false);
+      }
+    });
+  }
+
+  void _showRevokeConfirm() {
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(
+          'Revocar invitación',
+          style: AppTextStyles.body.copyWith(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          '¿Revocar la invitación enviada a ${_email.isNotEmpty ? _email : _name}? La invitación dejará de ser válida.',
+          style: AppTextStyles.pageSubtitle,
+        ),
+        actions: [
+          AppButton(
+            label: 'Cancelar',
+            onPressed: () => Navigator.of(ctx).pop(false),
+            variant: AppButtonVariant.outline,
+            size: AppButtonSize.sm,
+          ),
+          AppButton(
+            label: 'Revocar',
+            onPressed: () => Navigator.of(ctx).pop(true),
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.sm,
+          ),
+        ],
+      ),
+    ).then((confirmed) async {
+      if (confirmed != true || _id.isEmpty) return;
+      setState(() => _acting = true);
+      try {
+        await IamApi.revokeInvitation(_id);
+        widget.onRefresh();
+      } on DioException catch (e) {
+        if (!mounted) return;
+        setState(() => _acting = false);
+        final friendly = _friendlyError409(e);
+        ScaffoldMessenger.of(context).showSnackBar(
+          _errorSnack(friendly ?? 'Error al revocar la invitación'),
+        );
+      } catch (_) {
+        if (mounted) setState(() => _acting = false);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final canManageUsers = hasPermission(ref, 'users', 'manage');
@@ -1093,6 +1272,11 @@ class _UserRowState extends ConsumerState<_UserRow> {
                               child: Text('Reenviar invitación',
                                   style: AppTextStyles.body),
                             ));
+                            items.add(PopupMenuItem(
+                              value: 'revoke',
+                              child: Text('Revocar invitación',
+                                  style: AppTextStyles.body.copyWith(color: AppColors.ctDanger)),
+                            ));
                           }
                         }
                         if (_role.toLowerCase() != 'admin') {
@@ -1100,6 +1284,15 @@ class _UserRowState extends ConsumerState<_UserRow> {
                             value: 'channels',
                             child: Text('Gestionar canales',
                                 style: AppTextStyles.body),
+                          ));
+                        }
+                        if (canManageUsers && _status != 'invited') {
+                          items.add(const PopupMenuDivider(height: 8));
+                          items.add(PopupMenuItem(
+                            key: Key('user_delete_menu_$_id'),
+                            value: 'delete',
+                            child: Text('Eliminar',
+                                style: AppTextStyles.body.copyWith(color: AppColors.ctDanger)),
                           ));
                         }
                         return items;
@@ -1119,6 +1312,10 @@ class _UserRowState extends ConsumerState<_UserRow> {
                           _resendInvitation();
                         } else if (v == 'channels') {
                           _showManageChannelsDialog();
+                        } else if (v == 'delete') {
+                          _showDeleteConfirm();
+                        } else if (v == 'revoke') {
+                          _showRevokeConfirm();
                         }
                       },
                     ),
@@ -1212,21 +1409,29 @@ class _EditUserDialog extends StatefulWidget {
 
 class _EditUserDialogState extends State<_EditUserDialog> {
   late final TextEditingController _nombreCtrl;
-  late final TextEditingController _telefonoCtrl;
+  String _phoneE164 = '';
+  String _initialLocalNumber = '';
+  String _initialCountryIso = 'MX';
   bool _saving = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _nombreCtrl   = TextEditingController(text: widget.initialNombre);
-    _telefonoCtrl = TextEditingController(text: widget.initialTelefono);
+    _nombreCtrl = TextEditingController(text: widget.initialNombre);
+    // Parse existing phone into country + local for the picker.
+    final raw = widget.initialTelefono;
+    if (raw.isNotEmpty) {
+      final (iso, local) = PhoneNormalizer.parsePhone(raw);
+      _initialCountryIso = iso;
+      _initialLocalNumber = local;
+      _phoneE164 = raw;
+    }
   }
 
   @override
   void dispose() {
     _nombreCtrl.dispose();
-    _telefonoCtrl.dispose();
     super.dispose();
   }
 
@@ -1240,13 +1445,18 @@ class _EditUserDialogState extends State<_EditUserDialog> {
     try {
       await IamApi.updateUser(widget.userId, {
         'nombre':   nombre,
-        'telefono': _telefonoCtrl.text.trim(),
+        'telefono': _phoneE164,
       });
       if (!mounted) return;
       widget.onSaved();
       Navigator.pop(context);
     } on DioException catch (e) {
       if (!mounted) return;
+      final friendly = _friendlyError409(e);
+      if (friendly != null) {
+        setState(() { _saving = false; _error = friendly; });
+        return;
+      }
       final detail = e.response?.data is Map
           ? e.response!.data['detail']?.toString()
           : e.response?.data?.toString();
@@ -1284,10 +1494,11 @@ class _EditUserDialogState extends State<_EditUserDialog> {
                 placeholder: 'Juan García',
               ),
               const SizedBox(height: 12),
-              _Field(
+              PhoneFieldWidget(
                 label: 'Teléfono (opcional)',
-                ctrl: _telefonoCtrl,
-                placeholder: '+52 55 1234 5678',
+                initialLocalNumber: _initialLocalNumber,
+                initialCountryIso: _initialCountryIso,
+                onChanged: (e164) => _phoneE164 = e164,
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
@@ -1494,15 +1705,15 @@ class _InviteUserDialog extends ConsumerStatefulWidget {
 }
 
 class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
-  final _nombreCtrl   = TextEditingController();
-  final _telefonoCtrl = TextEditingController();
-  final _emailCtrl    = TextEditingController();
+  final _nombreCtrl = TextEditingController();
+  final _emailCtrl  = TextEditingController();
+  String _phoneE164 = '';
   List<Map<String, dynamic>> _availableRoles = [];
   String? _roleId;
   bool _rolesLoading = true;
   bool _sending = false;
   String? _error;
-  String? _phoneError;
+  String? _emailError;
 
   @override
   void initState() {
@@ -1513,7 +1724,6 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
   @override
   void dispose() {
     _nombreCtrl.dispose();
-    _telefonoCtrl.dispose();
     _emailCtrl.dispose();
     super.dispose();
   }
@@ -1532,68 +1742,50 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
     }
   }
 
-  String? _validatePhone(String? value) {
-    if (value == null || value.trim().isEmpty) return null; // phone is optional
-    final cleaned = value.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-    if (RegExp(r'^\d{10}$').hasMatch(cleaned) ||
-        RegExp(r'^52\d{10}$').hasMatch(cleaned) ||
-        RegExp(r'^\+52\d{10}$').hasMatch(cleaned) ||
-        RegExp(r'^\+521\d{10}$').hasMatch(cleaned)) {
-      return null;
-    }
-    return 'Formato inválido. Ejemplo: +52 55 1234 5678';
-  }
-
-  String _normalizePhone(String raw) {
-    final cleaned = raw.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-    if (cleaned.startsWith('+')) return cleaned;
-    if (cleaned.startsWith('52')) return '+$cleaned';
-    return '+52$cleaned';
-  }
-
   Future<void> _send() async {
-    final nombre     = _nombreCtrl.text.trim();
-    final email      = _emailCtrl.text.trim();
-    final phoneError = _validatePhone(_telefonoCtrl.text);
+    final nombre   = _nombreCtrl.text.trim();
+    final emailErr = _validateEmail(_emailCtrl.text);
+
     if (nombre.isEmpty) {
       setState(() => _error = 'Ingresa el nombre completo');
       return;
     }
-    if (email.isEmpty) {
-      setState(() => _error = 'Ingresa un email');
-      return;
-    }
-    if (phoneError != null) {
-      setState(() => _phoneError = phoneError);
+    if (emailErr != null) {
+      setState(() => _emailError = emailErr);
       return;
     }
     if (_roleId == null || _roleId!.isEmpty) {
       setState(() => _error = 'Selecciona un rol');
       return;
     }
-    setState(() { _sending = true; _error = null; _phoneError = null; });
+    setState(() { _sending = true; _error = null; _emailError = null; });
     try {
-      final phoneRaw = _telefonoCtrl.text.trim();
+      final email = _emailCtrl.text.trim().toLowerCase();
       final payload = <String, dynamic>{
         'nombre':  nombre,
         'email':   email,
         'role_id': _roleId,
       };
-      if (phoneRaw.isNotEmpty) {
-        payload['telefono'] = _normalizePhone(phoneRaw);
+      if (_phoneE164.isNotEmpty) {
+        payload['telefono'] = _phoneE164;
       }
-      await IamApi.inviteUser(payload);
+      await IamApi.inviteUser(payload, dio: ref.read(apiClientProvider).dio);
       if (!mounted) return;
       widget.onInvited();
       Navigator.pop(context);
     } on DioException catch (e) {
       if (!mounted) return;
+      final friendly = _friendlyError409(e);
+      if (friendly != null) {
+        setState(() { _sending = false; _error = friendly; });
+        return;
+      }
       final detail = e.response?.data is Map
           ? e.response!.data['detail']?.toString()
           : e.response?.data?.toString();
       setState(() {
         _sending = false;
-        _error   = detail ?? 'Error al enviar la invitación';
+        _error = detail ?? 'Error al enviar la invitación';
       });
     } catch (e) {
       if (!mounted) return;
@@ -1623,76 +1815,59 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
               ),
               const SizedBox(height: 20),
               _Field(
+                key: const Key('invite_name'),
                 label: 'Nombre completo',
                 ctrl: _nombreCtrl,
                 placeholder: 'Juan García',
               ),
               const SizedBox(height: 12),
-              _Row2(
-                left: _Field(
-                  label: 'Email',
-                  ctrl: _emailCtrl,
-                  placeholder: 'usuario@empresa.com',
-                ),
-                right: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Teléfono (opcional)',
-                      style: AppTextStyles.formLabel,
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _telefonoCtrl,
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'[\d\+\s\-\(\)]'),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Email', style: AppTextStyles.formLabel),
+                  const SizedBox(height: 6),
+                  TextField(
+                    key: const Key('invite_email'),
+                    controller: _emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    onChanged: (_) {
+                      if (_emailError != null) setState(() => _emailError = null);
+                    },
+                    style: AppTextStyles.body,
+                    decoration: InputDecoration(
+                      hintText: 'usuario@empresa.com',
+                      hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                      errorText: _emailError,
+                      errorStyle: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
+                      filled: true,
+                      fillColor: AppColors.ctSurface2,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppColors.ctBorder2),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: _emailError != null ? AppColors.ctDanger : AppColors.ctBorder2,
                         ),
-                      ],
-                      onChanged: (_) {
-                        if (_phoneError != null) {
-                          setState(() => _phoneError = null);
-                        }
-                      },
-                      style: AppTextStyles.body,
-                      decoration: InputDecoration(
-                        hintText: '+52 55 1234 5678',
-                        hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
-                        errorText: _phoneError,
-                        errorStyle: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
-                        filled: true,
-                        fillColor: AppColors.ctSurface2,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide:
-                              const BorderSide(color: AppColors.ctBorder2),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(
-                            color: _phoneError != null
-                                ? AppColors.ctDanger
-                                : AppColors.ctBorder2,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(
-                            color: _phoneError != null
-                                ? AppColors.ctDanger
-                                : AppColors.ctTeal,
-                            width: 1.5,
-                          ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: _emailError != null ? AppColors.ctDanger : AppColors.ctTeal,
+                          width: 1.5,
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              PhoneFieldWidget(
+                key: const Key('invite_phone'),
+                label: 'Teléfono (opcional)',
+                onChanged: (e164) => _phoneE164 = e164,
               ),
               const SizedBox(height: 12),
               const Text(
@@ -1724,6 +1899,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
+                          key: const Key('invite_role'),
                           value: _availableRoles.any(
                                   (r) => r['id']?.toString() == _roleId)
                               ? _roleId
@@ -1759,6 +1935,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   AppButton(
+                    key: const Key('invite_cancel'),
                     label: 'Cancelar',
                     onPressed: () => Navigator.pop(context),
                     variant: AppButtonVariant.outline,
@@ -1766,6 +1943,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
                   ),
                   const SizedBox(width: 10),
                   AppButton(
+                    key: const Key('invite_submit'),
                     label: 'Enviar invitación',
                     onPressed: _send,
                     variant: AppButtonVariant.teal,
@@ -2271,6 +2449,7 @@ class _Row2 extends StatelessWidget {
 
 class _Field extends StatelessWidget {
   const _Field({
+    super.key,
     required this.label,
     required this.ctrl,
     required this.placeholder,

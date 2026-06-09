@@ -7,24 +7,8 @@ import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/screen_header.dart';
+import '../../core/utils/relative_time.dart';
 import 'new_catalog_wizard.dart';
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-String _formatLastSync(String? iso) {
-  if (iso == null) return 'Nunca';
-  try {
-    final dt = DateTime.parse(iso).toLocal();
-    final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 60) return 'Hace ${diff.inSeconds}s';
-    if (diff.inMinutes < 60) return 'Hace ${diff.inMinutes} min';
-    if (diff.inHours < 24) return 'Hace ${diff.inHours}h';
-    if (diff.inDays == 1) return 'Ayer';
-    return 'Hace ${diff.inDays} días';
-  } catch (_) {
-    return '—';
-  }
-}
 
 // ── Detail placeholder (ID-136) ───────────────────────────────────────────────
 
@@ -146,6 +130,7 @@ class _CatalogsScreenState extends ConsumerState<CatalogsScreen> {
           actions: [
             if (canManage)
               AppButton(
+                key: const Key('catalog_new_btn'),
                 label: '+ Nuevo catálogo',
                 variant: AppButtonVariant.teal,
                 size: AppButtonSize.sm,
@@ -348,6 +333,8 @@ class _CatalogsBodyState extends State<_CatalogsBody> {
                   return Column(
                     children: [
                       _CatalogRow(
+                        key: ValueKey(
+                            'catalog_row_${entry.value['id'] ?? ''}'),
                         cat: entry.value,
                         canManage: widget.canManage,
                         onRefresh: widget.onRefresh,
@@ -378,6 +365,7 @@ class _CatalogsBodyState extends State<_CatalogsBody> {
 
 class _CatalogRow extends StatefulWidget {
   const _CatalogRow({
+    super.key,
     required this.cat,
     required this.canManage,
     required this.onRefresh,
@@ -492,7 +480,7 @@ class _CatalogRowState extends State<_CatalogRow> {
             Expanded(
               flex: 2,
               child: Text(
-                _formatLastSync(lastSyncedAt),
+                fmtRelative(lastSyncedAt, nullLabel: 'Nunca', showSeconds: true),
                 style: AppFonts.geist(fontSize: 12, color: AppColors.ctText2),
               ),
             ),
@@ -512,15 +500,17 @@ class _CatalogRowState extends State<_CatalogRow> {
               child: Center(
                 child: widget.canManage
                     ? _syncing
-                        ? const SizedBox(
+                        ? SizedBox(
+                            key: ValueKey('catalog_sync_loading_$id'),
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(
+                            child: const CircularProgressIndicator(
                                 strokeWidth: 2, color: AppColors.ctTeal),
                           )
                         : Tooltip(
                             message: 'Sincronizar ahora',
                             child: IconButton(
+                              key: ValueKey('catalog_sync_$id'),
                               onPressed: () => _sync(context),
                               icon: const Icon(Icons.sync_rounded,
                                   size: 18, color: AppColors.ctText2),

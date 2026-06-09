@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:intl/intl.dart';
 import 'package:calendar_view/calendar_view.dart';
 import 'package:omni_datetime_picker/omni_datetime_picker.dart';
 
@@ -13,6 +12,10 @@ import '../../core/api/operators_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/date_format.dart' as dtfmt;
+import '../../core/utils/display_mappers.dart' as dm;
+import '../../core/utils/scope_utils.dart';
+import '../../core/utils/week_math.dart' as wm;
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_row.dart';
 import '../../shared/widgets/screen_header.dart';
@@ -20,72 +23,8 @@ import '../../shared/widgets/screen_header.dart';
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
 const _kWeekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-const _kMonths = [
-  'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-  'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
-];
 
-DateTime _mondayOf(DateTime d) {
-  final diff = d.weekday - 1;
-  return DateTime(d.year, d.month, d.day - diff);
-}
-
-String _isoDate(DateTime d) =>
-    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-String _weekRangeLabel(DateTime monday) {
-  final sunday = monday.add(const Duration(days: 6));
-  if (monday.month == sunday.month) {
-    return '${monday.day}–${sunday.day} ${_kMonths[monday.month - 1]} ${monday.year}';
-  }
-  return '${monday.day} ${_kMonths[monday.month - 1]} – '
-      '${sunday.day} ${_kMonths[sunday.month - 1]} ${monday.year}';
-}
-
-// ── Scope helpers ─────────────────────────────────────────────────────────────
-
-(DateTime?, DateTime?) _parseScope(String? raw) {
-  if (raw == null || raw.isEmpty) return (null, null);
-  try {
-    // Eliminar delimitadores de rango y comillas
-    final clean = raw
-        .replaceAll('"', '')
-        .replaceAll('[', '')
-        .replaceAll('(', '')
-        .replaceAll(']', '')
-        .replaceAll(')', '');
-    final parts = clean.split(',');
-    if (parts.length < 2) return (null, null);
-    final lower = parts[0].trim();
-    final upper = parts[1].trim();
-    if (lower.isEmpty || upper.isEmpty) return (null, null);
-    return (DateTime.parse(lower), DateTime.parse(upper));
-  } catch (_) {
-    return (null, null);
-  }
-}
-
-final _dateFmt = DateFormat('d MMM', 'es_MX');
-final _timeFmt = DateFormat('HH:mm');
-String _formatDt(DateTime dt) {
-  final local = dt.toLocal();
-  return '${_dateFmt.format(local)} ${local.year} · ${_timeFmt.format(local)}';
-}
-
-String _formatWindow(String? raw) {
-  final (lo, hi) = _parseScope(raw);
-  if (lo == null || hi == null) return '—';
-  final loL = lo.toLocal();
-  final hiL = hi.toLocal();
-  final sameDay = loL.year == hiL.year &&
-      loL.month == hiL.month &&
-      loL.day == hiL.day;
-  if (sameDay) {
-    return '${_dateFmt.format(loL)} · ${_timeFmt.format(loL)} – ${_timeFmt.format(hiL)}';
-  }
-  return '${_dateFmt.format(loL)} ${_timeFmt.format(loL)} – '
-      '${_dateFmt.format(hiL)} ${_timeFmt.format(hiL)}';
-}
+// ── Scope helpers → lib/core/utils/scope_utils.dart (PLA-70) ─────────────────
 
 // ── Domain helpers ────────────────────────────────────────────────────────────
 
@@ -148,7 +87,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
 
   DateTime get _today => DateTime.now();
   DateTime get _currentMonday =>
-      _mondayOf(_today).add(Duration(days: _weekOffset * 7));
+      wm.mondayOf(_today).add(Duration(days: _weekOffset * 7));
 
   @override
   void initState() {
@@ -168,7 +107,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
         final day = monday.add(Duration(days: i));
         return AssignmentsApi.listAssignments(
           tenantId: tenantId,
-          scopeDate: _isoDate(day),
+          scopeDate: wm.isoDate(day),
         );
       });
       final operatorsFuture = OperatorsApi.listOperators();
@@ -196,7 +135,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
     final dayStart = DateTime(day.year, day.month, day.day);
     final dayEnd = dayStart.add(const Duration(days: 1));
     return _assignments.where((a) {
-      final (lower, upper) = _parseScope(a['scope'] as String?);
+      final (lower, upper) = parseScope(a['scope'] as String?);
       if (lower == null || upper == null) return false;
       return lower.isBefore(dayEnd) && upper.isAfter(dayStart);
     }).toList();
@@ -352,7 +291,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
                             currentMonday: _currentMonday,
                             onAssignmentTap: (a) {
                               final (lo, _) =
-                                  _parseScope(a['scope'] as String?);
+                                  parseScope(a['scope'] as String?);
                               if (lo != null) _openDrawerForDay(lo.toLocal());
                             },
                           )
@@ -471,7 +410,7 @@ class _Toolbar extends StatelessWidget {
             _IconBtn(icon: Icons.chevron_left, onTap: onWeekBack),
             const SizedBox(width: 8),
             Text(
-              _weekRangeLabel(currentMonday),
+              wm.weekRangeLabel(currentMonday),
               style: AppFonts.geist(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -870,14 +809,6 @@ class _AssignmentCard extends StatelessWidget {
   const _AssignmentCard({required this.assignment});
   final Map<String, dynamic> assignment;
 
-  String _initials(String name) {
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return name.isNotEmpty ? name[0].toUpperCase() : '?';
-  }
-
   @override
   Widget build(BuildContext context) {
     final name = assignment['operator_name'] as String? ?? '—';
@@ -908,7 +839,7 @@ class _AssignmentCard extends StatelessWidget {
                 radius: 18,
                 backgroundColor: color.withValues(alpha: 0.15),
                 child: Text(
-                  _initials(name),
+                  dm.initials(name),
                   style: AppFonts.geist(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -949,7 +880,7 @@ class _AssignmentCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            _formatWindow(assignment['scope'] as String?),
+            formatWindow(assignment['scope'] as String?),
             style:
                 AppFonts.geist(fontSize: 11, color: AppColors.ctText2),
           ),
@@ -1137,7 +1068,7 @@ class _AssignmentsTable extends StatelessWidget {
           padding: const EdgeInsets.symmetric(
               horizontal: 12, vertical: 10),
           child: Text(
-            _formatWindow(a['scope'] as String?),
+            formatWindow(a['scope'] as String?),
             style: AppFonts.geist(
                 fontSize: 12, color: AppColors.ctText),
           ),
@@ -1371,7 +1302,7 @@ class _AssignmentsSchedulerState extends State<_AssignmentsScheduler> {
 
     final events = <CalendarEventData<Map<String, dynamic>>>[];
     for (final a in widget.assignments) {
-      final (lo, hi) = _parseScope(a['scope'] as String?);
+      final (lo, hi) = parseScope(a['scope'] as String?);
       if (lo == null || hi == null) continue;
       final operatorId = a['operator_id'] as String? ?? '';
       final color = _operatorColors[operatorId] ?? AppColors.ctTeal;
@@ -2140,7 +2071,7 @@ bool get _step1Valid =>
               AppDetailRow(
                 label: 'Ventana',
                 value: Text(
-                  _formatWindow(
+                  formatWindow(
                     _scopeStart != null && _scopeEnd != null
                         ? '[${_scopeStart!.toUtc().toIso8601String()}'
                             ',${_scopeEnd!.toUtc().toIso8601String()})'
@@ -2446,7 +2377,7 @@ class _DateTimePickerBtn extends StatelessWidget {
                     : AppColors.ctText2),
             const SizedBox(width: 8),
             Text(
-              value != null ? _formatDt(value!) : hint,
+              value != null ? dtfmt.fmtDateIntl(value!) : hint,
               style: AppFonts.geist(
                   fontSize: 13,
                   color: value != null

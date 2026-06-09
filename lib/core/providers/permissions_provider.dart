@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
 import '../config.dart';
+import '../utils/toggle_permission.dart';
 import 'auth_provider.dart';
 import 'tenant_provider.dart';
 
@@ -38,7 +39,8 @@ final userRoleProvider = FutureProvider.autoDispose<String?>((ref) async {
   // BUG 1: esperar a que activeTenantIdProvider tenga valor antes de llamar al backend
   final tenantId = ref.watch(activeTenantIdProvider);
   if (tenantId.isEmpty) return null;
-  final res = await ApiClient.instance.get('/iam/users');
+  final dio = ref.read(apiClientProvider).dio;
+  final res = await dio.get('/iam/users');
   final data = res.data;
   final List raw = data is List
       ? data
@@ -78,7 +80,8 @@ final userPermissionsProvider = FutureProvider.autoDispose<Set<String>>((ref) as
   if (role.toLowerCase() == 'admin') return _kAllPermissions;
 
   // Buscar role_id por nombre
-  final rolesRes = await ApiClient.instance.get('/iam/roles');
+  final dio = ref.read(apiClientProvider).dio;
+  final rolesRes = await dio.get('/iam/roles');
   final rolesData = rolesRes.data;
   final List rawRoles = rolesData is List
       ? rolesData
@@ -93,7 +96,7 @@ final userPermissionsProvider = FutureProvider.autoDispose<Set<String>>((ref) as
   if (roleId.isEmpty) return {};
 
   // Obtener permisos del rol
-  final permRes = await ApiClient.instance.get('/iam/roles/$roleId/permissions');
+  final permRes = await dio.get('/iam/roles/$roleId/permissions');
   final permData = permRes.data;
   final List rawPerms = permData is List
       ? permData
@@ -141,7 +144,7 @@ final roleListProvider = FutureProvider.autoDispose<List<Role>>((ref) async {
       Role(id: 'viewer-mock',     name: 'viewer'),
     ];
   }
-  final res = await ApiClient.instance.get('/iam/roles');
+  final res = await ref.read(apiClientProvider).dio.get('/iam/roles');
   final data = res.data;
   final List raw = data is List
       ? data
@@ -247,7 +250,7 @@ class RolePermState {
 // ── Notifier ──────────────────────────────────────────────────────────────────
 
 class RolePermissionsNotifier extends StateNotifier<RolePermState> {
-  RolePermissionsNotifier(this._roleId)
+  RolePermissionsNotifier(this._roleId, this._dio)
       : super(const RolePermState(
           grants:        {},
           initialGrants: {},
@@ -257,12 +260,18 @@ class RolePermissionsNotifier extends StateNotifier<RolePermState> {
     _load();
   }
 
+  /// Test-only: pre-seed state without triggering _load().
+  RolePermissionsNotifier.seeded(this._roleId, RolePermState initial)
+      : _dio = Dio(),
+        super(initial);
+
   final String _roleId;
+  final Dio _dio;
 
   Future<void> _load() async {
     state = state.copyWith(loading: true, clearError: true);
     try {
-      final res  = await ApiClient.instance.get('/iam/roles/$_roleId/permissions');
+      final res  = await _dio.get('/iam/roles/$_roleId/permissions');
       final data = res.data;
       final List raw = data is List
           ? data
@@ -293,39 +302,17 @@ class RolePermissionsNotifier extends StateNotifier<RolePermState> {
   }
 
   /// Toggles a permission and returns cascade description strings (for toast).
+  /// Wrapper delgado sobre togglePermission() pura (PLA-70).
   List<String> toggle(String module, String action) {
-    final key     = '$module.$action';
-    final current = state.grants[key] ?? false;
-    final newGrants = Map<String, bool>.from(state.grants);
-    final cascades  = <String>[];
-
-    if (!current) {
-      // Activating: also activate prerequisite if needed
-      newGrants[key] = true;
-      final prereq = _kPrerequisites[key];
-      if (prereq != null && !(newGrants[prereq] ?? false)) {
-        newGrants[prereq] = true;
-        cascades.add(
-          'Se activó también "${kPermLabels[prereq] ?? prereq}" '
-          'porque es requerido por "${kPermLabels[key] ?? key}".',
-        );
-      }
-    } else {
-      // Deactivating: also deactivate dependents
-      newGrants[key] = false;
-      for (final entry in _kPrerequisites.entries) {
-        if (entry.value == key && (newGrants[entry.key] ?? false)) {
-          newGrants[entry.key] = false;
-          cascades.add(
-            'Se desactivó también "${kPermLabels[entry.key] ?? entry.key}" '
-            'porque requiere "${kPermLabels[key] ?? key}".',
-          );
-        }
-      }
-    }
-
-    state = state.copyWith(grants: newGrants);
-    return cascades;
+    final result = togglePermission(
+      currentGrants: state.grants,
+      module: module,
+      action: action,
+      prerequisites: _kPrerequisites,
+      labels: kPermLabels,
+    );
+    state = state.copyWith(grants: result.grants);
+    return result.cascadeMessages;
   }
 
   /// Saves diff to backend. Returns null on success or an error message.
@@ -342,7 +329,7 @@ class RolePermissionsNotifier extends StateNotifier<RolePermState> {
     }
     if (grant.isEmpty && revoke.isEmpty) return null;
     try {
-      await ApiClient.instance.patch(
+      await _dio.patch(
         '/iam/roles/$_roleId/permissions',
         data: {'grant': grant, 'revoke': revoke},
       );
@@ -370,5 +357,5 @@ class RolePermissionsNotifier extends StateNotifier<RolePermState> {
 
 final rolePermissionsEditProvider = StateNotifierProvider.autoDispose
     .family<RolePermissionsNotifier, RolePermState, String>(
-  (ref, roleId) => RolePermissionsNotifier(roleId),
+  (ref, roleId) => RolePermissionsNotifier(roleId, ref.read(apiClientProvider).dio),
 );

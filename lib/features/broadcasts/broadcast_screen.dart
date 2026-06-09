@@ -5,64 +5,16 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/utils/broadcast_helpers.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/whatsapp_window.dart';
 import '../../shared/widgets/app_button.dart';
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
 
 enum _BroadcastResultType { success, warning, error }
-
-// ── Variables estándar de texto libre ─────────────────────────────────────────
-
-const _kFreeVars = [
-  (key: '{nombre}',   label: 'nombre'),
-  (key: '{telefono}', label: 'teléfono'),
-  (key: '{flujo}',    label: 'flujo'),
-  (key: '{hora}',     label: 'hora'),
-  (key: '{dia}',      label: 'día'),
-  (key: '{fecha}',    label: 'fecha'),
-  (key: '{tenant}',   label: 'tenant'),
-];
-
-String _resolveFreeText(
-    String text, Map<String, dynamic>? op, String tenantName) {
-  if (text.isEmpty) return text;
-  final now = DateTime.now();
-  const days = [
-    'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'
-  ];
-  String flowName = 'Sin flujo';
-  if (op != null) {
-    final flows = op['flows'];
-    if (flows is List && flows.isNotEmpty) {
-      final first = flows.first;
-      flowName = first is Map
-          ? (first['name']?.toString() ?? 'Sin flujo')
-          : first.toString();
-    }
-  }
-  return text
-      .replaceAll(
-          '{nombre}',
-          op?['display_name']?.toString() ??
-              op?['name']?.toString() ??
-              'Operador')
-      .replaceAll('{telefono}', op?['phone']?.toString() ?? '')
-      .replaceAll('{flujo}', flowName)
-      .replaceAll(
-          '{hora}',
-          '${now.hour.toString().padLeft(2, '0')}:'
-          '${now.minute.toString().padLeft(2, '0')}')
-      .replaceAll('{dia}', days[now.weekday - 1])
-      .replaceAll(
-          '{fecha}',
-          '${now.day.toString().padLeft(2, '0')}/'
-          '${now.month.toString().padLeft(2, '0')}/'
-          '${now.year}')
-      .replaceAll('{tenant}', tenantName);
-}
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 
@@ -124,57 +76,6 @@ final _bcastHistoryProvider =
     }
   },
 );
-
-// ── Helper: resuelve preview de plantilla ─────────────────────────────────────
-
-String _resolvePreview(Map<String, dynamic> template) {
-  const examples = <String, String>{
-    'nombre_operador':   'José Miguel',
-    'telefono_operador': '5215559537449',
-    'nombre_tenant':     'TMR-Prixz',
-    'fecha_hoy':         '14/04/2026',
-    'hora_actual':       '10:30 AM',
-  };
-  String preview = template['body_text']?.toString() ?? '';
-  final vars = template['variables'];
-  if (vars is List) {
-    for (final v in vars) {
-      if (v is! Map) continue;
-      final slot = v['slot'] as int? ?? 0;
-      final type = v['type'] as String? ?? 'free';
-      final key  = v['key']  as String? ?? '';
-      final val  = type == 'system'
-          ? (examples[key] ?? '[$key]')
-          : (key.isNotEmpty ? '[$key]' : '{{$slot}}');
-      if (slot > 0) preview = preview.replaceAll('{{$slot}}', val);
-    }
-  }
-  return preview;
-}
-
-List<String> _resolveTemplateVariables(Map<String, dynamic> template) {
-  const examples = <String, String>{
-    'nombre_operador':   'José Miguel',
-    'telefono_operador': '5215559537449',
-    'nombre_tenant':     'TMR-Prixz',
-    'fecha_hoy':         '14/04/2026',
-    'hora_actual':       '10:30 AM',
-  };
-  final vars = template['variables'];
-  if (vars is! List || vars.isEmpty) return [];
-  final sorted = vars
-      .whereType<Map>()
-      .map((e) => Map<String, dynamic>.from(e))
-      .toList()
-    ..sort((a, b) =>
-        ((a['slot'] as int?) ?? 0).compareTo((b['slot'] as int?) ?? 0));
-  return sorted.map((v) {
-    final type = v['type'] as String? ?? 'free';
-    final key  = v['key']  as String? ?? '';
-    if (type == 'system') return examples[key] ?? '[$key]';
-    return key.isNotEmpty ? '[$key]' : '[variable]';
-  }).toList();
-}
 
 // ── Pantalla ──────────────────────────────────────────────────────────────────
 
@@ -248,13 +149,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     }).toList();
   }
 
-  static bool _windowOpen(Map<String, dynamic> op) {
-    final raw = op['last_inbound_at'] as String?;
-    if (raw == null) return false;
-    final dt = DateTime.tryParse(raw);
-    if (dt == null) return false;
-    return DateTime.now().difference(dt).inHours < 24;
-  }
+  // _windowOpen eliminada — usar whatsAppWindowOpen (PLA-91).
 
   Future<void> _sendBroadcast(
     List<Map<String, dynamic>> filteredOps,
@@ -303,7 +198,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                 : null;
         if (firstOp != null && firstOp.isNotEmpty) {
           final tenantDisplayName = ref.read(activeTenantDisplayProvider);
-          resolvedText = _resolveFreeText(resolvedText, firstOp, tenantDisplayName);
+          resolvedText = resolveFreeText(resolvedText, firstOp, tenantDisplayName);
         }
       }
 
@@ -313,7 +208,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         'message_text':       _useTemplate ? null : resolvedText,
         'template_id':        _useTemplate ? _selectedTemplateId : null,
         'template_variables': _useTemplate && selectedTemplate != null
-            ? _resolveTemplateVariables(selectedTemplate)
+            ? resolveTemplateVariables(selectedTemplate)
             : <String>[],
       };
 
@@ -377,7 +272,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
       setState(() {
         _sending      = false;
         _confirming   = false;
-        _result       = _parseErrorMessage(raw ?? e.message ?? '');
+        _result       = parseWhatsAppErrorMessage(raw ?? e.message ?? '');
         _resultType   = _BroadcastResultType.error;
         _resultErrors = [];
       });
@@ -386,26 +281,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
       setState(() {
         _sending      = false;
         _confirming   = false;
-        _result       = _parseErrorMessage(e.toString());
+        _result       = parseWhatsAppErrorMessage(e.toString());
         _resultType   = _BroadcastResultType.error;
         _resultErrors = [];
       });
-    }
-  }
-
-  String _parseErrorMessage(dynamic error) {
-    try {
-      final detail = error.toString();
-      if (detail.contains('131037') || detail.contains('display name')) {
-        return 'El número aún no tiene el nombre de perfil aprobado por Meta. '
-            'Por favor espera la aprobación antes de iniciar nuevas conversaciones.';
-      }
-      if (detail.contains('131026') || detail.contains('not in whitelist')) {
-        return 'Este número no está registrado como destinatario de prueba.';
-      }
-      return 'Error al enviar el mensaje. Intenta de nuevo.';
-    } catch (_) {
-      return 'Error al enviar el mensaje. Intenta de nuevo.';
     }
   }
 
@@ -466,7 +345,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     // null last_inbound_at → _windowOpen retorna false (ventana cerrada)
     final closedWindowCount = isTelegram
         ? 0
-        : selectedOperators.where((op) => !_windowOpen(op)).length;
+        : selectedOperators.where((op) => !whatsAppWindowOpen(op['last_inbound_at'] as String?)).length;
 
     // Flujos únicos en todos los operadores
     final allFlows   = <String>{};
@@ -897,7 +776,7 @@ class _FormColumn extends StatelessWidget {
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
-                  children: _kFreeVars.map((v) => _VarChip(
+                  children: kBroadcastFreeVars.map((v) => _VarChip(
                     label: v.label,
                     onTap: () => onInsertVariable(v.key),
                   )).toList(),
@@ -1095,10 +974,10 @@ class _PreviewColumn extends StatelessWidget {
     // FIX 1: previewText se resuelve con variables del primer destinatario
     String previewText = '';
     if (useTemplate && selectedTemplate != null) {
-      previewText = _resolvePreview(selectedTemplate!);
+      previewText = resolveTemplatePreview(selectedTemplate!);
     } else if (!useTemplate) {
       // FIX 3: resolver variables estándar
-      previewText = _resolveFreeText(msgCtrl.text, firstSelectedOp, tenantName);
+      previewText = resolveFreeText(msgCtrl.text, firstSelectedOp, tenantName);
     }
 
     // FIX 1: título dinámico
@@ -1186,7 +1065,7 @@ class _PreviewColumn extends StatelessWidget {
 
                   // windowOpen: bool (false = cerrada), solo chip en WA
                   final bool? windowOpen = isWa
-                      ? _BroadcastScreenState._windowOpen(op)
+                      ? whatsAppWindowOpen(op['last_inbound_at'] as String?)
                       : null;
                   final isClosed = windowOpen == false;
 

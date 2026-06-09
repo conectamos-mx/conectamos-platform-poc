@@ -58,6 +58,9 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    // ADR-414: keep tz_format global in sync with active tenant timezone.
+    ref.watch(tenantZoneSyncProvider);
+
     // Covers fresh-login case: currentUserProvider is a synchronous Provider
     // that caches null and is never invalidated by auth changes.
     // Listening here ensures load() is called when sign-in completes.
@@ -172,9 +175,16 @@ class _Topbar extends ConsumerWidget {
           const Spacer(),
 
           // [E] KPI chips
-          kpiAsync.whenOrNull(
-            data: (kpis) => kpis.isEmpty ? null : _KpiChips(kpis: kpis),
-          ) ?? const SizedBox.shrink(),
+          kpiAsync.when(
+            data: (kpis) => kpis.isEmpty
+                ? const SizedBox.shrink()
+                : _KpiChips(kpis: kpis),
+            loading: () => const SizedBox.shrink(),
+            error: (e, st) => const Tooltip(
+              message: 'Error al cargar KPIs',
+              child: Icon(Icons.error_outline, size: 16, color: AppColors.ctDanger),
+            ),
+          ),
           const SizedBox(width: 8),
 
           // [F] Tenant selector

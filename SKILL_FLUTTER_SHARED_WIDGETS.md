@@ -363,6 +363,13 @@ final confirmed = await AppConfirmDialog.show(
 | `normal` (default) | AppButton primary | Confirmaciones neutras |
 | `danger` | AppButton danger | Acciones destructivas — eliminar, revocar, desactivar |
 
+**Testability Keys (integration tests):**
+
+| Key | Widget | Uso en tests |
+|---|---|---|
+| `confirm_dialog_ok` | Botón confirmar | `find.byKey(const Key('confirm_dialog_ok'))` — tap para confirmar la acción |
+| `confirm_dialog_cancel` | Botón cancelar | `find.byKey(const Key('confirm_dialog_cancel'))` — tap para cancelar |
+
 **PROHIBIDO usar en su lugar:**
 - `showDialog` con contenido `AlertDialog` inline
 - Cualquier clase `_*Dialog` privada para confirmaciones simples
@@ -1338,3 +1345,192 @@ AppEditableSection(
 **PROHIBIDO usar en su lugar:**
 - Dialogs modales para edicion campo-por-campo en pantallas de detalle
 - Auto-save sin confirmacion del usuario (patron anterior del detail de operadores)
+
+---
+
+### 2.24 AppSwitch · `lib/shared/widgets/app_switch.dart`
+
+Toggle booleano con label. Usa tokens del design system (ctTeal active, ctBorder inactive).
+
+```dart
+import '../../shared/widgets/app_switch.dart';
+
+AppSwitch(
+  label: 'Activo',
+  value: _isActive,
+  onChanged: (v) => setState(() => _isActive = v),
+)
+
+// Disabled
+AppSwitch(
+  label: 'Bloqueado',
+  value: true,
+  enabled: false,
+  onChanged: (_) {},
+)
+```
+
+| Prop | Tipo | Default | Descripcion |
+|------|------|---------|-------------|
+| `label` | `String` | requerido | Texto a la izquierda del switch |
+| `value` | `bool` | requerido | Estado actual |
+| `onChanged` | `ValueChanged<bool>` | requerido | Callback al cambiar |
+| `enabled` | `bool` | true | Si false, el switch queda deshabilitado |
+
+---
+
+### 2.25 CatalogItemForm · `lib/shared/widgets/catalog_item_form.dart`
+
+Formulario dinamico schema-driven para crear/editar items de catalogo.
+Renderiza campos segun `type` del schema: text, number, boolean, options (dropdown).
+Emite tipos nativos en `getValue()`: `String`, `num`, `bool`.
+
+```dart
+import '../../shared/widgets/catalog_item_form.dart';
+
+// Crear item (initialData = null)
+final formKey = GlobalKey<CatalogItemFormState>();
+CatalogItemForm(
+  key: formKey,
+  fieldsSchema: catalog['fields_schema'],
+  primaryKeyField: 'sku',
+)
+
+// Editar item (initialData != null, PK read-only)
+CatalogItemForm(
+  key: formKey,
+  fieldsSchema: catalog['fields_schema'],
+  primaryKeyField: 'sku',
+  initialData: item['data'],
+)
+
+// Validar y obtener datos
+if (formKey.currentState!.validate()) {
+  final data = formKey.currentState!.getValue();
+  // data['price'] es num, data['active'] es bool
+}
+```
+
+| Prop | Tipo | Default | Descripcion |
+|------|------|---------|-------------|
+| `fieldsSchema` | `List<Map<String,dynamic>>` | requerido | Schema de campos (key, label, type, options) |
+| `primaryKeyField` | `String` | requerido | Key del campo PK (se deshabilita en edit mode) |
+| `initialData` | `Map<String,dynamic>?` | null | Datos iniciales. Si != null, modo edicion (PK read-only) |
+| `enabled` | `bool` | true | Habilita/deshabilita todos los campos |
+
+**Metodos publicos (via GlobalKey):**
+- `validate()` → `bool`: PK no vacio; numbers parseables.
+- `getValue()` → `Map<String,dynamic>`: tipos nativos. Number vacio se omite.
+
+**Mapeo de type:**
+| type | Widget | Valor emitido |
+|------|--------|---------------|
+| `text` | AppTextField | String |
+| `number` | AppTextField (numerico) | num (int o double) |
+| `boolean` | AppSwitch | bool |
+| campo con `options` | AppDropdown | String |
+| otro | AppTextField (fallback) | String |
+
+**Testability Keys (integration tests):**
+
+Cada input de tipo text/number lleva `ValueKey('item_field_<fieldKey>')` donde `<fieldKey>` es el `key` del campo en `fields_schema` (ej. `'sku'`, `'nombre'`). La Key se asigna al `AppTextField` wrapper (un `Column`), no al `TextField` interno.
+
+```dart
+// En tests: localizar el TextField dentro del AppTextField keyed
+final input = find.descendant(
+  of: find.byKey(const ValueKey('item_field_sku')),
+  matching: find.byType(TextField),
+);
+await tester.enterText(input, 'ABC-123');
+```
+
+---
+
+### 2.19 validatePhoneE164 · `lib/shared/validators/phone_validator.dart`
+
+Validador E.164 compartido para campos de teléfono. Retorna `null` si el valor es válido
+o vacío (el caller decide si el campo es obligatorio). Retorna un string de error
+user-facing si el formato es inválido.
+
+**Reglas:** requiere `+`, seguido de 10–15 dígitos. Acepta espacios, guiones y paréntesis
+(se limpian internamente antes de validar).
+
+```dart
+import '../../shared/validators/phone_validator.dart';
+
+// En un formulario — campo opcional
+final phoneErr = validatePhoneE164(_phoneCtrl.text);
+if (phoneErr != null) {
+  setState(() => _phoneError = phoneErr);
+  return;
+}
+
+// En un formulario — campo obligatorio
+final phone = _phoneCtrl.text.trim();
+if (phone.isEmpty) {
+  setState(() => _error = 'Ingresa tu teléfono');
+  return;
+}
+final phoneErr = validatePhoneE164(phone);
+if (phoneErr != null) {
+  setState(() => _error = phoneErr);
+  return;
+}
+```
+
+| Firma | Retorno |
+|---|---|
+| `String? validatePhoneE164(String? value)` | `null` = válido o vacío; `String` = mensaje de error |
+
+**Cuándo usarlo:** En TODOS los campos de teléfono del proyecto. No crear validadores
+locales MX-céntricos ni variantes E.164 propias — este es el único.
+
+---
+
+### 2.20 PhoneFieldWidget · `lib/shared/widgets/app_phone_field.dart`
+
+Campo de teléfono con selector de país (banderita + prefijo) y preview E.164 en tiempo real.
+Incluye `CountryPickerDialog` (dialog buscable) y la constante `kPhoneCountries` (21 países).
+Usa `PhoneNormalizer` (`lib/core/utils/phone_normalizer.dart`) internamente para formatear
+y validar.
+
+```dart
+import '../../shared/widgets/app_phone_field.dart';
+
+// Uso mínimo — campo obligatorio
+PhoneFieldWidget(
+  label: 'Teléfono',
+  onChanged: (e164) => _phoneE164 = e164,
+)
+
+// Con valor inicial (edición)
+final (iso, local) = PhoneNormalizer.parsePhone(existingPhone);
+PhoneFieldWidget(
+  label: 'Teléfono (opcional)',
+  initialLocalNumber: local,
+  initialCountryIso: iso,
+  onChanged: (e164) => _phoneE164 = e164,
+)
+
+// Deshabilitado
+PhoneFieldWidget(
+  label: 'Teléfono',
+  onChanged: (_) {},
+  enabled: false,
+  initialLocalNumber: '5512345678',
+  initialCountryIso: 'MX',
+)
+```
+
+| Prop | Tipo | Default | Descripción |
+|------|------|---------|-------------|
+| `onChanged` | `ValueChanged<String>` | requerido | Callback con el número en E.164 |
+| `label` | `String?` | null | Label sobre el campo |
+| `initialLocalNumber` | `String?` | null | Dígitos locales iniciales |
+| `initialCountryIso` | `String` | `'MX'` | ISO 3166-1 alpha-2 del país inicial |
+| `errorText` | `String?` | null | Error externo (ej. del backend) |
+| `enabled` | `bool` | true | Habilita/deshabilita el campo |
+
+**Cuándo usarlo:** En TODOS los campos de teléfono con selector de país. Reemplaza
+cualquier `TextField` manual con hint de teléfono. El caller NO necesita validar E.164
+manualmente — el widget lo formatea internamente vía `PhoneNormalizer`.

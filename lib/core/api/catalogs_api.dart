@@ -234,6 +234,32 @@ class CatalogsApi {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
+  static Future<Map<String, dynamic>> updateItem({
+    required String tenantId,
+    required String catalogId,
+    required String itemId,
+    required Map<String, dynamic> data,
+  }) async {
+    final response = await ApiClient.instance.put(
+      '/api/v1/catalogs/$catalogId/items/$itemId',
+      queryParameters: {'tenant_id': tenantId},
+      data: {'data': data},
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  static Future<Map<String, dynamic>> deleteItem({
+    required String tenantId,
+    required String catalogId,
+    required String itemId,
+  }) async {
+    final response = await ApiClient.instance.delete(
+      '/api/v1/catalogs/$catalogId/items/$itemId',
+      queryParameters: {'tenant_id': tenantId},
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   static Future<List<Map<String, dynamic>>> getUsages({
     required String tenantId,
     required String catalogId,

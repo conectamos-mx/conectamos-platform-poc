@@ -9,6 +9,7 @@ import '../../core/api/operator_roles_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/display_mappers.dart' as dm;
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_row.dart';
 import '../../shared/widgets/app_text_field.dart';
@@ -26,16 +27,6 @@ const _kTypeConfig = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-Color _hexColor(String? hex) {
-  if (hex == null) return const Color(0xFF9CA3AF);
-  try {
-    final h = hex.replaceAll('#', '');
-    if (h.length != 6) return const Color(0xFF9CA3AF);
-    return Color(int.parse('FF$h', radix: 16));
-  } catch (_) {
-    return const Color(0xFF9CA3AF);
-  }
-}
 
 String _dioError(Object e) {
   if (e is DioException) {
@@ -807,7 +798,7 @@ class _NewFlowDialogState extends State<_NewFlowDialog> {
                         width: 10,
                         height: 10,
                         decoration: BoxDecoration(
-                          color: _hexColor(color),
+                          color: dm.hexColor(color),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -1123,7 +1114,7 @@ class _WorkerChip extends StatelessWidget {
             width: 8,
             height: 8,
             decoration: BoxDecoration(
-              color: _hexColor(color),
+              color: dm.hexColor(color),
               shape: BoxShape.circle,
             ),
           ),
