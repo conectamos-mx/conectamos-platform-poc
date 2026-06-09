@@ -365,7 +365,7 @@ class _GeneralInfoCardState extends ConsumerState<_GeneralInfoCard> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final res = await ApiClient.instance.get('/tenants/$_currentTenantId');
+      final res = await ref.read(apiClientProvider).dio.get('/tenants/$_currentTenantId');
       final d = Map<String, dynamic>.from(res.data as Map);
       if (!mounted) return;
       _displayNameCtrl.text = d['display_name']?.toString() ?? d['name']?.toString() ?? '';
@@ -391,7 +391,7 @@ class _GeneralInfoCardState extends ConsumerState<_GeneralInfoCard> {
   Future<void> _save() async {
     setState(() { _saving = true; _error = null; _success = null; });
     try {
-      await ApiClient.instance.put('/tenants/$_currentTenantId', data: {
+      await ref.read(apiClientProvider).dio.put('/tenants/$_currentTenantId', data: {
         'display_name':    _displayNameCtrl.text.trim(),
         'legal_name':      _legalNameCtrl.text.trim(),
         'rfc':             _rfcCtrl.text.trim(),
@@ -507,7 +507,7 @@ class _BillingCardState extends ConsumerState<_BillingCard> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final res = await ApiClient.instance.get('/tenants/$_currentTenantId');
+      final res = await ref.read(apiClientProvider).dio.get('/tenants/$_currentTenantId');
       final d = Map<String, dynamic>.from(res.data as Map);
       if (!mounted) return;
       _requiereCfdi     = d['requiere_cfdi'] == true;
@@ -524,7 +524,7 @@ class _BillingCardState extends ConsumerState<_BillingCard> {
   Future<void> _save() async {
     setState(() { _saving = true; _error = null; _success = null; });
     try {
-      await ApiClient.instance.put('/tenants/$_currentTenantId', data: {
+      await ref.read(apiClientProvider).dio.put('/tenants/$_currentTenantId', data: {
         'requiere_cfdi':  _requiereCfdi,
         'regimen_fiscal': _regimenCtrl.text.trim(),
         'uso_cfdi':       _usoCfdiCtrl.text.trim(),
@@ -2217,7 +2217,7 @@ class _CommunicationSectionState
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final res = await ApiClient.instance.get('/tenants/$_currentTenantId');
+      final res = await ref.read(apiClientProvider).dio.get('/tenants/$_currentTenantId');
       final d = Map<String, dynamic>.from(res.data as Map);
       if (!mounted) return;
       setState(() {
@@ -2232,7 +2232,7 @@ class _CommunicationSectionState
   Future<void> _toggle(bool value) async {
     setState(() => _showSupervisorName = value);
     try {
-      await ApiClient.instance.put(
+      await ref.read(apiClientProvider).dio.put(
         '/tenants/$_currentTenantId',
         data: {'show_supervisor_name': value},
       );
