@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/groups_api.dart';
 import '../../core/providers/permissions_provider.dart';
-import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
@@ -68,13 +67,6 @@ class _ControlTowersScreenState extends ConsumerState<ControlTowersScreen> {
     }
   }
 
-  void _openCreate() async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (_) => _CreateTowerDialog(onSaved: _load),
-    );
-    if (result == true) _load();
-  }
 
   void _openEdit(Map<String, dynamic> tower) async {
     final result = await showDialog<bool>(
@@ -165,16 +157,7 @@ class _ControlTowersScreenState extends ConsumerState<ControlTowersScreen> {
           PageHeader(
             eyebrow: 'Notificaciones',
             title: 'Torres de Control',
-            description: 'Grupos push-only vía Whapi para notificaciones sin interacción bidireccional',
-            actions: [
-              if (canManage)
-                AppButton(
-                  variant: AppButtonVariant.primary,
-                  label: 'Nueva Torre',
-                  prefixIcon: const Icon(Icons.add, size: 16),
-                  onPressed: _openCreate,
-                ),
-            ],
+            description: 'Grupos push-only vía Whapi para notificaciones sin interacción bidireccional. Para crear nuevas torres, ve al detalle del Worker correspondiente.',
           ),
           const SizedBox(height: 16),
           Expanded(
@@ -393,131 +376,6 @@ class _DetailRow extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-      ],
-    );
-  }
-}
-
-// ── Create Dialog ─────────────────────────────────────────────────────────
-
-class _CreateTowerDialog extends StatefulWidget {
-  const _CreateTowerDialog({required this.onSaved});
-
-  final VoidCallback onSaved;
-
-  @override
-  State<_CreateTowerDialog> createState() => _CreateTowerDialogState();
-}
-
-class _CreateTowerDialogState extends State<_CreateTowerDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameCtrl = TextEditingController();
-  final _descCtrl = TextEditingController();
-  final _phonesCtrl = TextEditingController();
-  bool _saving = false;
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _descCtrl.dispose();
-    _phonesCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() { _saving = true; });
-
-    final phones = _phonesCtrl.text
-        .split(',')
-        .map((p) => p.trim())
-        .where((p) => p.isNotEmpty)
-        .toList();
-
-    try {
-      await GroupsApi.createControlTower(
-        displayName: _nameCtrl.text.trim(),
-        description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-        participantPhones: phones,
-      );
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Torre de control creada exitosamente'),
-          backgroundColor: AppColors.ctOk,
-        ),
-      );
-      widget.onSaved();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() { _saving = false; });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_dioError(e)), backgroundColor: AppColors.ctDanger),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Nueva Torre de Control'),
-      content: SizedBox(
-        width: 500,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre *',
-                  hintText: 'Ej: Torre Ventas',
-                ),
-                validator: (v) => (v ?? '').trim().isEmpty ? 'Requerido' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _descCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Descripción',
-                  hintText: 'Opcional',
-                ),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _phonesCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Teléfonos participantes *',
-                  hintText: 'Ej: 5212345678901, 5219876543210',
-                  helperText: 'Números separados por comas (con código de país)',
-                ),
-                validator: (v) {
-                  if ((v ?? '').trim().isEmpty) return 'Requerido';
-                  final phones = v!.split(',').where((p) => p.trim().isNotEmpty).toList();
-                  if (phones.isEmpty) return 'Ingresa al menos un teléfono';
-                  return null;
-                },
-                maxLines: 2,
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancelar'),
-        ),
-        AppButton(
-                variant: AppButtonVariant.primary,
-          label: _saving ? 'Creando...' : 'Crear',
-          onPressed: _saving ? () {} : () => _submit(),
-          isDisabled: _saving,
-        ),
       ],
     );
   }
