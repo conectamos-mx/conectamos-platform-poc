@@ -60,15 +60,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # ── Quality gate (PLA-100) ───────────────────────────────────────────────
-      # These analyze + test steps are MIRRORED in ci.yml (job quality).
-      # If the threshold or commands change, update both files. (PLA-100)
-      - name: Analyze
-        run: flutter analyze --no-fatal-infos
-
-      - name: Unit tests
-        run: flutter test test/unit/
-
       - name: Build web
         run: |
           flutter build web --release \
