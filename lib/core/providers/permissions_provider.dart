@@ -39,7 +39,8 @@ final userRoleProvider = FutureProvider.autoDispose<String?>((ref) async {
   // BUG 1: esperar a que activeTenantIdProvider tenga valor antes de llamar al backend
   final tenantId = ref.watch(activeTenantIdProvider);
   if (tenantId.isEmpty) return null;
-  final res = await ApiClient.instance.get('/iam/users');
+  final dio = ref.read(apiClientProvider).dio;
+  final res = await dio.get('/iam/users');
   final data = res.data;
   final List raw = data is List
       ? data
@@ -79,7 +80,8 @@ final userPermissionsProvider = FutureProvider.autoDispose<Set<String>>((ref) as
   if (role.toLowerCase() == 'admin') return _kAllPermissions;
 
   // Buscar role_id por nombre
-  final rolesRes = await ApiClient.instance.get('/iam/roles');
+  final dio = ref.read(apiClientProvider).dio;
+  final rolesRes = await dio.get('/iam/roles');
   final rolesData = rolesRes.data;
   final List rawRoles = rolesData is List
       ? rolesData
@@ -94,7 +96,7 @@ final userPermissionsProvider = FutureProvider.autoDispose<Set<String>>((ref) as
   if (roleId.isEmpty) return {};
 
   // Obtener permisos del rol
-  final permRes = await ApiClient.instance.get('/iam/roles/$roleId/permissions');
+  final permRes = await dio.get('/iam/roles/$roleId/permissions');
   final permData = permRes.data;
   final List rawPerms = permData is List
       ? permData
@@ -142,7 +144,7 @@ final roleListProvider = FutureProvider.autoDispose<List<Role>>((ref) async {
       Role(id: 'viewer-mock',     name: 'viewer'),
     ];
   }
-  final res = await ApiClient.instance.get('/iam/roles');
+  final res = await ref.read(apiClientProvider).dio.get('/iam/roles');
   final data = res.data;
   final List raw = data is List
       ? data
@@ -248,7 +250,7 @@ class RolePermState {
 // ── Notifier ──────────────────────────────────────────────────────────────────
 
 class RolePermissionsNotifier extends StateNotifier<RolePermState> {
-  RolePermissionsNotifier(this._roleId)
+  RolePermissionsNotifier(this._roleId, this._dio)
       : super(const RolePermState(
           grants:        {},
           initialGrants: {},
@@ -260,14 +262,16 @@ class RolePermissionsNotifier extends StateNotifier<RolePermState> {
 
   /// Test-only: pre-seed state without triggering _load().
   RolePermissionsNotifier.seeded(this._roleId, RolePermState initial)
-      : super(initial);
+      : _dio = Dio(),
+        super(initial);
 
   final String _roleId;
+  final Dio _dio;
 
   Future<void> _load() async {
     state = state.copyWith(loading: true, clearError: true);
     try {
-      final res  = await ApiClient.instance.get('/iam/roles/$_roleId/permissions');
+      final res  = await _dio.get('/iam/roles/$_roleId/permissions');
       final data = res.data;
       final List raw = data is List
           ? data
@@ -325,7 +329,7 @@ class RolePermissionsNotifier extends StateNotifier<RolePermState> {
     }
     if (grant.isEmpty && revoke.isEmpty) return null;
     try {
-      await ApiClient.instance.patch(
+      await _dio.patch(
         '/iam/roles/$_roleId/permissions',
         data: {'grant': grant, 'revoke': revoke},
       );
@@ -353,5 +357,5 @@ class RolePermissionsNotifier extends StateNotifier<RolePermState> {
 
 final rolePermissionsEditProvider = StateNotifierProvider.autoDispose
     .family<RolePermissionsNotifier, RolePermState, String>(
-  (ref, roleId) => RolePermissionsNotifier(roleId),
+  (ref, roleId) => RolePermissionsNotifier(roleId, ref.read(apiClientProvider).dio),
 );
