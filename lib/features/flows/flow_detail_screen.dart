@@ -4053,6 +4053,8 @@ String _actionLabel(String? type) {
       return 'Notificar grupo';
     case 'google_sheets_update_row':
       return 'Google Sheets — Actualizar fila';
+    case 'excel_onedrive_append_row':
+      return 'Excel OneDrive — Agregar fila';
     default:
       return 'Abrir flujo';
   }
@@ -4088,6 +4090,11 @@ String _actionSubtitle(Map<String, dynamic> action) {
       final uSid = uConfig['spreadsheet_id'] as String? ?? '';
       final uDisplay = uSid.length > 20 ? '${uSid.substring(0, 20)}…' : uSid;
       return '📊 $uDisplay';
+    case 'excel_onedrive_append_row':
+      final eConfig = action['config'] as Map? ?? {};
+      final fileId = eConfig['file_id'] as String? ?? '';
+      final eDisplay = fileId.length > 20 ? '${fileId.substring(0, 20)}…' : fileId;
+      return '📊 $eDisplay';
     default:
       return '';
   }
@@ -4096,7 +4103,7 @@ String _actionSubtitle(Map<String, dynamic> action) {
 Color _actionCatColor(String? type) => switch (type) {
       'open_flow' || 'open_flow_n_times' => const Color(0xFF8B5CF6),
       'webhook_out' => const Color(0xFF3B82F6),
-      'google_sheets_append_row' || 'google_sheets_update_row' => const Color(0xFF10B981),
+      'google_sheets_append_row' || 'google_sheets_update_row' || 'excel_onedrive_append_row' => const Color(0xFF10B981),
       'emit_event' => const Color(0xFFF59E0B),
       _ => AppColors.ctTeal,
     };
@@ -4104,7 +4111,7 @@ Color _actionCatColor(String? type) => switch (type) {
 String _actionCatLabel(String? type) => switch (type) {
       'open_flow' || 'open_flow_n_times' => 'Encadenar flujos',
       'webhook_out' => 'Sistemas externos',
-      'google_sheets_append_row' || 'google_sheets_update_row' => 'Hojas de cálculo',
+      'google_sheets_append_row' || 'google_sheets_update_row' || 'excel_onedrive_append_row' => 'Hojas de cálculo',
       'emit_event' => 'Eventos internos',
       _ => 'Acción',
     };
@@ -4606,6 +4613,15 @@ class _ActionDialogState extends State<_ActionDialog> {
   bool _loadingHeaders = false;
   String? _headersError;
 
+  // excel_onedrive_append_row
+  final _excelFileIdCtrl = TextEditingController();
+  final _excelSheetNameCtrl = TextEditingController();
+  List<String> _excelHeaders = [];
+  bool _loadingExcelHeaders = false;
+  String? _excelHeadersError;
+  bool _microsoftConnected = false;
+  bool _checkingMicrosoftOAuth = false;
+
   // notify_group
   List<Map<String, dynamic>> _groups = [];
   bool _loadingGroups = false;
@@ -4644,6 +4660,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         'google_sheets_append_row',
         'notify_group',
         'google_sheets_update_row',
+        'excel_onedrive_append_row',
       }.contains(_type);
 
   List<Map<String, dynamic>> _fieldsForActionType(String type) {
@@ -4813,6 +4830,31 @@ class _ActionDialogState extends State<_ActionDialog> {
         }
         }
       }
+      if (_type == 'excel_onedrive_append_row') {
+        final cfg = a['config'] as Map? ?? {};
+        _excelFileIdCtrl.text = cfg['file_id'] as String? ?? '';
+        _excelSheetNameCtrl.text = cfg['sheet_name'] as String? ?? 'Sheet1';
+        _hasHeaders = cfg['has_headers'] as bool? ?? false;
+        final mapping = cfg['column_mapping'] as Map? ?? {};
+        final fieldKeyRe = RegExp(r'^\{\{fields\.([\w.]+)\}\}$');
+        final metaKeyRe = RegExp(r'^\{\{(operator|execution)\.([\w.]+)\}\}$');
+        for (final e in mapping.entries) {
+          final valStr = e.value.toString();
+          final fieldMatch = fieldKeyRe.firstMatch(valStr);
+          final metaMatch = metaKeyRe.firstMatch(valStr);
+          String? parsedKey;
+          if (fieldMatch != null) {
+            parsedKey = fieldMatch.group(1);
+          } else if (metaMatch != null) {
+            parsedKey = '__meta.${metaMatch.group(1)}.${metaMatch.group(2)}';
+          }
+          _columnMappingKeys.add(parsedKey);
+          _columnMappingRows.add((
+            TextEditingController(text: e.key.toString()),
+            TextEditingController(text: valStr),
+          ));
+        }
+      }
       final cond = a['condition'] as String?;
       if (cond != null && cond.isNotEmpty) {
         final re = RegExp(
@@ -4844,6 +4886,15 @@ class _ActionDialogState extends State<_ActionDialog> {
       if (_hasHeaders && _spreadsheetIdCtrl.text.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _fetchSheetHeaders();
+        });
+      }
+    }
+    if (_type == 'excel_onedrive_append_row') {
+      _checkMicrosoftOAuthForAction();
+      // Si tiene headers habilitado al editar, cargar automáticamente
+      if (_hasHeaders && _excelFileIdCtrl.text.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _fetchExcelHeaders();
         });
       }
     }
@@ -5078,6 +5129,18 @@ class _ActionDialogState extends State<_ActionDialog> {
     }
   }
 
+  Future<void> _checkMicrosoftOAuthForAction() async {
+    setState(() => _checkingMicrosoftOAuth = true);
+    try {
+      final status = await ConnectionsApi.getMicrosoftStatus(tenantId: widget.tenantId);
+      if (mounted) setState(() => _microsoftConnected = status['connected'] == true);
+    } catch (_) {
+      if (mounted) setState(() => _microsoftConnected = false);
+    } finally {
+      if (mounted) setState(() => _checkingMicrosoftOAuth = false);
+    }
+  }
+
   Future<void> _fetchSheetHeaders() async {
     final url = _sheetUrlCtrl.text.trim();
     String spreadsheetId = '';
@@ -5136,6 +5199,42 @@ class _ActionDialogState extends State<_ActionDialog> {
         const Duration(milliseconds: 800),
         () { if (mounted) _loadSheetPreviewForAction(); },
       );
+    }
+  }
+
+  Future<void> _fetchExcelHeaders() async {
+    final fileId = _excelFileIdCtrl.text.trim();
+    if (fileId.isEmpty) {
+      setState(() {
+        _excelHeadersError = 'Ingresa un ID de archivo de Excel válido';
+        _excelHeaders = [];
+      });
+      return;
+    }
+    final sheetName = _excelSheetNameCtrl.text.trim().isEmpty ? 'Sheet1' : _excelSheetNameCtrl.text.trim();
+    setState(() {
+      _loadingExcelHeaders = true;
+      _excelHeadersError = null;
+    });
+    try {
+      final headers = await ConnectionsApi.getExcelHeaders(
+        fileId: fileId,
+        sheetName: sheetName,
+      );
+      if (mounted) {
+        setState(() {
+          _excelHeaders = headers;
+          _loadingExcelHeaders = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _excelHeadersError = 'Error al cargar headers: $e';
+          _excelHeaders = [];
+          _loadingExcelHeaders = false;
+        });
+      }
     }
   }
 
@@ -5788,6 +5887,30 @@ class _ActionDialogState extends State<_ActionDialog> {
         updated.remove('event_name');
         updated.remove('event_data');
         break;
+      case 'excel_onedrive_append_row':
+        final fileId = _excelFileIdCtrl.text.trim();
+        if (fileId.isEmpty) return;
+        final validRows = _columnMappingRows
+            .where((r) => r.$1.text.trim().isNotEmpty)
+            .toList();
+        if (validRows.isEmpty) return;
+        updated['config'] = {
+          'file_id': fileId,
+          'sheet_name': _excelSheetNameCtrl.text.trim().isEmpty
+              ? 'Sheet1'
+              : _excelSheetNameCtrl.text.trim(),
+          'column_mapping': {
+            for (final r in validRows) r.$1.text.trim(): r.$2.text.trim(),
+          },
+          'has_headers': _hasHeaders,
+        };
+        updated.remove('target_flow_slug');
+        updated.remove('carry_ancestors');
+        updated.remove('integration_id');
+        updated.remove('include_ancestors');
+        updated.remove('event_name');
+        updated.remove('event_data');
+        break;
       default:
         for (final e in _dynTextCtrls.entries) { updated[e.key] = e.value.text.trim(); }
         for (final e in _dynSelectVals.entries) { updated[e.key] = e.value; }
@@ -5807,7 +5930,7 @@ class _ActionDialogState extends State<_ActionDialog> {
   static const _kActionCategories = [
     ('flow', 'Encadenar flujos', 'Abre otros flujos al completar este', Color(0xFF8B5CF6), ['open_flow', 'open_flow_n_times']),
     ('external', 'Sistemas externos', 'Env\u00EDa datos a servicios externos', Color(0xFF3B82F6), ['webhook_out']),
-    ('sheets', 'Hojas de c\u00E1lculo', 'Escribe o actualiza datos en Google Sheets', Color(0xFF10B981), ['google_sheets_append_row', 'google_sheets_update_row']),
+    ('sheets', 'Hojas de c\u00E1lculo', 'Escribe o actualiza datos en Google Sheets o Excel OneDrive', Color(0xFF10B981), ['google_sheets_append_row', 'google_sheets_update_row', 'excel_onedrive_append_row']),
     ('events', 'Eventos internos', 'Emite eventos para otros sistemas', Color(0xFFF59E0B), ['emit_event']),
     ('groups', 'Notificaciones a grupos', 'Env\u00EDa un mensaje a un grupo de WhatsApp o Telegram', Color(0xFF00D1A3), ['notify_group']),
   ];
@@ -5818,6 +5941,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     'webhook_out': 'Env\u00EDa los datos capturados a un endpoint HTTP externo.',
     'google_sheets_append_row': 'Agrega una fila nueva con los datos del flujo.',
     'google_sheets_update_row': 'Actualiza una fila existente en la hoja.',
+    'excel_onedrive_append_row': 'Agrega una fila nueva en Excel OneDrive con los datos del flujo.',
     'emit_event': 'Emite un evento interno para otros flujos o servicios.',
     'notify_group': 'Env\u00EDa un mensaje al grupo con los datos del flujo completado.',
   };
@@ -5913,6 +6037,9 @@ class _ActionDialogState extends State<_ActionDialog> {
                                     });
                                     if (type == 'google_sheets_append_row' || type == 'google_sheets_update_row') {
                                       _checkGoogleOAuthForAction();
+                                    }
+                                    if (type == 'excel_onedrive_append_row') {
+                                      _checkMicrosoftOAuthForAction();
                                     }
                                   },
                                 ),
@@ -6930,6 +7057,130 @@ class _ActionDialogState extends State<_ActionDialog> {
                     onChanged: (v) => setState(() => _lookupValueFieldKey = v),
                   );
                 }),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Mapeo de columnas',
+                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+                    ),
+                    AppButton(
+                      label: '+ Agregar columna',
+                      variant: AppButtonVariant.ghost,
+                      size: AppButtonSize.sm,
+                      prefixIcon: const Icon(Icons.add, size: 14, color: AppColors.ctTeal),
+                      onPressed: () => setState(() {
+                        _columnMappingRows.add((
+                          TextEditingController(),
+                          TextEditingController(),
+                        ));
+                        _columnMappingKeys.add(null);
+                      }),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ..._columnMappingRows.asMap().entries.map((e) => _buildColumnMappingRow(e.key)),
+              ] else if (_type == 'excel_onedrive_append_row') ...[
+                // Excel OneDrive UI
+                if (_checkingMicrosoftOAuth)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctTeal),
+                    ),
+                  )
+                else if (!_microsoftConnected)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      border: Border.all(color: const Color(0xFFF59E0B)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded,
+                                size: 16, color: Color(0xFFB45309)),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Tu cuenta de Microsoft no está conectada.',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFFB45309),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Para usar Excel OneDrive, conecta tu cuenta de Microsoft en Configuración → Integraciones.',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: const Color(0xFF92400E),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else ...[
+                  _FormField(
+                    label: 'ID de archivo de Excel',
+                    controller: _excelFileIdCtrl,
+                    placeholder: 'ej. 01ABCDEF1234567890',
+                  ),
+                  const SizedBox(height: 12),
+                  _FormField(
+                    label: 'Nombre de la hoja',
+                    controller: _excelSheetNameCtrl,
+                    placeholder: 'Sheet1',
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _hasHeaders,
+                        onChanged: (v) => setState(() {
+                          _hasHeaders = v ?? false;
+                          if (_hasHeaders && _excelFileIdCtrl.text.isNotEmpty) {
+                            _fetchExcelHeaders();
+                          }
+                        }),
+                        activeColor: AppColors.ctTeal,
+                      ),
+                      const SizedBox(width: 8),
+                      Text('La hoja tiene headers (primera fila)',
+                          style: AppTextStyles.bodySmall),
+                    ],
+                  ),
+                  if (_hasHeaders && _excelFileIdCtrl.text.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    AppButton(
+                      label: 'Cargar headers',
+                      variant: AppButtonVariant.outline,
+                      size: AppButtonSize.sm,
+                      onPressed: () {
+                        if (!_loadingExcelHeaders) _fetchExcelHeaders();
+                      },
+                      prefixIcon: _loadingExcelHeaders
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: AppColors.ctTeal))
+                          : const Icon(Icons.refresh, size: 14),
+                    ),
+                  ],
+                  if (_excelHeadersError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(_excelHeadersError!,
+                        style: AppTextStyles.bodySmall
+                            .copyWith(color: AppColors.ctDanger)),
+                  ],
+                ],
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -35,6 +35,22 @@ class ConnectionsApi {
     return List<String>.from(resp.data['headers'] as List);
   }
 
+  /// Fetches the header row (first row) from an Excel file in OneDrive.
+  /// Returns a list of column names.
+  static Future<List<String>> getExcelHeaders({
+    required String fileId,
+    required String sheetName,
+  }) async {
+    final resp = await ApiClient.instance.get(
+      '/integrations/microsoft/excel/headers',
+      queryParameters: {
+        'file_id': fileId,
+        'sheet_name': sheetName,
+      },
+    );
+    return List<String>.from(resp.data['headers'] as List);
+  }
+
   // ── Microsoft OAuth ────────────────────────────────────────────────────────
 
   /// Returns the Microsoft OAuth authorization URL.
