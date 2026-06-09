@@ -16,7 +16,7 @@ final tenantUsersForEscalacionesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final tenantId = ref.watch(activeTenantIdProvider);
   if (tenantId.isEmpty) return [];
-  final res = await ApiClient.instance.get('/iam/users');
+  final res = await ref.read(apiClientProvider).dio.get('/iam/users');
   final data = res.data;
   final List raw = data is List
       ? data
