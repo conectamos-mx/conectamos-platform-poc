@@ -52,13 +52,3 @@ Solo 3 consumers usan el filtro:
 
 `knownKeys` SIEMPRE usa `fields` completo (snapshot sin filtrar) para detectar campos legacy.
 **Consecuencia:** Campos ocultos por show_if no se renderizan ni cuentan en progreso. Campos legacy no contaminados.
-
----
-
-## ADR-348 — Polling como unidad inyectable reutilizable (SyncPoller)
-
-**Fecha:** 2026-06-08
-**Estado:** Implementado
-**Contexto:** El `_SyncTab` de catálogos tenía polling inline con `Timer.periodic` + `DateTime.now()`. Las ramas de timeout (60s) y dispose eran no testeables en unit test porque `DateTime.now()` usa wall-clock real y `tester.pump()` solo avanza el fake clock de timers.
-**Decision:** Extraer la lógica de polling a `SyncPoller` (`lib/core/utils/sync_poller.dart`), una clase pura con `Clock` inyectado (package `clock`). Parámetros: `interval`, `timeout`, `clock`, `poll` callback, `onTimeout` callback. Defaults: 2s/60s. Ambos usos de tiempo via `clock.now()`, cero `DateTime.now()`. El widget `_SyncTab` consume `SyncPoller` directamente (instancia en `initState`, `dispose` en `dispose`). Sin provider global — es una instancia por tab.
-**Consecuencia:** Las 3 ramas (success, timeout, dispose) son testeables con `fakeAsync` + `Clock` fake. Reutilizable para futuros pollers (asignaciones, KPIs). Comportamiento prod sin cambios (defaults iguales).
