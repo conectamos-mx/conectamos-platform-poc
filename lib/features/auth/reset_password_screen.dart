@@ -1,20 +1,21 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/api/api_client.dart';
 import 'auth_shared.dart';
 
-class ResetPasswordScreen extends StatefulWidget {
+class ResetPasswordScreen extends ConsumerStatefulWidget {
   const ResetPasswordScreen({super.key, required this.token});
   final String token;
 
   @override
-  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
+  ConsumerState<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
 }
 
-class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
+class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   final _passCtrl    = TextEditingController();
   final _confirmCtrl = TextEditingController();
   bool _submitting = false;
@@ -71,7 +72,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         setState(() { _error = 'El enlace expiró o es inválido. Solicita uno nuevo.'; _submitting = false; });
         return;
       }
-      await ApiClient.instance.post(
+      await ref.read(apiClientProvider).dio.post(
         '/iam/password-reset/confirm',
         data: {'access_token': accessToken, 'password': pass},
       );
