@@ -17,6 +17,7 @@ import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/app_detail_header.dart';
 import '../../core/utils/relative_time.dart';
+import '../../core/utils/sync_poller.dart';
 import '../../shared/widgets/catalog_item_form.dart';
 
 // ── CatalogDetailScreen ───────────────────────────────────────────────────────
@@ -2285,10 +2286,7 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
   bool _loading = true;
   String? _error;
 
-  Timer? _pollTimer;
-  static const _pollInterval = Duration(seconds: 2);
-  static const _pollTimeout  = Duration(seconds: 60);
-  DateTime? _pollStart;
+  SyncPoller? _poller;
 
   String get _catalogId => widget.catalog['id'] as String? ?? '';
 
@@ -2297,31 +2295,26 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadLogs();
-      if (widget.polling) {
-        _pollStart = DateTime.now();
-        _startPolling();
-      }
+      if (widget.polling) _startPolling();
     });
   }
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _poller?.dispose();
     super.dispose();
   }
 
   void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(_pollInterval, (_) async {
-      if (!mounted) { _pollTimer?.cancel(); return; }
-      if (DateTime.now().difference(_pollStart!) > _pollTimeout) {
-        _pollTimer?.cancel(); return;
-      }
-      await _loadLogs();
-      if (_logs.isNotEmpty && _logs.first['status'] != 'running') {
-        _pollTimer?.cancel();
-      }
-    });
+    _poller?.dispose();
+    _poller = SyncPoller(
+      poll: () async {
+        if (!mounted) return false;
+        await _loadLogs();
+        return _logs.isEmpty || _logs.first['status'] == 'running';
+      },
+    );
+    _poller!.start();
   }
 
   Future<void> _loadLogs() async {
