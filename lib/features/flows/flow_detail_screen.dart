@@ -4055,6 +4055,8 @@ String _actionLabel(String? type) {
       return 'Google Sheets — Actualizar fila';
     case 'excel_onedrive_append_row':
       return 'Excel OneDrive — Agregar fila';
+    case 'excel_onedrive_update_row':
+      return 'Excel OneDrive — Actualizar fila';
     default:
       return 'Abrir flujo';
   }
@@ -4097,6 +4099,11 @@ String _actionSubtitle(Map<String, dynamic> action) {
       final fileId = eConfig['file_id'] as String? ?? '';
       final eDisplay = fileId.length > 20 ? '${fileId.substring(0, 20)}…' : fileId;
       return '📊 $eDisplay';
+    case 'excel_onedrive_update_row':
+      final euConfig = action['config'] as Map? ?? {};
+      final euFileId = euConfig['file_id'] as String? ?? '';
+      final euDisplay = euFileId.length > 20 ? '${euFileId.substring(0, 20)}…' : euFileId;
+      return '📊 $euDisplay';
     default:
       return '';
   }
@@ -4105,7 +4112,7 @@ String _actionSubtitle(Map<String, dynamic> action) {
 Color _actionCatColor(String? type) => switch (type) {
       'open_flow' || 'open_flow_n_times' => const Color(0xFF8B5CF6),
       'webhook_out' => const Color(0xFF3B82F6),
-      'google_sheets_append_row' || 'google_sheets_update_row' || 'excel_onedrive_append_row' => const Color(0xFF10B981),
+      'google_sheets_append_row' || 'google_sheets_update_row' || 'excel_onedrive_append_row' || 'excel_onedrive_update_row' => const Color(0xFF10B981),
       'emit_event' => const Color(0xFFF59E0B),
       _ => AppColors.ctTeal,
     };
@@ -4113,7 +4120,7 @@ Color _actionCatColor(String? type) => switch (type) {
 String _actionCatLabel(String? type) => switch (type) {
       'open_flow' || 'open_flow_n_times' => 'Encadenar flujos',
       'webhook_out' => 'Sistemas externos',
-      'google_sheets_append_row' || 'google_sheets_update_row' || 'excel_onedrive_append_row' => 'Hojas de cálculo',
+      'google_sheets_append_row' || 'google_sheets_update_row' || 'excel_onedrive_append_row' || 'excel_onedrive_update_row' => 'Hojas de cálculo',
       'emit_event' => 'Eventos internos',
       _ => 'Acción',
     };
@@ -4667,6 +4674,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         'notify_group',
         'google_sheets_update_row',
         'excel_onedrive_append_row',
+        'excel_onedrive_update_row',
       }.contains(_type);
 
   List<Map<String, dynamic>> _fieldsForActionType(String type) {
@@ -4838,7 +4846,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         }
         }
       }
-      if (_type == 'excel_onedrive_append_row') {
+      if (_type == 'excel_onedrive_append_row' || _type == 'excel_onedrive_update_row') {
         final cfg = a['config'] as Map? ?? {};
         _excelFileIdCtrl.text = cfg['file_id'] as String? ?? '';
         _excelSheetNameCtrl.text = cfg['sheet_name'] as String? ?? 'Sheet1';
@@ -4861,6 +4869,10 @@ class _ActionDialogState extends State<_ActionDialog> {
             TextEditingController(text: e.key.toString()),
             TextEditingController(text: valStr),
           ));
+        }
+        if (_type == 'excel_onedrive_update_row') {
+          _lookupColumnCtrl.text = cfg['lookup_column'] as String? ?? '';
+          _lookupValueFieldKey = cfg['lookup_value_field_key'] as String?;
         }
       }
       final cond = a['condition'] as String?;
@@ -4898,7 +4910,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         });
       }
     }
-    if (_type == 'excel_onedrive_append_row') {
+    if (_type == 'excel_onedrive_append_row' || _type == 'excel_onedrive_update_row') {
       _checkMicrosoftOAuthForAction();
       // Si tiene headers habilitado al editar, cargar automáticamente
       if (_hasHeaders && _excelFileIdCtrl.text.isNotEmpty) {
@@ -5933,6 +5945,32 @@ class _ActionDialogState extends State<_ActionDialog> {
         updated.remove('event_name');
         updated.remove('event_data');
         break;
+      case 'excel_onedrive_update_row':
+        final euFileId = _excelFileIdCtrl.text.trim();
+        if (euFileId.isEmpty) return;
+        final euValidRows = _columnMappingRows
+            .where((r) => r.$1.text.trim().isNotEmpty)
+            .toList();
+        if (euValidRows.isEmpty) return;
+        updated['config'] = {
+          'file_id': euFileId,
+          'sheet_name': _excelSheetNameCtrl.text.trim().isEmpty
+              ? 'Sheet1'
+              : _excelSheetNameCtrl.text.trim(),
+          'column_mapping': {
+            for (final r in euValidRows) r.$1.text.trim(): r.$2.text.trim(),
+          },
+          'lookup_column': _lookupColumnCtrl.text.trim(),
+          'lookup_value_field_key': _lookupValueFieldKey ?? '',
+          'has_headers': _hasHeaders,
+        };
+        updated.remove('target_flow_slug');
+        updated.remove('carry_ancestors');
+        updated.remove('integration_id');
+        updated.remove('include_ancestors');
+        updated.remove('event_name');
+        updated.remove('event_data');
+        break;
       default:
         for (final e in _dynTextCtrls.entries) { updated[e.key] = e.value.text.trim(); }
         for (final e in _dynSelectVals.entries) { updated[e.key] = e.value; }
@@ -5952,7 +5990,7 @@ class _ActionDialogState extends State<_ActionDialog> {
   static const _kActionCategories = [
     ('flow', 'Encadenar flujos', 'Abre otros flujos al completar este', Color(0xFF8B5CF6), ['open_flow', 'open_flow_n_times']),
     ('external', 'Sistemas externos', 'Env\u00EDa datos a servicios externos', Color(0xFF3B82F6), ['webhook_out']),
-    ('sheets', 'Hojas de c\u00E1lculo', 'Escribe o actualiza datos en Google Sheets o Excel OneDrive', Color(0xFF10B981), ['google_sheets_append_row', 'google_sheets_update_row', 'excel_onedrive_append_row']),
+    ('sheets', 'Hojas de c\u00E1lculo', 'Escribe o actualiza datos en Google Sheets o Excel OneDrive', Color(0xFF10B981), ['google_sheets_append_row', 'google_sheets_update_row', 'excel_onedrive_append_row', 'excel_onedrive_update_row']),
     ('events', 'Eventos internos', 'Emite eventos para otros sistemas', Color(0xFFF59E0B), ['emit_event']),
     ('groups', 'Notificaciones push', 'Env\u00EDa notificaciones a grupos o torres de control', Color(0xFF00D1A3), ['notify_group']),
   ];
@@ -5964,6 +6002,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     'google_sheets_append_row': 'Agrega una fila nueva con los datos del flujo.',
     'google_sheets_update_row': 'Actualiza una fila existente en la hoja.',
     'excel_onedrive_append_row': 'Agrega una fila nueva en Excel OneDrive con los datos del flujo.',
+    'excel_onedrive_update_row': 'Actualiza una fila existente en Excel OneDrive.',
     'emit_event': 'Emite un evento interno para otros flujos o servicios.',
     'notify_group': 'Env\u00EDa una notificaci\u00F3n a un grupo o torre de control cuando se completa el flujo.',
   };
@@ -6060,7 +6099,7 @@ class _ActionDialogState extends State<_ActionDialog> {
                                     if (type == 'google_sheets_append_row' || type == 'google_sheets_update_row') {
                                       _checkGoogleOAuthForAction();
                                     }
-                                    if (type == 'excel_onedrive_append_row') {
+                                    if (type == 'excel_onedrive_append_row' || type == 'excel_onedrive_update_row') {
                                       _checkMicrosoftOAuthForAction();
                                     }
                                   },
