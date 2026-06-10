@@ -1389,7 +1389,7 @@ class _WorkerFlowsTabState extends ConsumerState<_WorkerFlowsTab> {
       final tenantId = ref.read(activeTenantIdProvider);
       final results = await Future.wait([
         FlowsApi.getFlowsByWorker(dio: ref.read(apiClientProvider).dio, tenantWorkerId: widget.workerId),
-        OperatorRolesApi.listRoles(tenantId: tenantId),
+        OperatorRolesApi.listRoles(dio: ref.read(apiClientProvider).dio, tenantId: tenantId),
       ]);
       if (!mounted) return;
       final flows = List<Map<String, dynamic>>.from(results[0] as List);
@@ -1959,7 +1959,7 @@ class _NewFlowDialogState extends ConsumerState<_NewFlowDialog> {
   Future<void> _loadRoles() async {
     setState(() => _loadingRoles = true);
     try {
-      final roles = await OperatorRolesApi.listRoles(tenantId: widget.tenantId);
+      final roles = await OperatorRolesApi.listRoles(dio: ref.read(apiClientProvider).dio, tenantId: widget.tenantId);
       if (mounted) {
         setState(() => _availableRoles = List<Map<String, dynamic>>.from(roles));
       }

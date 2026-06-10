@@ -50,7 +50,7 @@ class _OperatorsScreenState extends ConsumerState<OperatorsScreen> {
       final tenantId = ref.read(activeTenantIdProvider);
       final results = await Future.wait([
         OperatorsApi.listOperators(dio: ref.read(apiClientProvider).dio),
-        OperatorRolesApi.listRoles(tenantId: tenantId),
+        OperatorRolesApi.listRoles(dio: ref.read(apiClientProvider).dio, tenantId: tenantId),
       ]);
       if (mounted) {
         setState(() {

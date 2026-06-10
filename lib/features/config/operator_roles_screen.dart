@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/operator_roles_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
@@ -37,7 +38,7 @@ class _OperatorRolesScreenState extends ConsumerState<OperatorRolesScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       final tenantId = ref.read(activeTenantIdProvider);
-      final data = await OperatorRolesApi.listRoles(tenantId: tenantId);
+      final data = await OperatorRolesApi.listRoles(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
       if (mounted) setState(() { _roles = data; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
@@ -86,7 +87,7 @@ class _OperatorRolesScreenState extends ConsumerState<OperatorRolesScreen> {
     if (id.isEmpty) return;
 
     try {
-      await OperatorRolesApi.deleteRole(roleId: id);
+      await OperatorRolesApi.deleteRole(dio: ref.read(apiClientProvider).dio, roleId: id);
       if (mounted) _load();
     } catch (e) {
       String msg = e.toString();
@@ -208,6 +209,7 @@ class _OperatorRolesScreenState extends ConsumerState<OperatorRolesScreen> {
           _RoleEditorDrawer(
             key: ValueKey(_editingRole?['id'] ?? 'new'),
             tenantId: tenantId,
+            dio: ref.read(apiClientProvider).dio,
             role: _editingRole,
             canManage: canManage,
             onSaved: () { _closeDrawer(); _load(); },
@@ -337,12 +339,14 @@ class _RoleEditorDrawer extends StatefulWidget {
   const _RoleEditorDrawer({
     super.key,
     required this.tenantId,
+    required this.dio,
     required this.role,
     required this.canManage,
     required this.onSaved,
     required this.onClose,
   });
   final String tenantId;
+  final Dio dio;
   final Map<String, dynamic>? role;
   final bool canManage;
   final VoidCallback onSaved;
@@ -420,7 +424,7 @@ class _RoleEditorDrawerState extends State<_RoleEditorDrawer> {
       final existing = widget.role;
       if (existing == null) {
         await OperatorRolesApi.createRole(
-            tenantId: widget.tenantId, body: body);
+            dio: widget.dio, tenantId: widget.tenantId, body: body);
         if (mounted) {
           messenger.showSnackBar(const SnackBar(
               content: Text('Rol creado correctamente.')));
@@ -429,7 +433,7 @@ class _RoleEditorDrawerState extends State<_RoleEditorDrawer> {
       } else {
         final id = existing['id'] as String? ?? '';
         await OperatorRolesApi.updateRole(
-            tenantId: widget.tenantId, roleId: id, body: body);
+            dio: widget.dio, tenantId: widget.tenantId, roleId: id, body: body);
         if (mounted) {
           messenger.showSnackBar(const SnackBar(
               content: Text('Rol actualizado correctamente.')));

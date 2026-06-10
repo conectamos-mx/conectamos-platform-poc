@@ -213,7 +213,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
       final tenantId = ref.read(activeTenantIdProvider);
       final results = await Future.wait([
         FlowsApi.getFlow(dio: ref.read(apiClientProvider).dio, flowId: widget.flowId),
-        OperatorRolesApi.listRoles(tenantId: tenantId),
+        OperatorRolesApi.listRoles(dio: ref.read(apiClientProvider).dio, tenantId: tenantId),
       ]);
       if (!mounted) return;
       final flow = results[0] as Map<String, dynamic>;

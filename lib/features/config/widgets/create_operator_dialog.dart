@@ -134,7 +134,7 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
     setState(() => _rolesLoading = true);
     try {
       final tenantId = ref.read(activeTenantIdProvider);
-      final roles = await OperatorRolesApi.listRoles(tenantId: tenantId);
+      final roles = await OperatorRolesApi.listRoles(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
       if (mounted) {
         setState(() {
           _availableRoles = roles;
