@@ -134,7 +134,7 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
           'display_order': e.key + 1,
         }).toList();
     try {
-      await OperatorFieldsApi.reorderOperatorFields(order);
+      await OperatorFieldsApi.reorderOperatorFields(order, dio: ref.read(apiClientProvider).dio);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -212,7 +212,7 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
 
     final fieldId = field['id'] as String? ?? '';
     try {
-      final res = await OperatorFieldsApi.deleteOperatorField(fieldId);
+      final res = await OperatorFieldsApi.deleteOperatorField(fieldId, dio: ref.read(apiClientProvider).dio);
       final withDataResponse = res['operators_with_data'] as int? ?? 0;
       if (mounted) {
         setState(() {
@@ -245,7 +245,7 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
     final fieldId = field['id'] as String? ?? '';
     final label = field['label'] as String? ?? 'este campo';
     try {
-      await OperatorFieldsApi.updateOperatorField(fieldId, isActive: true);
+      await OperatorFieldsApi.updateOperatorField(fieldId, dio: ref.read(apiClientProvider).dio, isActive: true);
       if (mounted) {
         setState(() {
           _inactiveFields.removeWhere((f) => f['id'] == fieldId);
@@ -315,6 +315,7 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
       context: context,
       builder: (_) => OperatorFieldFormDialog(
         tenantId: tenantId,
+        dio: ref.read(apiClientProvider).dio,
         onSaved: _load,
       ),
     );
@@ -325,6 +326,7 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
       context: context,
       builder: (_) => OperatorFieldFormDialog(
         tenantId: '',
+        dio: ref.read(apiClientProvider).dio,
         field: field,
         onSaved: _load,
       ),
