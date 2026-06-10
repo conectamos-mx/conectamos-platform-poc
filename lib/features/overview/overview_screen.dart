@@ -497,6 +497,7 @@ class _HeroBand extends StatelessWidget {
                           const SizedBox(height: 8),
                           Text(
                             '${pct ?? '—'}% de tu equipo está operando.',
+                            key: pct == null ? const Key('kpi_empty_operation_pct') : null,
                             style: AppFonts.onest(
                               fontSize: 38,
                               fontWeight: FontWeight.w700,
