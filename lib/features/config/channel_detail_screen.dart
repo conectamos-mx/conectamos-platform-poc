@@ -291,6 +291,7 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
               _TemplatesTab(
                 channelId: widget.channelId,
                 tenantId: _tenantId,
+                dio: ref.read(apiClientProvider).dio,
                 onError: _showError,
                 onSuccess: _showSuccess,
               ),
@@ -885,11 +886,13 @@ class _TemplatesTab extends StatefulWidget {
   const _TemplatesTab({
     required this.channelId,
     required this.tenantId,
+    required this.dio,
     required this.onError,
     required this.onSuccess,
   });
   final String channelId;
   final String tenantId;
+  final Dio dio;
   final ValueChanged<String> onError;
   final ValueChanged<String> onSuccess;
 
@@ -911,7 +914,7 @@ class _TemplatesTabState extends State<_TemplatesTab> {
   Future<void> _fetchTemplates() async {
     setState(() => _loading = true);
     try {
-      final list = await TemplatesApi.listTemplates(channelId: widget.channelId);
+      final list = await TemplatesApi.listTemplates(dio: widget.dio, channelId: widget.channelId);
       if (mounted) setState(() { _templates = list; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _templates = []; _loading = false; });
@@ -952,6 +955,7 @@ class _TemplatesTabState extends State<_TemplatesTab> {
     if (confirmed != true || !mounted) return;
     try {
       await TemplatesApi.deleteTemplate(
+        dio: widget.dio,
         templateId: template['id'] as String,
         channelId: widget.channelId,
       );
@@ -965,7 +969,7 @@ class _TemplatesTabState extends State<_TemplatesTab> {
   Future<void> _sync() async {
     setState(() => _syncing = true);
     try {
-      await TemplatesApi.syncTemplates(channelId: widget.channelId);
+      await TemplatesApi.syncTemplates(dio: widget.dio, channelId: widget.channelId);
       widget.onSuccess('Plantillas sincronizadas');
       await _fetchTemplates();
     } catch (e) {
@@ -1340,11 +1344,13 @@ class _WelcomeTab extends StatefulWidget {
   const _WelcomeTab({
     required this.channel,
     required this.tenantId,
+    required this.dio,
     required this.onError,
     required this.onSuccess,
   });
   final Map<String, dynamic> channel;
   final String tenantId;
+  final Dio dio;
   final ValueChanged<String> onError;
   final ValueChanged<String> onSuccess;
 
@@ -1367,6 +1373,7 @@ class _WelcomeTabState extends State<_WelcomeTab> {
   Future<void> _loadApproved() async {
     try {
       final all = await TemplatesApi.listTemplates(
+          dio: widget.dio,
           channelId: widget.channel['id'] as String);
       final approved = all
           .where((t) =>
