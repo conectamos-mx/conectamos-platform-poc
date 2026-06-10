@@ -4634,6 +4634,11 @@ class _ActionDialogState extends State<_ActionDialog> {
   List<Map<String, dynamic>> _onedriveFiles = [];
   String? _selectedExcelFileId;
   String? _selectedExcelFileName;
+  bool _loadingExcelPreview = false;
+  bool _excelPreviewLoaded = false;
+  List<String> _availableExcelSheets = [];
+  String? _selectedExcelSheet;
+  List<String> _excelPreviewColumns = [];
 
   // notify_group
   // notify_group / enviar notificación
@@ -4854,7 +4859,9 @@ class _ActionDialogState extends State<_ActionDialog> {
         final cfg = a['config'] as Map? ?? {};
         _selectedExcelFileId = cfg['file_id'] as String? ?? '';
         _excelFileIdCtrl.text = _selectedExcelFileId ?? '';
-        _excelSheetNameCtrl.text = cfg['sheet_name'] as String? ?? 'Sheet1';
+        final sheetName = cfg['sheet_name'] as String? ?? 'Sheet1';
+        _excelSheetNameCtrl.text = sheetName;
+        _selectedExcelSheet = sheetName;
         _hasHeaders = cfg['has_headers'] as bool? ?? false;
         final mapping = cfg['column_mapping'] as Map? ?? {};
         final fieldKeyRe = RegExp(r'^\{\{fields\.([\w.]+)\}\}$');
@@ -4917,6 +4924,12 @@ class _ActionDialogState extends State<_ActionDialog> {
     }
     if (_type == 'excel_onedrive_append_row' || _type == 'excel_onedrive_update_row') {
       _checkMicrosoftOAuthForAction();
+      // Si tiene un file_id al editar, cargar preview automáticamente
+      if (_selectedExcelFileId != null && _selectedExcelFileId!.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _loadExcelPreview();
+        });
+      }
       // Si tiene headers habilitado al editar, cargar automáticamente
       if (_hasHeaders && _excelFileIdCtrl.text.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -5204,6 +5217,42 @@ class _ActionDialogState extends State<_ActionDialog> {
     } catch (e) {
       debugPrint('[_loadOnedriveFilesForAction] Error: $e');
       if (mounted) setState(() => _loadingOnedriveFiles = false);
+    }
+  }
+
+  Future<void> _loadExcelPreview({String? sheetName}) async {
+    if (_selectedExcelFileId == null) return;
+    setState(() {
+      _loadingExcelPreview = true;
+      _excelPreviewLoaded = false;
+    });
+    try {
+      final result = await CatalogsApi.getOnedrivePreview(
+        tenantId: widget.tenantId,
+        fileId: _selectedExcelFileId!,
+        sheetName: sheetName ?? _selectedExcelSheet,
+      );
+      if (!mounted) return;
+      setState(() {
+        _availableExcelSheets = List<String>.from(result['sheets'] as List? ?? []);
+        _selectedExcelSheet = result['selected_sheet'] as String?;
+        _excelPreviewColumns = List<String>.from(result['columns'] as List? ?? []);
+        _excelPreviewLoaded = true;
+        _loadingExcelPreview = false;
+      });
+    } catch (e) {
+      debugPrint('[_loadExcelPreview] Error: $e');
+      if (!mounted) return;
+      setState(() => _loadingExcelPreview = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar preview: $e'),
+            backgroundColor: AppColors.ctDanger,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 
@@ -7303,13 +7352,49 @@ class _ActionDialogState extends State<_ActionDialog> {
                           _selectedExcelFileName = _onedriveFiles
                               .firstWhere((f) => f['id'] == v, orElse: () => {})['name'] as String?;
                           _excelFileIdCtrl.text = v ?? '';
+                          _selectedExcelSheet = null;
+                          _availableExcelSheets = [];
+                          _excelPreviewLoaded = false;
                         });
+                        _loadExcelPreview();
                       },
                     ),
+                    if (_loadingExcelPreview) ...[
+                      const SizedBox(height: 6),
+                      const LinearProgressIndicator(color: AppColors.ctTeal),
+                    ],
+                    if (_excelPreviewLoaded && _availableExcelSheets.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text('Hoja', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 6),
+                      AppDropdown<String?>(
+                        hint: 'Selecciona una hoja…',
+                        value: _selectedExcelSheet,
+                        items: _availableExcelSheets.map((sheet) {
+                          return AppDropdownItem<String?>(value: sheet, label: sheet);
+                        }).toList(),
+                        onChanged: (s) {
+                          setState(() => _selectedExcelSheet = s);
+                          if (s != null) {
+                            _excelSheetNameCtrl.text = s;
+                            _loadExcelPreview(sheetName: s);
+                          }
+                        },
+                      ),
+                      if (_excelPreviewColumns.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Se detectaron ${_excelPreviewColumns.length} columnas: '
+                          '${_excelPreviewColumns.take(5).join(', ')}'
+                          '${_excelPreviewColumns.length > 5 ? '…' : ''}',
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+                        ),
+                      ],
+                    ],
                   ],
                   const SizedBox(height: 12),
                   _FormField(
-                    label: 'Nombre de la hoja',
+                    label: 'Nombre de la hoja (manual)',
                     controller: _excelSheetNameCtrl,
                     placeholder: 'Sheet1',
                   ),
