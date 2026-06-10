@@ -1063,7 +1063,7 @@ class _ArchivedPanelState extends ConsumerState<_ArchivedPanel> {
     if (_operators.isNotEmpty || _loadingOps) return;
     setState(() => _loadingOps = true);
     try {
-      final ops = await OperatorsApi.listOperators();
+      final ops = await OperatorsApi.listOperators(dio: ref.read(apiClientProvider).dio);
       if (mounted) setState(() { _operators = ops; _loadingOps = false; });
     } catch (_) {
       if (mounted) setState(() => _loadingOps = false);
@@ -3226,7 +3226,7 @@ class _ApiChatHeader extends StatelessWidget {
 
 // ── _ActiveFlowPill ───────────────────────────────────────────────────────────
 
-class _ActiveFlowPill extends StatefulWidget {
+class _ActiveFlowPill extends ConsumerStatefulWidget {
   const _ActiveFlowPill({
     required this.operatorId,
     required this.tenantId,
@@ -3235,10 +3235,10 @@ class _ActiveFlowPill extends StatefulWidget {
   final String tenantId;
 
   @override
-  State<_ActiveFlowPill> createState() => _ActiveFlowPillState();
+  ConsumerState<_ActiveFlowPill> createState() => _ActiveFlowPillState();
 }
 
-class _ActiveFlowPillState extends State<_ActiveFlowPill> {
+class _ActiveFlowPillState extends ConsumerState<_ActiveFlowPill> {
   Map<String, dynamic>? _activeFlow;
   Timer? _timer;
 
@@ -3268,6 +3268,7 @@ class _ActiveFlowPillState extends State<_ActiveFlowPill> {
     if (!mounted) return;
     try {
       final flow = await FlowsApi.getActiveFlow(
+        dio: ref.read(apiClientProvider).dio,
         operatorId: widget.operatorId,
       );
       if (!mounted) return;
@@ -6069,8 +6070,8 @@ class _NewMessageDialogState extends ConsumerState<_NewMessageDialog> {
     setState(() { _loadingAll = true; _loadError = null; });
     try {
       final results = await Future.wait([
-        OperatorsApi.listOperators(),
-        ApiClient.instance.get('/templates'),
+        OperatorsApi.listOperators(dio: ref.read(apiClientProvider).dio),
+        ref.read(apiClientProvider).dio.get('/templates'),
       ]);
       final ops = results[0] as List<Map<String, dynamic>>;
 
@@ -6162,7 +6163,14 @@ class _NewMessageDialogState extends ConsumerState<_NewMessageDialog> {
     debugPrint('[_send] channelId=$_selectedChannelId useTemplate=$_useTemplate templateId=$_selectedTemplateId');
     setState(() { _sending = true; _sendError = null; });
     try {
-      final channelId = _selectedChannelId ?? '';
+      // For groups, use the group's own channel_id; for operators, use the global selected channel
+      final isGroup = _selected!['is_group'] == true;
+      final channelId = isGroup
+          ? (_selected!['channel_id'] as String? ?? '')
+          : (_selectedChannelId ?? '');
+
+      debugPrint('[_send] isGroup=$isGroup resolvedChannelId=$channelId');
+
       if (channelId.isEmpty) {
         setState(() { _sending = false; _sendError = 'No se encontró canal WhatsApp para este operador.'; });
         return;
@@ -6173,7 +6181,7 @@ class _NewMessageDialogState extends ConsumerState<_NewMessageDialog> {
           orElse: () => {},
         );
         debugPrint('[_send] payload: to=$phone channel=$channelId template=${tpl['name'] ?? tpl['template_name']} lang=${tpl['language'] ?? tpl['lang']}');
-        await ApiClient.instance.post(
+        await ref.read(apiClientProvider).dio.post(
           '/messages/send',
           data: {
             'to': phone,

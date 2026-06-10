@@ -6,17 +6,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/ai_workers_api.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/flows_api.dart';
+import '../../core/api/groups_api.dart';
 import '../../core/api/operator_roles_api.dart';
 import '../../core/providers/tenant_provider.dart';
+import 'widgets/participants_widget.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_avatar.dart';
 import '../../core/utils/display_mappers.dart' as dm;
 import '../../shared/widgets/app_badge.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_header.dart';
+import '../../shared/widgets/app_list_card.dart';
 import '../../shared/widgets/app_loading_state.dart';
 import '../../shared/widgets/app_search_bar.dart';
 import '../../shared/widgets/app_stacked_metric_card.dart';
+import '../../shared/widgets/image_picker_avatar.dart';
+import '../../shared/widgets/info_icon_button.dart';
 import 'channel_detail_screen.dart';
 import 'channels_screen.dart';
 import '../../shared/widgets/app_text_field.dart';
@@ -69,7 +76,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 3, vsync: this);
+    _tabCtrl = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final selectedFlow = GoRouterState.of(context)
           .uri
@@ -160,6 +167,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
             tabs: const [
               Tab(text: 'Configuración'),
               Tab(text: 'Canales'),
+              Tab(text: 'Torres de Control'),
               Tab(text: 'Flujos'),
             ],
           ),
@@ -285,6 +293,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
                     ),
                   ],
                 ),
+          _ControlTowersTab(workerId: widget.workerId),
           _selectedFlowId == null
               ? _WorkerFlowsTab(
                   workerId: widget.workerId,
@@ -1372,7 +1381,7 @@ class _WorkerFlowsTabState extends ConsumerState<_WorkerFlowsTab> {
     try {
       final tenantId = ref.read(activeTenantIdProvider);
       final results = await Future.wait([
-        FlowsApi.getFlowsByWorker(tenantWorkerId: widget.workerId),
+        FlowsApi.getFlowsByWorker(dio: ref.read(apiClientProvider).dio, tenantWorkerId: widget.workerId),
         OperatorRolesApi.listRoles(tenantId: tenantId),
       ]);
       if (!mounted) return;
@@ -1890,7 +1899,7 @@ String _flowSlugify(String input) {
       .replaceAll(RegExp(r'^-+|-+$'), '');
 }
 
-class _NewFlowDialog extends StatefulWidget {
+class _NewFlowDialog extends ConsumerStatefulWidget {
   const _NewFlowDialog({
     required this.tenantId,
     required this.workerId,
@@ -1901,10 +1910,10 @@ class _NewFlowDialog extends StatefulWidget {
   final void Function(String flowId) onCreated;
 
   @override
-  State<_NewFlowDialog> createState() => _NewFlowDialogState();
+  ConsumerState<_NewFlowDialog> createState() => _NewFlowDialogState();
 }
 
-class _NewFlowDialogState extends State<_NewFlowDialog> {
+class _NewFlowDialogState extends ConsumerState<_NewFlowDialog> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   String? _slugError;
@@ -1964,6 +1973,7 @@ class _NewFlowDialogState extends State<_NewFlowDialog> {
   Future<void> _submit() async {
     try {
       final result = await FlowsApi.createFlow(
+        dio: ref.read(apiClientProvider).dio,
         tenantWorkerId: widget.workerId,
         name: _nameCtrl.text.trim(),
         slug: _slug,
@@ -2241,6 +2251,845 @@ class _SummaryRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(value, style: AppTextStyles.body.copyWith(fontSize: 13)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── _ControlTowersTab ─────────────────────────────────────────────────────
+
+class _ControlTowersTab extends StatefulWidget {
+  const _ControlTowersTab({required this.workerId});
+  final String workerId;
+
+  @override
+  State<_ControlTowersTab> createState() => _ControlTowersTabState();
+}
+
+class _ControlTowersTabState extends State<_ControlTowersTab> {
+  List<Map<String, dynamic>> _towers = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    if (!mounted) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final all = await GroupsApi.listControlTowers();
+      // Filtrar por worker_id
+      final filtered = all.where((t) => t['worker_id'] == widget.workerId).toList();
+      if (!mounted) return;
+      setState(() {
+        _towers = filtered;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.toString();
+      });
+    }
+  }
+
+  Future<void> _edit(Map<String, dynamic> tower) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => _EditTowerDialog(
+        tower: tower,
+        onSaved: _load,
+      ),
+    );
+    if (result == true) _load();
+  }
+
+  Future<void> _delete(Map<String, dynamic> tower) async {
+    final towerId = tower['id'] as String? ?? '';
+    final displayName = tower['display_name'] as String? ?? '';
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar Torre de Control'),
+        content: Text('¿Confirmas eliminar "$displayName"?\n\nEsta acción marcará la torre como inactiva.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.ctDanger),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await GroupsApi.deleteControlTower(towerId: towerId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Torre "$displayName" eliminada')),
+      );
+      _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al eliminar: $e'), backgroundColor: AppColors.ctDanger),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(22, 18, 22, 14),
+          child: Row(
+            children: [
+              Text(
+                'Torres de Control',
+                style: AppTextStyles.body.copyWith(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              AppButton(
+                label: '+ Nueva Torre',
+                variant: AppButtonVariant.teal,
+                size: AppButtonSize.sm,
+                onPressed: () async {
+                  final result = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => _CreateTowerDialog(
+                      workerId: widget.workerId,
+                      onSaved: _load,
+                    ),
+                  );
+                  if (result == true) _load();
+                },
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: _buildBody()),
+      ],
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctTeal),
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_error!, style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger)),
+            const SizedBox(height: 8),
+            AppButton(
+              label: 'Reintentar',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.sm,
+              onPressed: _load,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_towers.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cell_tower, size: 40, color: AppColors.ctText3),
+            const SizedBox(height: 12),
+            Text(
+              'Sin torres de control configuradas',
+              style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
+      itemCount: _towers.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (_, i) => _TowerCard(
+        tower: _towers[i],
+        onEdit: () => _edit(_towers[i]),
+        onDelete: () => _delete(_towers[i]),
+      ),
+    );
+  }
+}
+
+// ── _TowerCard ────────────────────────────────────────────────────────────
+
+class _TowerCard extends StatelessWidget {
+  const _TowerCard({
+    required this.tower,
+    required this.onEdit,
+    required this.onDelete,
+  });
+  final Map<String, dynamic> tower;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = tower['display_name'] as String? ?? '—';
+    final description = tower['description'] as String? ?? '';
+    final status = tower['status'] as String? ?? 'inactive';
+    final channelType = tower['channel_type'] as String? ?? 'whatsapp';
+    final externalGroupId = tower['external_group_id'] as String? ?? '';
+
+    // Obtener icon_url desde config
+    final config = tower['config'] as Map<String, dynamic>? ?? {};
+    final iconUrl = config['icon_url'] as String?;
+
+    return AppListCard(
+      leadingIcon: AppAvatar(
+        imageUrl: iconUrl,
+        fallback: const Icon(
+          Icons.group,
+          size: 20,
+          color: AppColors.ctText3,
+        ),
+        size: 40,
+      ),
+      title: displayName,
+      subtitle: description,
+      trailing: AppBadge(
+        label: status == 'active' ? 'Activo' : 'Inactivo',
+        variant: status == 'active' ? AppBadgeVariant.ok : AppBadgeVariant.neutral,
+      ),
+      metadataRows: [
+        AppListCardMetadata(
+          icon: channelType == 'whatsapp' ? Icons.chat : Icons.forum_outlined,
+          text: channelType.toUpperCase(),
+        ),
+        AppListCardMetadata(
+          icon: Icons.tag,
+          text: externalGroupId,
+        ),
+      ],
+      actions: [
+        AppListCardAction(
+          icon: Icons.edit,
+          color: AppColors.ctTeal,
+          tooltip: 'Editar',
+          onPressed: onEdit,
+        ),
+        AppListCardAction(
+          icon: Icons.delete_outline,
+          color: AppColors.ctDanger,
+          tooltip: status == 'inactive' ? 'Inactiva' : 'Eliminar',
+          onPressed: onDelete,
+          isDisabled: status == 'inactive',
+        ),
+      ],
+      banner: status == 'inactive'
+          ? AppListCardBanner.warning('Torre inactiva - No se enviarán notificaciones')
+          : null,
+    );
+  }
+}
+
+// ── _CreateTowerDialog ────────────────────────────────────────────────────
+
+class _CreateTowerDialog extends StatefulWidget {
+  const _CreateTowerDialog({
+    required this.workerId,
+    required this.onSaved,
+  });
+
+  final String workerId;
+  final VoidCallback onSaved;
+
+  @override
+  State<_CreateTowerDialog> createState() => _CreateTowerDialogState();
+}
+
+class _CreateTowerDialogState extends State<_CreateTowerDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  List<String> _participants = [];
+  String? _iconUrl;
+  bool _saving = false;
+
+  // Palabras que disparan filtros de spam de WhatsApp
+  static const _spamTriggerWords = [
+    'torre', 'tower',
+    'test', 'prueba',
+    'dev', 'desarrollo', 'development',
+    'grupo', 'group',
+    'control',
+  ];
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  String? _validateName(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return 'Requerido';
+
+    // Verificar palabras spam
+    final lowerText = text.toLowerCase();
+    for (final word in _spamTriggerWords) {
+      if (lowerText.contains(word)) {
+        return 'Evita usar "$word" - puede activar filtros de spam';
+      }
+    }
+
+    return null;
+  }
+
+  void _showNamingGuide() {
+    showDialog(
+      context: context,
+      builder: (context) => const _NamingGuideDialog(),
+    );
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    // Validar que haya al menos un participante
+    if (_participants.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Debes agregar al menos un participante'),
+          backgroundColor: AppColors.ctDanger,
+        ),
+      );
+      return;
+    }
+
+    setState(() { _saving = true; });
+
+    try {
+      await GroupsApi.createControlTower(
+        workerId: widget.workerId,
+        displayName: _nameCtrl.text.trim(),
+        description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+        participantPhones: _participants,
+        iconUrl: _iconUrl,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Torre de control creada exitosamente'),
+          backgroundColor: AppColors.ctOk,
+        ),
+      );
+      widget.onSaved();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _saving = false; });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al crear torre: $e'),
+          backgroundColor: AppColors.ctDanger,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Nueva Torre de Control'),
+      content: SizedBox(
+        width: 500,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Avatar picker
+              Center(
+                child: ImagePickerAvatar(
+                  imageUrl: _iconUrl,
+                  fallback: const Icon(
+                    Icons.group,
+                    size: 40,
+                    color: AppColors.ctText3,
+                  ),
+                  onImageSelected: (url) => setState(() => _iconUrl = url),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre *',
+                        hintText: 'Ej: Equipo Ventas',
+                      ),
+                      validator: _validateName,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InfoIconButton(onTap: _showNamingGuide),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _descCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Descripción',
+                  hintText: 'Opcional',
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 20),
+              const Divider(),
+              const SizedBox(height: 16),
+              ParticipantsWidget(
+                initial: _participants,
+                onChanged: (list) => setState(() => _participants = list),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        AppButton(
+          variant: AppButtonVariant.teal,
+          size: AppButtonSize.sm,
+          label: _saving ? 'Creando...' : 'Crear',
+          onPressed: () => _submit(),
+          isDisabled: _saving,
+        ),
+      ],
+    );
+  }
+}
+
+// ── _EditTowerDialog ──────────────────────────────────────────────────────
+
+class _EditTowerDialog extends StatefulWidget {
+  const _EditTowerDialog({
+    required this.tower,
+    required this.onSaved,
+  });
+
+  final Map<String, dynamic> tower;
+  final VoidCallback onSaved;
+
+  @override
+  State<_EditTowerDialog> createState() => _EditTowerDialogState();
+}
+
+class _EditTowerDialogState extends State<_EditTowerDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _descCtrl;
+  String? _iconUrl;
+  late String _status;
+  late List<String> _participants;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(
+      text: widget.tower['display_name'] as String? ?? '',
+    );
+    _descCtrl = TextEditingController(
+      text: widget.tower['description'] as String? ?? '',
+    );
+    _status = widget.tower['status'] as String? ?? 'active';
+
+    // Cargar participantes e icon_url existentes desde config
+    final config = widget.tower['config'] as Map<String, dynamic>? ?? {};
+    _participants = (config['participants'] as List?)?.cast<String>() ?? [];
+    _iconUrl = config['icon_url'] as String?;
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  void _showNamingGuide() {
+    showDialog(
+      context: context,
+      builder: (context) => const _NamingGuideDialog(),
+    );
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() { _saving = true; });
+
+    try {
+      await GroupsApi.updateControlTower(
+        towerId: widget.tower['id'] as String,
+        displayName: _nameCtrl.text.trim(),
+        description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+        status: _status,
+        participants: _participants,
+        iconUrl: _iconUrl,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Torre actualizada exitosamente'),
+          backgroundColor: AppColors.ctOk,
+        ),
+      );
+      widget.onSaved();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _saving = false; });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al actualizar: $e'),
+          backgroundColor: AppColors.ctDanger,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Editar Torre de Control'),
+      content: SizedBox(
+        width: 500,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Avatar picker
+              Center(
+                child: ImagePickerAvatar(
+                  imageUrl: _iconUrl,
+                  fallback: const Icon(
+                    Icons.group,
+                    size: 40,
+                    color: AppColors.ctText3,
+                  ),
+                  onImageSelected: (url) => setState(() => _iconUrl = url),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre *',
+                        hintText: 'Ej: Torre Ventas',
+                      ),
+                      validator: (v) => (v ?? '').trim().isEmpty ? 'Requerido' : null,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InfoIconButton(onTap: _showNamingGuide),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _descCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Descripción',
+                  hintText: 'Opcional',
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Text(
+                    'Estado',
+                    style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    _status == 'active' ? 'Activa' : 'Inactiva',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: _status == 'active' ? AppColors.ctOkText : AppColors.ctText2,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Transform.scale(
+                    scale: 0.8,
+                    child: Switch(
+                      value: _status == 'active',
+                      onChanged: (val) => setState(() => _status = val ? 'active' : 'inactive'),
+                      activeThumbColor: AppColors.ctTeal,
+                      activeTrackColor: AppColors.ctTeal.withValues(alpha: 0.3),
+                      inactiveThumbColor: AppColors.ctBorder2,
+                      inactiveTrackColor: AppColors.ctSurface2,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Divider(),
+              const SizedBox(height: 16),
+              ParticipantsWidget(
+                initial: _participants,
+                onChanged: (list) => setState(() => _participants = list),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        AppButton(
+          variant: AppButtonVariant.teal,
+          size: AppButtonSize.sm,
+          label: _saving ? 'Guardando...' : 'Guardar',
+          onPressed: () => _submit(),
+          isDisabled: _saving,
+        ),
+      ],
+    );
+  }
+}
+
+// ── _NamingGuideDialog ────────────────────────────────────────────────────
+
+class _NamingGuideDialog extends StatelessWidget {
+  const _NamingGuideDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppColors.ctTeal.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Icon(Icons.info_outline, size: 20, color: AppColors.ctTeal),
+          ),
+          const SizedBox(width: 10),
+          const Text('Guía para nombrar grupos'),
+        ],
+      ),
+      content: SizedBox(
+        width: 500,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Warning banner
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.ctWarn.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.ctWarn.withOpacity(0.3)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.warning_amber, size: 18, color: AppColors.ctWarn),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'WhatsApp usa inteligencia artificial para detectar spam. Evita nombres que parezcan automatizados.',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.ctText,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Good examples
+              Text(
+                '✓ Nombres recomendados',
+                style: AppTextStyles.body.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ctOk,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildExampleCard(
+                context,
+                isGood: true,
+                examples: [
+                  'Equipo Ventas',
+                  'Coordinación General',
+                  'Soporte Técnico',
+                  'Comercial México',
+                  'Operaciones CDMX',
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Bad examples
+              Text(
+                '✗ Nombres a evitar',
+                style: AppTextStyles.body.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ctDanger,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildExampleCard(
+                context,
+                isGood: false,
+                examples: [
+                  'Torre Ventas Dev',
+                  'Grupo Test',
+                  'Torre de Control',
+                  'Prueba WhatsApp',
+                  'Development Team',
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Tips section
+              Text(
+                'Consejos adicionales',
+                style: AppTextStyles.body.copyWith(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildTipItem('Usa nombres naturales y descriptivos'),
+              _buildTipItem('Evita palabras como "torre", "test", "dev", "grupo"'),
+              _buildTipItem('No crees varios grupos seguidos muy rápido'),
+              _buildTipItem('Agrega participantes gradualmente (automático)'),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        AppButton(
+          variant: AppButtonVariant.teal,
+          size: AppButtonSize.sm,
+          label: 'Entendido',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExampleCard(BuildContext context, {required bool isGood, required List<String> examples}) {
+    final color = isGood ? AppColors.ctOk : AppColors.ctDanger;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: examples.map((example) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Icon(
+                  isGood ? Icons.check_circle : Icons.cancel,
+                  size: 14,
+                  color: color,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  example,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    fontSize: 12,
+                    color: AppColors.ctText,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildTipItem(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            width: 4,
+            height: 4,
+            decoration: const BoxDecoration(
+              color: AppColors.ctTeal,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTextStyles.bodySmall.copyWith(
+                fontSize: 12,
+                color: AppColors.ctText2,
+              ),
+            ),
           ),
         ],
       ),

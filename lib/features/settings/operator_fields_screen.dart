@@ -89,7 +89,7 @@ class _OperatorFieldsBodyState extends ConsumerState<OperatorFieldsBody> {
     setState(() { _loading = true; _error = null; });
     try {
       // Fetch all fields including inactive ones
-      final res = await ApiClient.instance.get(
+      final res = await ref.read(apiClientProvider).dio.get(
         '/operator-fields',
         queryParameters: {
           'include_inactive': true,

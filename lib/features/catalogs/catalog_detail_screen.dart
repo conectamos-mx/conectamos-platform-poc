@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/catalogs_api.dart';
 import '../../core/api/connections_api.dart';
 import '../../core/providers/permissions_provider.dart';
@@ -17,6 +18,7 @@ import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/app_detail_header.dart';
 import '../../core/utils/relative_time.dart';
+import '../../core/utils/sync_poller.dart';
 import '../../shared/widgets/catalog_item_form.dart';
 
 // ── CatalogDetailScreen ───────────────────────────────────────────────────────
@@ -68,7 +70,9 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
     });
     try {
       final tenantId = ref.read(activeTenantIdProvider);
+      final dio = ref.read(apiClientProvider).dio;
       final data = await CatalogsApi.getCatalogBySlug(
+        dio: dio,
         tenantId: tenantId,
         slug: widget.slug,
       );
@@ -96,10 +100,12 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
     final catalogId = _catalog?['id'] as String? ?? '';
     if (catalogId.isEmpty) return;
     final tenantId = ref.read(activeTenantIdProvider);
+    final dio = ref.read(apiClientProvider).dio;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _saving = true);
     try {
       await CatalogsApi.updateCatalog(
+        dio: dio,
         tenantId: tenantId,
         catalogId: catalogId,
         body: _pendingPatch,
@@ -145,12 +151,14 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
         ),
         actions: [
           AppButton(
+            key: const Key('delete_catalog_cancel'),
             label: 'Cancelar',
             variant: AppButtonVariant.ghost,
             size: AppButtonSize.sm,
             onPressed: () => Navigator.of(ctx).pop(false),
           ),
           AppButton(
+            key: const Key('delete_catalog_confirm'),
             label: 'Eliminar',
             variant: AppButtonVariant.danger,
             size: AppButtonSize.sm,
@@ -163,7 +171,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
     if (confirmed != true || !mounted) return;
     setState(() => _deleting = true);
     try {
-      await CatalogsApi.deleteCatalog(catalogId: catalogId);
+      await CatalogsApi.deleteCatalog(dio: ref.read(apiClientProvider).dio, catalogId: catalogId);
       if (mounted) context.go('/catalogs', extra: {'refresh': true});
     } catch (e) {
       if (mounted) {
@@ -183,7 +191,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _syncing = true);
     try {
-      await CatalogsApi.syncCatalog(catalogId: catalogId);
+      await CatalogsApi.syncCatalog(dio: ref.read(apiClientProvider).dio, catalogId: catalogId);
       if (mounted) {
         messenger.showSnackBar(const SnackBar(
           content: Text('Sincronización iniciada'),
@@ -267,6 +275,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
             actions: [
               if (_canManage)
                 AppActionButton(
+                  key: const Key('detail_delete_btn'),
                   variant: AppActionVariant.delete,
                   onPressed: _doDelete,
                   isLoading: _deleting,
@@ -275,6 +284,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
               if (_canManage && isSyncable) ...[
                 const SizedBox(width: 4),
                 AppButton(
+                  key: const Key('detail_sync_btn'),
                   label: 'Sincronizar ahora',
                   variant: AppButtonVariant.outline,
                   size: AppButtonSize.sm,
@@ -287,6 +297,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
               ],
               if (_canManage)
                 AppButton(
+                  key: const Key('detail_save_btn'),
                   label: 'Guardar',
                   variant: AppButtonVariant.teal,
                   size: AppButtonSize.sm,
@@ -894,6 +905,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
     try {
       final tenantId = ref.read(activeTenantIdProvider);
       final result = await CatalogsApi.sheetsPreview(
+        dio: ref.read(apiClientProvider).dio,
         tenantId: tenantId,
         sheetUrl: _sheetUrlCtrl.text.trim(),
         sheetName: sheetName ?? _selectedSheet,
@@ -1152,6 +1164,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
                     if (showReconnect) ...[
                       const SizedBox(width: 8),
                       AppButton(
+                        key: const Key('source_reconnect_btn'),
                         label: 'Reconectar ahora',
                         variant: isWarn
                             ? AppButtonVariant.outline
@@ -1278,6 +1291,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
                   if (sourceType == 'google_sheets') ...[
                     if (widget.canManage) ...[
                       TextField(
+                        key: const Key('source_sheet_url'),
                         controller: _sheetUrlCtrl,
                         style: AppFonts.geist(
                             fontSize: 13, color: AppColors.ctText),
@@ -1306,6 +1320,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
                       const SizedBox(height: 12),
                       if (_availableSheets.isNotEmpty)
                         DropdownButtonFormField<String>(
+                          key: const Key('source_sheet_tab'),
                           initialValue: _selectedSheet,
                           decoration: InputDecoration(
                             labelText: 'Pestaña',
@@ -1547,6 +1562,7 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
     try {
       final q = _searchCtrl.text.trim();
       final result = await CatalogsApi.listItemsPaged(
+        dio: ref.read(apiClientProvider).dio,
         tenantId: tenantId,
         catalogId: _catalogId,
         page: _page,
@@ -1629,6 +1645,7 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
             children: [
               Expanded(
                 child: TextField(
+                  key: const Key('items_search'),
                   controller: _searchCtrl,
                   onChanged: _onSearchChanged,
                   style: AppFonts.geist(
@@ -1664,6 +1681,7 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
               if (_isManual && widget.canManage) ...[
                 const SizedBox(width: 8),
                 AppButton(
+                  key: const Key('items_add_btn'),
                   label: 'Agregar',
                   variant: AppButtonVariant.teal,
                   size: AppButtonSize.sm,
@@ -1758,6 +1776,8 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                                           item['data'] as Map)
                                       : <String, dynamic>{};
                                   return _CatalogItemRow(
+                                    key: ValueKey(
+                                        'item_row_${item['id'] ?? ''}'),
                                     item: item,
                                     rawData: rawData,
                                     fields: _fields,
@@ -1907,6 +1927,7 @@ class _ItemDetailSheetState extends ConsumerState<_ItemDetailSheet> {
                   ),
                   const SizedBox(height: 8),
                   AppButton(
+                    key: const Key('item_edit_save'),
                     label: 'Guardar',
                     variant: AppButtonVariant.teal,
                     expand: true,
@@ -1919,6 +1940,7 @@ class _ItemDetailSheetState extends ConsumerState<_ItemDetailSheet> {
                         final tenantId =
                             ref.read(activeTenantIdProvider);
                         await CatalogsApi.updateItem(
+                          dio: ref.read(apiClientProvider).dio,
                           tenantId: tenantId,
                           catalogId: _catalogId,
                           itemId: _itemId,
@@ -1966,6 +1988,7 @@ class _ItemDetailSheetState extends ConsumerState<_ItemDetailSheet> {
     try {
       final tenantId = ref.read(activeTenantIdProvider);
       final result = await CatalogsApi.deleteItem(
+        dio: ref.read(apiClientProvider).dio,
         tenantId: tenantId,
         catalogId: _catalogId,
         itemId: _itemId,
@@ -2013,12 +2036,14 @@ class _ItemDetailSheetState extends ConsumerState<_ItemDetailSheet> {
                 const Spacer(),
                 if (widget.canManage) ...[
                   IconButton(
+                    key: const Key('item_detail_edit'),
                     tooltip: 'Editar',
                     icon: const Icon(Icons.edit_outlined,
                         size: 18, color: AppColors.ctTeal),
                     onPressed: _openEditDialog,
                   ),
                   IconButton(
+                    key: const Key('item_detail_delete'),
                     tooltip: 'Eliminar',
                     icon: const Icon(Icons.delete_outline_rounded,
                         size: 18, color: AppColors.ctDanger),
@@ -2137,7 +2162,7 @@ class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
     setState(() => _saving = true);
     try {
       await CatalogsApi.createItem(
-          tenantId: tenantId, catalogId: catalogId, data: data);
+          dio: ref.read(apiClientProvider).dio, tenantId: tenantId, catalogId: catalogId, data: data);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
@@ -2181,6 +2206,7 @@ class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
             ),
             const SizedBox(height: 8),
             AppButton(
+              key: const Key('item_add_save'),
               label: 'Guardar',
               variant: AppButtonVariant.teal,
               expand: true,
@@ -2197,6 +2223,7 @@ class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
 
 class _CatalogItemRow extends StatefulWidget {
   const _CatalogItemRow({
+    super.key,
     required this.item,
     required this.rawData,
     required this.fields,
@@ -2268,10 +2295,7 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
   bool _loading = true;
   String? _error;
 
-  Timer? _pollTimer;
-  static const _pollInterval = Duration(seconds: 2);
-  static const _pollTimeout  = Duration(seconds: 60);
-  DateTime? _pollStart;
+  SyncPoller? _poller;
 
   String get _catalogId => widget.catalog['id'] as String? ?? '';
 
@@ -2280,31 +2304,26 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadLogs();
-      if (widget.polling) {
-        _pollStart = DateTime.now();
-        _startPolling();
-      }
+      if (widget.polling) _startPolling();
     });
   }
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _poller?.dispose();
     super.dispose();
   }
 
   void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(_pollInterval, (_) async {
-      if (!mounted) { _pollTimer?.cancel(); return; }
-      if (DateTime.now().difference(_pollStart!) > _pollTimeout) {
-        _pollTimer?.cancel(); return;
-      }
-      await _loadLogs();
-      if (_logs.isNotEmpty && _logs.first['status'] != 'running') {
-        _pollTimer?.cancel();
-      }
-    });
+    _poller?.dispose();
+    _poller = SyncPoller(
+      poll: () async {
+        if (!mounted) return false;
+        await _loadLogs();
+        return _logs.isEmpty || _logs.first['status'] == 'running';
+      },
+    );
+    _poller!.start();
   }
 
   Future<void> _loadLogs() async {
@@ -2313,7 +2332,7 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
     setState(() { _loading = true; _error = null; });
     try {
       final logs = await CatalogsApi.listSyncLog(
-          tenantId: tenantId, catalogId: _catalogId);
+          dio: ref.read(apiClientProvider).dio, tenantId: tenantId, catalogId: _catalogId);
       if (mounted) setState(() { _logs = logs; _loading = false; });
     } catch (e) {
       if (mounted) {
@@ -2336,6 +2355,7 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
     }
     if (_logs.isEmpty) {
       return Center(
+        key: const Key('sync_empty_state'),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2361,6 +2381,7 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
       children: [
         if (_logs.isNotEmpty && _logs.first['status'] == 'running') ...[
           Container(
+            key: const Key('sync_running_banner'),
             margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
@@ -2388,7 +2409,13 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
             padding: const EdgeInsets.all(20),
             itemCount: _logs.length,
             separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (_, i) => _SyncLogRow(log: _logs[i]),
+            itemBuilder: (_, i) {
+              final log = _logs[i];
+              return _SyncLogRow(
+                key: ValueKey('sync_log_${log['id'] ?? i}'),
+                log: log,
+              );
+            },
           ),
         ),
       ],
@@ -2397,7 +2424,7 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
 }
 
 class _SyncLogRow extends StatelessWidget {
-  const _SyncLogRow({required this.log});
+  const _SyncLogRow({super.key, required this.log});
   final Map<String, dynamic> log;
 
   @override
@@ -2561,7 +2588,7 @@ class _UsoTabState extends ConsumerState<_UsoTab> {
     setState(() { _loading = true; _error = null; });
     try {
       final usages = await CatalogsApi.getUsages(
-          tenantId: tenantId, catalogId: _catalogId);
+          dio: ref.read(apiClientProvider).dio, tenantId: tenantId, catalogId: _catalogId);
       if (mounted) setState(() { _usages = usages; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
@@ -2589,6 +2616,7 @@ class _UsoTabState extends ConsumerState<_UsoTab> {
             title: 'Flujos que usan este catálogo',
             child: _usages.isEmpty
                 ? Column(
+                    key: const Key('uso_empty_state'),
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Icon(Icons.hub_outlined, size: 36,
@@ -2603,6 +2631,8 @@ class _UsoTabState extends ConsumerState<_UsoTab> {
                 : Column(
                     children: _usages
                         .map((u) => _UsageRow(
+                              key: ValueKey(
+                                  'usage_${u['flow_slug'] ?? ''}'),
                               flowSlug: u['flow_slug'] as String? ?? '',
                               flowLabel: u['flow_label'] as String? ?? '',
                               fieldLabel: u['field_label'] as String? ?? '',
@@ -2618,6 +2648,7 @@ class _UsoTabState extends ConsumerState<_UsoTab> {
 
 class _UsageRow extends StatelessWidget {
   const _UsageRow({
+    super.key,
     required this.flowSlug,
     required this.flowLabel,
     required this.fieldLabel,

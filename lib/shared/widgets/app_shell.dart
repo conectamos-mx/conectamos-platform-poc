@@ -100,16 +100,17 @@ class _AppShellState extends ConsumerState<AppShell> {
 const _kRouteBranchIndex = {
   '/overview':      0,
   '/conversations': 1,
-  '/broadcast':     2,
-  '/dashboard':     3,
-  '/operators':     4,
-  '/executions':    5,
-  '/tareas':        6,
-  '/escalaciones':  7,
-  '/workers':       8,
-  '/connections':   9,
-  '/settings':      10,
-  '/catalogs':      11,
+  '/broadcast':      2,
+  '/dashboard':      3,
+  '/operators':      4,
+  '/executions':     5,
+  '/tareas':         6,
+  '/escalaciones':   7,
+  '/workers':        8,
+  '/connections':    9,
+  '/settings':       10,
+  '/catalogs':       11,
+  '/assignments':    12,
 };
 
 // ── TOPBAR ────────────────────────────────────────────────────────────────────

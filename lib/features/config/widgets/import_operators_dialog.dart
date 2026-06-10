@@ -3,7 +3,9 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/api/operators_api.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/text_styles.dart';
@@ -15,15 +17,15 @@ import '../../../shared/widgets/app_import_preview_table.dart';
 import '../../../shared/widgets/app_loading_state.dart';
 import '../../../shared/widgets/app_template_download.dart';
 
-class ImportOperatorsDialog extends StatefulWidget {
+class ImportOperatorsDialog extends ConsumerStatefulWidget {
   const ImportOperatorsDialog({super.key, required this.onSuccess});
   final VoidCallback onSuccess;
 
   @override
-  State<ImportOperatorsDialog> createState() => _ImportOperatorsDialogState();
+  ConsumerState<ImportOperatorsDialog> createState() => _ImportOperatorsDialogState();
 }
 
-class _ImportOperatorsDialogState extends State<ImportOperatorsDialog> {
+class _ImportOperatorsDialogState extends ConsumerState<ImportOperatorsDialog> {
   // ── Navigation ────────────────────────────────────────────────────────────
   int _step = 0; // 0=config, 1=preview, 2=result
 
@@ -59,6 +61,7 @@ class _ImportOperatorsDialogState extends State<ImportOperatorsDialog> {
     setState(() => _validating = true);
     try {
       final result = await OperatorsApi.importDryRun(
+        dio: ref.read(apiClientProvider).dio,
         fileBytes: _fileBytes!,
         fileName: _fileName!,
         strategy: 'skip_errors',
@@ -98,6 +101,7 @@ class _ImportOperatorsDialogState extends State<ImportOperatorsDialog> {
     });
     try {
       final result = await OperatorsApi.importOperators(
+        dio: ref.read(apiClientProvider).dio,
         fileBytes: _fileBytes!,
         fileName: _fileName!,
         strategy: 'skip_errors',

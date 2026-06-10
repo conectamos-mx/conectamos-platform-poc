@@ -252,7 +252,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     if (tenantId.isEmpty) return;
     final wasEmpty = _filterWorkerIds.isEmpty;
     try {
-      final resp = await ApiClient.instance.get('/workers');
+      final resp = await ref.read(apiClientProvider).dio.get('/workers');
       debugPrint('[Workers] resp.data type: ${resp.data.runtimeType}');
       debugPrint('[Workers] resp.data: ${resp.data.toString().substring(0, resp.data.toString().length.clamp(0, 300))}');
       final list = resp.data is List
@@ -293,7 +293,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     final tenantId = ref.read(activeTenantIdProvider);
     if (tenantId.isEmpty) return;
     try {
-      final list = await OperatorsApi.listOperators();
+      final list = await OperatorsApi.listOperators(dio: ref.read(apiClientProvider).dio);
       if (mounted) {
         setState(() {
           _availableOperators = list;
@@ -315,7 +315,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     final myVersion = _flowsLoadVersion;
 
     try {
-      final resp = await ApiClient.instance.get('/flows');
+      final resp = await ref.read(apiClientProvider).dio.get('/flows');
 
       // Si se lanzó una llamada más nueva, descartar
       if (myVersion != _flowsLoadVersion) return;

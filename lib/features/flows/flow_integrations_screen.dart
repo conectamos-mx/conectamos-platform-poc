@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
@@ -51,6 +52,7 @@ class _FlowIntegrationsScreenState
     });
     try {
       final list = await FlowsApi.listIntegrations(
+        dio: ref.read(apiClientProvider).dio,
         flowId: widget.flowId,
       );
       if (!mounted) return;
@@ -72,6 +74,7 @@ class _FlowIntegrationsScreenState
     setState(() => _deleting = true);
     try {
       await FlowsApi.deleteIntegration(
+        dio: ref.read(apiClientProvider).dio,
         flowId: widget.flowId,
         integrationId: integrationId,
       );
@@ -95,6 +98,7 @@ class _FlowIntegrationsScreenState
         currentUrl: currentUrl,
         onSave: (newUrl) async {
           final updated = await FlowsApi.patchIntegration(
+            dio: ref.read(apiClientProvider).dio,
             flowId: widget.flowId,
             integrationId: integrationId,
             endpointUrl: newUrl,
@@ -462,7 +466,7 @@ class _IntegrationCard extends StatelessWidget {
 
 // ── Create dialog ─────────────────────────────────────────────────────────────
 
-class _CreateIntegrationDialog extends StatefulWidget {
+class _CreateIntegrationDialog extends ConsumerStatefulWidget {
   const _CreateIntegrationDialog({
     required this.flowId,
     required this.onCreated,
@@ -472,11 +476,11 @@ class _CreateIntegrationDialog extends StatefulWidget {
   final Future<void> Function(Map<String, dynamic> integration) onCreated;
 
   @override
-  State<_CreateIntegrationDialog> createState() =>
+  ConsumerState<_CreateIntegrationDialog> createState() =>
       _CreateIntegrationDialogState();
 }
 
-class _CreateIntegrationDialogState extends State<_CreateIntegrationDialog> {
+class _CreateIntegrationDialogState extends ConsumerState<_CreateIntegrationDialog> {
   String _type = 'api';
   final _nameCtrl = TextEditingController();
   final _urlCtrl = TextEditingController();
@@ -514,6 +518,7 @@ class _CreateIntegrationDialogState extends State<_CreateIntegrationDialog> {
     });
     try {
       final integration = await FlowsApi.createIntegration(
+        dio: ref.read(apiClientProvider).dio,
         flowId: widget.flowId,
         name: _nameCtrl.text.trim(),
         integrationType: _type,

@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/api/api_error.dart';
 import '../../../core/api/channels_api.dart';
 import '../../../core/api/iam_api.dart';
@@ -150,7 +151,7 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
   Future<void> _loadTenantUsers() async {
     setState(() => _tenantUsersLoading = true);
     try {
-      final users = await IamApi.getUsers();
+      final users = await IamApi.getUsers(dio: ref.read(apiClientProvider).dio);
       if (mounted) {
         setState(() {
           _unlinkTenantUsers = users
@@ -222,7 +223,7 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
     if (phone == _lastLookedUpPhone && _lookupResult != null) return;
     setState(() => _lookupLoading = true);
     try {
-      final result = await OperatorsApi.lookupByPhone(phone: phone);
+      final result = await OperatorsApi.lookupByPhone(dio: ref.read(apiClientProvider).dio, phone: phone);
       if (mounted && phone == _phoneE164) {
         setState(() {
           _lookupResult = result;
@@ -323,6 +324,7 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
           ? _linkTenantUserId
           : null;
       await OperatorsApi.createOperatorV2(
+        dio: ref.read(apiClientProvider).dio,
         displayName: name,
         phone: _phoneE164,
         roleIds: _selectedRoleIds,
@@ -530,6 +532,7 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
         : null;
     try {
       await OperatorsApi.restoreOperator(
+        dio: ref.read(apiClientProvider).dio,
         id: id,
         linkToTenantUserId: effectiveLinkId,
       );

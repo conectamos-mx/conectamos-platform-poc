@@ -6,6 +6,9 @@ import 'package:calendar_view/calendar_view.dart';
 import 'package:omni_datetime_picker/omni_datetime_picker.dart';
 
 import '../../core/api/assignments_api.dart';
+import 'package:dio/dio.dart';
+
+import '../../core/api/api_client.dart';
 import '../../core/api/catalogs_api.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/api/operators_api.dart';
@@ -110,7 +113,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
           scopeDate: wm.isoDate(day),
         );
       });
-      final operatorsFuture = OperatorsApi.listOperators();
+      final operatorsFuture = OperatorsApi.listOperators(dio: ref.read(apiClientProvider).dio);
       final dayResults = await Future.wait(dayFutures);
       final operators = await operatorsFuture;
       final data = dayResults.expand((list) => list).toList();
@@ -323,6 +326,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
               builder: (_) => _NewAssignmentDialog(
                 tenantId: ref.read(activeTenantIdProvider),
                 operators: _operators,
+                dio: ref.read(apiClientProvider).dio,
                 onSaved: () {
                   setState(() => _showNewModal = false);
                   _loadAssignments();
@@ -1561,12 +1565,14 @@ class _NewAssignmentDialog extends StatefulWidget {
     required this.operators,
     required this.onSaved,
     required this.onCancel,
+    required this.dio,
   });
 
   final String tenantId;
   final List<Map<String, dynamic>> operators;
   final VoidCallback onSaved;
   final VoidCallback onCancel;
+  final Dio dio;
 
   @override
   State<_NewAssignmentDialog> createState() =>
@@ -1606,8 +1612,8 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
     if (mounted) setState(() { _loadingApiData = true; _apiError = null; });
     try {
       final catalogs =
-          await CatalogsApi.listCatalogs(tenantId: widget.tenantId);
-      final flows = await FlowsApi.listFlows();
+          await CatalogsApi.listCatalogs(dio: widget.dio, tenantId: widget.tenantId);
+      final flows = await FlowsApi.listFlows(dio: widget.dio);
       if (mounted) {
         setState(() {
           _catalogs = catalogs;
@@ -1872,6 +1878,7 @@ bool get _step1Valid =>
               key: ValueKey('res_$i'),
               index: i,
               tenantId: widget.tenantId,
+              dio: widget.dio,
               catalogSlug: _resCatalogSlugs[i],
               catalogs: _catalogs,
               itemIdCtrl: _resItemIdCtrls[i],
@@ -2134,6 +2141,7 @@ class _ResourceRow extends StatefulWidget {
     super.key,
     required this.index,
     required this.tenantId,
+    required this.dio,
     required this.catalogSlug,
     required this.catalogs,
     required this.itemIdCtrl,
@@ -2146,6 +2154,7 @@ class _ResourceRow extends StatefulWidget {
 
   final int index;
   final String tenantId;
+  final Dio dio;
   final String catalogSlug;
   final List<Map<String, dynamic>> catalogs;
   final TextEditingController itemIdCtrl;
@@ -2189,6 +2198,7 @@ class _ResourceRowState extends State<_ResourceRow> {
     setState(() => _loadingItems = true);
     try {
       final items = await CatalogsApi.listItems(
+        dio: widget.dio,
         tenantId: widget.tenantId,
         catalogId: catalogId,
       );

@@ -1,13 +1,13 @@
-import 'package:conectamos_platform/core/api/api_client.dart';
 import 'package:dio/dio.dart';
 
 class FlowsApi {
   static Future<List<Map<String, dynamic>>> listFlows({
+    required Dio dio,
     String? triggerSource,
   }) async {
     final params = <String, dynamic>{};
     if (triggerSource != null) params['trigger_source'] = triggerSource;
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/flows',
       queryParameters: params,
     );
@@ -15,9 +15,10 @@ class FlowsApi {
   }
 
   static Future<List<Map<String, dynamic>>> getFlowsByWorker({
+    required Dio dio,
     required String tenantWorkerId,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/flows',
       queryParameters: {
         'tenant_worker_id': tenantWorkerId,
@@ -30,15 +31,17 @@ class FlowsApi {
   }
 
   static Future<Map<String, dynamic>> getFlow({
+    required Dio dio,
     required String flowId,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/flows/$flowId',
     );
     return Map<String, dynamic>.from(response.data);
   }
 
   static Future<Map<String, dynamic>> createFlow({
+    required Dio dio,
     required String tenantWorkerId,
     required String name,
     required String slug,
@@ -48,7 +51,7 @@ class FlowsApi {
     List<String>? allowedRoleIds,
     List<String>? triggerSources,
   }) async {
-    final response = await ApiClient.instance.post('/flows', data: {
+    final response = await dio.post('/flows', data: {
       'tenant_worker_id': tenantWorkerId,
       'name':             name,
       'slug':             slug,
@@ -62,6 +65,7 @@ class FlowsApi {
   }
 
   static Future<Map<String, dynamic>> updateFlow({
+    required Dio dio,
     required String flowId,
     String? name,
     String? slug,
@@ -88,7 +92,7 @@ class FlowsApi {
       'allowed_role_ids':  ?allowedRoleIds,
       'preconditions':     ?preconditions,
     };
-    final response = await ApiClient.instance.patch(
+    final response = await dio.patch(
       '/flows/$flowId',
       data: body,
     );
@@ -96,10 +100,11 @@ class FlowsApi {
   }
 
   static Future<void> deleteFlow({
+    required Dio dio,
     required String flowId,
   }) async {
     try {
-      await ApiClient.instance.delete(
+      await dio.delete(
         '/flows/$flowId',
       );
     } on DioException catch (e) {
@@ -122,9 +127,10 @@ class FlowsApi {
 
   // @deprecated — usar listIntegrationsByTenant
   static Future<List<Map<String, dynamic>>> listIntegrations({
+    required Dio dio,
     required String flowId,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/flows/$flowId/integrations',
     );
     final raw = response.data;
@@ -137,6 +143,7 @@ class FlowsApi {
 
   // @deprecated — usar createIntegrationForTenant
   static Future<Map<String, dynamic>> createIntegration({
+    required Dio dio,
     required String flowId,
     required String name,
     required String integrationType,
@@ -144,7 +151,7 @@ class FlowsApi {
     bool includeAncestors = false,
     int rateLimitPerMinute = 60,
   }) async {
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/flows/$flowId/integrations',
       data: {
         'name':                name,
@@ -158,11 +165,12 @@ class FlowsApi {
   }
 
   static Future<Map<String, dynamic>> patchIntegration({
+    required Dio dio,
     required String flowId,
     required String integrationId,
     required String endpointUrl,
   }) async {
-    final response = await ApiClient.instance.patch(
+    final response = await dio.patch(
       '/flows/$flowId/integrations/$integrationId',
       data: {'endpoint_url': endpointUrl},
     );
@@ -171,10 +179,11 @@ class FlowsApi {
 
   // @deprecated — usar deleteIntegrationById
   static Future<void> deleteIntegration({
+    required Dio dio,
     required String flowId,
     required String integrationId,
   }) async {
-    await ApiClient.instance.delete(
+    await dio.delete(
       '/flows/$flowId/integrations/$integrationId',
     );
   }
@@ -182,13 +191,14 @@ class FlowsApi {
   // ── Tenant-level integrations ────────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> listIntegrationsByTenant({
+    required Dio dio,
     String? tenantWorkerId,
     String? integrationType,
   }) async {
     final params = <String, dynamic>{};
     if (tenantWorkerId != null) params['tenant_worker_id'] = tenantWorkerId;
     if (integrationType != null) params['integration_type'] = integrationType;
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/integrations',
       queryParameters: params,
     );
@@ -203,13 +213,14 @@ class FlowsApi {
   }
 
   static Future<Map<String, dynamic>> createIntegrationForTenant({
+    required Dio dio,
     required String name,
     required String integrationType,
     required String tenantWorkerId,
     String? endpointUrl,
     int rateLimitPerMinute = 60,
   }) async {
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/integrations',
       data: {
         'name': name,
@@ -223,9 +234,10 @@ class FlowsApi {
   }
 
   static Future<void> deleteIntegrationById({
+    required Dio dio,
     required String integrationId,
   }) async {
-    await ApiClient.instance.delete(
+    await dio.delete(
       '/integrations/$integrationId',
     );
   }
@@ -233,13 +245,14 @@ class FlowsApi {
   // ── Dashboard (executions) ──────────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> listPendingExecutions({
+    required Dio dio,
     String? flowSlug,
   }) async {
     final params = <String, dynamic>{
       'status': 'pending_dashboard',
     };
     if (flowSlug != null) params['flow_slug'] = flowSlug;
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/api/v1/dashboard/executions',
       queryParameters: params,
     );
@@ -250,9 +263,10 @@ class FlowsApi {
   }
 
   static Future<Map<String, dynamic>?> getActiveFlow({
+    required Dio dio,
     required String operatorId,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/flows/active',
       queryParameters: {
         'operator_id': operatorId,
@@ -263,9 +277,10 @@ class FlowsApi {
   }
 
   static Future<Map<String, dynamic>> getExecution({
+    required Dio dio,
     required String executionId,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/api/v1/dashboard/executions/$executionId',
     );
     final data = Map<String, dynamic>.from(response.data);
@@ -273,26 +288,30 @@ class FlowsApi {
   }
 
   static Future<void> submitExecution({
+    required Dio dio,
     required String executionId,
     required Map<String, String> fields,
   }) async {
-    await ApiClient.instance.post(
+    await dio.post(
       '/api/v1/dashboard/executions/$executionId/submit',
       data: {'fields': fields},
     );
   }
 
   static Future<Map<String, dynamic>> abandonExecution({
+    required Dio dio,
     required String executionId,
   }) async {
-    final resp = await ApiClient.instance.post(
+    final resp = await dio.post(
       '/api/v1/dashboard/flow-executions/$executionId/abandon',
     );
     return resp.data as Map<String, dynamic>;
   }
 
-  static Future<List<Map<String, dynamic>>> listDashboardConfigurations() async {
-    final response = await ApiClient.instance.get(
+  static Future<List<Map<String, dynamic>>> listDashboardConfigurations({
+    required Dio dio,
+  }) async {
+    final response = await dio.get(
       '/api/v1/dashboard/configurations',
     );
     final raw = response.data;
@@ -301,9 +320,12 @@ class FlowsApi {
         list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
   }
 
-  static Future<Map<String, dynamic>?> getDashboardConfiguration(String slug) async {
+  static Future<Map<String, dynamic>?> getDashboardConfiguration({
+    required Dio dio,
+    required String slug,
+  }) async {
     try {
-      final response = await ApiClient.instance.get(
+      final response = await dio.get(
         '/api/v1/dashboard/configurations/$slug',
       );
       return Map<String, dynamic>.from(response.data as Map);
@@ -313,15 +335,16 @@ class FlowsApi {
     }
   }
 
-  static Future<Map<String, dynamic>> getDashboardKpis(
-    String dashboardSlug, {
+  static Future<Map<String, dynamic>> getDashboardKpis({
+    required Dio dio,
+    required String dashboardSlug,
     String? dateRangeStart,
     String? dateRangeEnd,
   }) async {
     final params = <String, dynamic>{'dashboard_slug': dashboardSlug};
     if (dateRangeStart != null) params['date_range_start'] = dateRangeStart;
     if (dateRangeEnd != null) params['date_range_end'] = dateRangeEnd;
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/api/v1/dashboard/kpis',
       queryParameters: params,
     );
@@ -337,15 +360,16 @@ class FlowsApi {
     return byWidgetId;
   }
 
-  static Future<List<Map<String, dynamic>>> getDashboardActivity(
-    String dashboardSlug, {
+  static Future<List<Map<String, dynamic>>> getDashboardActivity({
+    required Dio dio,
+    required String dashboardSlug,
     String? dateRangeStart,
     String? dateRangeEnd,
   }) async {
     final params = <String, dynamic>{'dashboard_slug': dashboardSlug};
     if (dateRangeStart != null) params['date_range_start'] = dateRangeStart;
     if (dateRangeEnd != null) params['date_range_end'] = dateRangeEnd;
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/api/v1/dashboard/activity',
       queryParameters: params,
     );
@@ -355,16 +379,20 @@ class FlowsApi {
         list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
   }
 
-  static Future<List<Map<String, dynamic>>> getActionTypes() async {
-    final response = await ApiClient.instance.get('/flows/action-types');
+  static Future<List<Map<String, dynamic>>> getActionTypes({
+    required Dio dio,
+  }) async {
+    final response = await dio.get('/flows/action-types');
     final raw = response.data;
     final list = raw is Map ? (raw['types'] ?? []) : raw;
     return List<Map<String, dynamic>>.from(
         (list as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
   }
 
-  static Future<List<Map<String, dynamic>>> getPreconditionTypes() async {
-    final response = await ApiClient.instance.get(
+  static Future<List<Map<String, dynamic>>> getPreconditionTypes({
+    required Dio dio,
+  }) async {
+    final response = await dio.get(
       '/flows/precondition-types',
     );
     final raw = response.data;
@@ -373,15 +401,16 @@ class FlowsApi {
         (list as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
   }
 
-  static Future<Map<String, dynamic>> getDashboardCharts(
-    String dashboardSlug, {
+  static Future<Map<String, dynamic>> getDashboardCharts({
+    required Dio dio,
+    required String dashboardSlug,
     String? dateRangeStart,
     String? dateRangeEnd,
   }) async {
     final params = <String, dynamic>{'dashboard_slug': dashboardSlug};
     if (dateRangeStart != null) params['date_range_start'] = dateRangeStart;
     if (dateRangeEnd != null) params['date_range_end'] = dateRangeEnd;
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/api/v1/dashboard/charts',
       queryParameters: params,
     );

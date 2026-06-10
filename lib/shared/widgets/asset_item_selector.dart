@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/theme/app_theme.dart';
@@ -8,7 +9,7 @@ import '../../core/theme/app_theme.dart';
 /// Selector de items de un catálogo para campos asset_ref.
 /// Llama GET /flows/catalog-items/{catalogSlug}?q={query}&limit=20
 /// autenticado con el JWT del tenant (mismo Bearer que el resto de la app).
-class AssetItemSelector extends StatefulWidget {
+class AssetItemSelector extends ConsumerStatefulWidget {
   const AssetItemSelector({
     super.key,
     required this.catalogSlug,
@@ -23,10 +24,10 @@ class AssetItemSelector extends StatefulWidget {
   final String? initialDisplayText;
 
   @override
-  State<AssetItemSelector> createState() => _AssetItemSelectorState();
+  ConsumerState<AssetItemSelector> createState() => _AssetItemSelectorState();
 }
 
-class _AssetItemSelectorState extends State<AssetItemSelector> {
+class _AssetItemSelectorState extends ConsumerState<AssetItemSelector> {
   final _searchCtrl = TextEditingController();
   List<Map<String, dynamic>> _results = [];
   bool _loading = false;
@@ -66,7 +67,7 @@ class _AssetItemSelectorState extends State<AssetItemSelector> {
       _showList = true;
     });
     try {
-      final resp = await ApiClient.instance.get(
+      final resp = await ref.read(apiClientProvider).dio.get(
         '/flows/catalog-items/${widget.catalogSlug}',
         queryParameters: {'q': q, 'limit': 20},
       );

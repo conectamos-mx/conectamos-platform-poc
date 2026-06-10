@@ -24,7 +24,8 @@ el global y las funciones formatean en la zona del tenant.
 | `initTz` | `void initTz()` | Inicializa la base de datos de zonas horarias. Llamar una vez en `main()`. Idempotente. |
 | `setActiveZone` | `void setActiveZone(String iana)` | Actualiza la zona activa. Si IANA invalido → null (UTC fallback). Llamado por `tenantZoneSyncProvider`. |
 | `formatInTimeZone` | `({String text, bool utcFallback}) formatInTimeZone(DateTime utcInstant, DateFormat fmt)` | Formatea `utcInstant` en zona activa. Fallback: UTC + " (UTC)". |
-| `nowInZone` | `({DateTime now, bool utcFallback}) nowInZone()` | `DateTime.now()` en zona activa. Fallback: UTC. |
+| `nowInZone` | `({DateTime now, bool utcFallback}) nowInZone()` | `DateTime.now()` en zona activa. Fallback: UTC. Respeta `setNowForTest` override. |
+| `setNowForTest` | `@visibleForTesting void setNowForTest(DateTime? nowUtc)` | Override del instante "ahora" para tests determinísticos. Recibe UTC; null restaura reloj real. |
 | `toZone` | `({DateTime dt, bool utcFallback}) toZone(DateTime instant)` | Convierte cualquier DateTime a zona activa. Fallback: UTC. |
 | `startOfDay` | `({DateTime dt, bool utcFallback}) startOfDay(DateTime instant)` | 00:00:00.000 del dia calendario del instante en zona activa. DST-aware. Fallback: UTC. |
 | `endOfDay` | `({DateTime dt, bool utcFallback}) endOfDay(DateTime instant)` | 23:59:59.999 del dia calendario del instante en zona activa. DST-aware. Fallback: UTC. |
@@ -138,6 +139,32 @@ usar noon UTC como ancla segura: `DateTime.utc(2026, 1, 15, 12)`. Noon UTC cae
 en el dia correcto para cualquier timezone dentro de UTC±12.
 
 Referencia canonica: `test/unit/tz_format_test.dart` (100% UTC).
+
+### setNowForTest — override de reloj para tests calendáricos
+
+Tests que verifican semántica de **día calendario** (Hoy/Ayer/agrupación por fecha)
+DEBEN fijar "ahora" con `setNowForTest(DateTime.utc(...))` en lugar de usar
+`DateTime.now()`. Sin esto, los tests fallan 1h diaria cuando la hora tenant cruza
+medianoche (PLA-169, deploy #205).
+
+```dart
+setUp(() => setActiveZone('America/Mexico_City'));
+tearDown(() => setNowForTest(null)); // OBLIGATORIO — evita fuga de estado
+
+test('yesterday returns Ayer', () {
+  final now = DateTime.utc(2026, 6, 10, 18, 0); // 12:00 CDMX
+  setNowForTest(now);
+  final loc = tz.getLocation('America/Mexico_City');
+  final yesterdayNoon = tz.TZDateTime(loc, 2026, 6, 9, 12, 0);
+  expect(fmtDateGroupLabel(yesterdayNoon.toUtc()), 'Ayer');
+});
+```
+
+**Cuándo usar:** tests de `fmtExecutionDate`, `fmtDateGroupLabel`, `fmtCreatedCell`,
+`isToday` — cualquier función que compara contra `nowInZone()`.
+
+**Cuándo NO hace falta:** tests de `fmtRelative` con duración pura (Hace X min),
+`isTelegramExpired`, `isWindowOpen` — comparan diferencia en segundos, no día calendario.
 
 ---
 
