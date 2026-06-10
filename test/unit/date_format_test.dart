@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:timezone/timezone.dart' as tz;
 import 'package:conectamos_platform/core/utils/date_format.dart';
 import 'package:conectamos_platform/core/utils/tz_format.dart';
 
@@ -241,6 +242,7 @@ void main() {
 
   group('fmtExecutionDate', () {
     setUp(() => setActiveZone('America/Mexico_City'));
+    tearDown(() => setNowForTest(null));
 
     test('null returns empty string', () {
       expect(fmtExecutionDate(null), '');
@@ -251,14 +253,19 @@ void main() {
     });
 
     test('today ISO starts with Hoy', () {
-      final iso = DateTime.now().toUtc().toIso8601String();
-      expect(fmtExecutionDate(iso), startsWith('Hoy'));
+      // Fix now to 2026-06-10 18:00 UTC = 12:00 CDMX
+      final now = DateTime.utc(2026, 6, 10, 18, 0);
+      setNowForTest(now);
+      expect(fmtExecutionDate(now.toIso8601String()), startsWith('Hoy'));
     });
 
     test('yesterday ISO starts with Ayer', () {
-      final yesterday = DateTime.now().subtract(const Duration(hours: 25));
-      final iso = yesterday.toUtc().toIso8601String();
-      expect(fmtExecutionDate(iso), startsWith('Ayer'));
+      // Fix now to 2026-06-10 18:00 UTC = 12:00 CDMX
+      final now = DateTime.utc(2026, 6, 10, 18, 0);
+      setNowForTest(now);
+      final loc = tz.getLocation('America/Mexico_City');
+      final yesterdayNoon = tz.TZDateTime(loc, 2026, 6, 9, 12, 0);
+      expect(fmtExecutionDate(yesterdayNoon.toUtc().toIso8601String()), startsWith('Ayer'));
     });
 
     test('old date returns dd/MM · HH:mm pattern', () {
@@ -270,12 +277,25 @@ void main() {
       setActiveZone('Invalid/Zone');
       expect(fmtExecutionDate('2020-01-01T12:00:00Z'), contains('(UTC)'));
     });
+
+    test('regression: yesterday at 00:30 tenant (deploy #205 failure window)', () {
+      // 06:30 UTC = 00:30 CDMX — the exact window that caused flaky failure
+      final now = DateTime.utc(2026, 6, 10, 6, 30);
+      setNowForTest(now);
+      final loc = tz.getLocation('America/Mexico_City');
+      final yesterdayNoon = tz.TZDateTime(loc, 2026, 6, 9, 12, 0);
+      expect(fmtExecutionDate(yesterdayNoon.toUtc().toIso8601String()), startsWith('Ayer'));
+      expect(fmtDateGroupLabel(yesterdayNoon.toUtc()), 'Ayer');
+      final r = fmtCreatedCell(yesterdayNoon.toUtc().toIso8601String());
+      expect(r.dateLine, startsWith('Ayer, '));
+    });
   });
 
   // ── isToday ─────────────────────────────────────────────────────────────────
 
   group('isToday', () {
     setUp(() => setActiveZone('America/Mexico_City'));
+    tearDown(() => setNowForTest(null));
 
     test('null returns false', () {
       expect(isToday(null), false);
@@ -286,13 +306,16 @@ void main() {
     });
 
     test('now returns true', () {
-      final iso = DateTime.now().toUtc().toIso8601String();
-      expect(isToday(iso), true);
+      final now = DateTime.utc(2026, 6, 10, 18, 0);
+      setNowForTest(now);
+      expect(isToday(now.toIso8601String()), true);
     });
 
     test('2 days ago returns false', () {
-      final old = DateTime.now().subtract(const Duration(days: 2));
-      expect(isToday(old.toUtc().toIso8601String()), false);
+      final now = DateTime.utc(2026, 6, 10, 18, 0);
+      setNowForTest(now);
+      final old = DateTime.utc(2026, 6, 8, 18, 0);
+      expect(isToday(old.toIso8601String()), false);
     });
   });
 
@@ -300,15 +323,20 @@ void main() {
 
   group('fmtDateGroupLabel', () {
     setUp(() => setActiveZone('America/Mexico_City'));
+    tearDown(() => setNowForTest(null));
 
     test('today returns Hoy', () {
-      final now = DateTime.now().toUtc();
+      final now = DateTime.utc(2026, 6, 10, 18, 0);
+      setNowForTest(now);
       expect(fmtDateGroupLabel(now), 'Hoy');
     });
 
     test('yesterday returns Ayer', () {
-      final yesterday = DateTime.now().subtract(const Duration(hours: 25)).toUtc();
-      expect(fmtDateGroupLabel(yesterday), 'Ayer');
+      final now = DateTime.utc(2026, 6, 10, 18, 0);
+      setNowForTest(now);
+      final loc = tz.getLocation('America/Mexico_City');
+      final yesterdayNoon = tz.TZDateTime(loc, 2026, 6, 9, 12, 0);
+      expect(fmtDateGroupLabel(yesterdayNoon.toUtc()), 'Ayer');
     });
 
     test('old date returns d mmm yyyy via intl', () {
@@ -340,7 +368,8 @@ void main() {
 
     test('invalid zone today returns Hoy (UTC)', () {
       setActiveZone('Invalid/Zone');
-      final now = DateTime.now().toUtc();
+      final now = DateTime.utc(2026, 6, 10, 18, 0);
+      setNowForTest(now);
       expect(fmtDateGroupLabel(now), 'Hoy (UTC)');
     });
   });
@@ -349,6 +378,7 @@ void main() {
 
   group('fmtCreatedCell', () {
     setUp(() => setActiveZone('America/Mexico_City'));
+    tearDown(() => setNowForTest(null));
 
     test('null returns dash dateLine and empty relativeLine', () {
       final r = fmtCreatedCell(null);
@@ -357,17 +387,20 @@ void main() {
     });
 
     test('today returns Hoy, HH:mm + Ahora', () {
-      final iso = DateTime.now().toUtc().toIso8601String();
-      final r = fmtCreatedCell(iso);
+      final now = DateTime.utc(2026, 6, 10, 18, 0);
+      setNowForTest(now);
+      final r = fmtCreatedCell(now.toIso8601String());
       expect(r.dateLine, startsWith('Hoy, '));
       expect(r.dateLine, matches(RegExp(r'^Hoy, \d{2}:\d{2}$')));
       expect(r.relativeLine, 'Ahora');
     });
 
     test('yesterday returns Ayer, HH:mm', () {
-      final yesterday = DateTime.now().subtract(const Duration(hours: 25));
-      final iso = yesterday.toUtc().toIso8601String();
-      final r = fmtCreatedCell(iso);
+      final now = DateTime.utc(2026, 6, 10, 18, 0);
+      setNowForTest(now);
+      final loc = tz.getLocation('America/Mexico_City');
+      final yesterdayNoon = tz.TZDateTime(loc, 2026, 6, 9, 12, 0);
+      final r = fmtCreatedCell(yesterdayNoon.toUtc().toIso8601String());
       expect(r.dateLine, startsWith('Ayer, '));
     });
 
@@ -392,8 +425,10 @@ void main() {
     });
 
     test('relativeLine delegates to fmtRelative', () {
-      final dt = DateTime.now().subtract(const Duration(minutes: 5));
-      final r = fmtCreatedCell(dt.toUtc().toIso8601String());
+      final now = DateTime.utc(2026, 6, 10, 18, 0);
+      setNowForTest(now);
+      final dt = now.subtract(const Duration(minutes: 5));
+      final r = fmtCreatedCell(dt.toIso8601String());
       expect(r.relativeLine, 'Hace 5 min');
     });
   });
