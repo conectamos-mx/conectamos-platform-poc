@@ -71,7 +71,7 @@ class _ExecutionDetailScreenState
     try {
       final results = await Future.wait([
         FlowsApi.getExecution(dio: ref.read(apiClientProvider).dio, executionId: widget.executionId),
-        ExecutionsApi.getMessages(executionId: widget.executionId)
+        ExecutionsApi.getMessages(dio: ref.read(apiClientProvider).dio, executionId: widget.executionId)
             .catchError((_) => <Map<String, dynamic>>[]),
       ]);
       final raw = results[0] as Map<String, dynamic>;
