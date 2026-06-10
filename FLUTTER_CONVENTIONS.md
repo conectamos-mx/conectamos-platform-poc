@@ -479,6 +479,42 @@ Cuando un formulario se genera dinamicamente a partir de un `fields_schema`
 
 ---
 
+## 17. Acceso a Dio (migración apiClientProvider, T5)
+
+Las API classes migradas reciben `{required Dio dio}` en lugar de usar
+`ApiClient.instance` internamente. Para obtener la instancia de Dio:
+
+**Widget con `WidgetRef` (ConsumerWidget / ConsumerStatefulWidget):**
+```dart
+final dio = ref.read(apiClientProvider).dio;
+await SomeApi.doThing(dio: dio, tenantId: tenantId);
+```
+
+**Widget anidado sin `ref` (StatefulWidget hijo):**
+Recibir `Dio` por constructor desde el ancestro Consumer más cercano:
+```dart
+class _InnerDialog extends StatefulWidget {
+  const _InnerDialog({required this.dio, ...});
+  final Dio dio;
+  ...
+}
+// En el ancestro Consumer:
+_InnerDialog(dio: ref.read(apiClientProvider).dio, ...)
+```
+
+**Criterio de decisión:**
+- Preferir convertir a `ConsumerStatefulWidget` cuando es barato (widget sin mixins
+  complejos, sin cascada de base classes).
+- Usar threading por constructor solo cuando la conversión es desproporcionada
+  (widget con `SingleTickerProviderStateMixin`, deep nesting, etc.).
+
+**Prohibido:**
+- `ProviderScope.containerOf` para acceder a `apiClientProvider`.
+- Crear instancias de `Dio` directamente (`Dio()`, `Dio(BaseOptions(...))`).
+- Usar `ApiClient.instance` en API classes ya migradas.
+
+---
+
 ## show_if evaluation en execution detail
 
 Patron establecido en ADR-347. Tres helpers en `execution_detail_screen.dart`:

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:dio/dio.dart';
+
+import '../../core/api/api_client.dart';
 import '../../core/api/catalogs_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
@@ -95,7 +98,7 @@ class _CatalogsScreenState extends ConsumerState<CatalogsScreen> {
     });
     try {
       final tenantId = ref.read(activeTenantIdProvider);
-      final data = await CatalogsApi.listCatalogs(tenantId: tenantId);
+      final data = await CatalogsApi.listCatalogs(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
       if (mounted) setState(() { _catalogs = data; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
@@ -107,7 +110,7 @@ class _CatalogsScreenState extends ConsumerState<CatalogsScreen> {
     final slug = await showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => NewCatalogWizard(tenantId: tenantId),
+      builder: (_) => NewCatalogWizard(tenantId: tenantId, dio: ref.read(apiClientProvider).dio),
     );
     if (slug != null && mounted) {
       context.go('/catalogs/$slug');
@@ -166,6 +169,7 @@ class _CatalogsScreenState extends ConsumerState<CatalogsScreen> {
                         catalogs: _catalogs,
                         canManage: canManage,
                         onRefresh: _load,
+                        dio: ref.read(apiClientProvider).dio,
                       ),
                     ),
         ),
@@ -181,10 +185,12 @@ class _CatalogsBody extends StatefulWidget {
     required this.catalogs,
     required this.canManage,
     required this.onRefresh,
+    required this.dio,
   });
   final List<Map<String, dynamic>> catalogs;
   final bool canManage;
   final VoidCallback onRefresh;
+  final Dio dio;
 
   @override
   State<_CatalogsBody> createState() => _CatalogsBodyState();
@@ -338,6 +344,7 @@ class _CatalogsBodyState extends State<_CatalogsBody> {
                         cat: entry.value,
                         canManage: widget.canManage,
                         onRefresh: widget.onRefresh,
+                        dio: widget.dio,
                       ),
                       if (!isLast)
                         const Divider(height: 1, color: AppColors.ctBorder),
@@ -369,9 +376,11 @@ class _CatalogRow extends StatefulWidget {
     required this.cat,
     required this.canManage,
     required this.onRefresh,
+    required this.dio,
   });
   final Map<String, dynamic> cat;
   final bool canManage;
+  final Dio dio;
   final VoidCallback onRefresh;
 
   @override
@@ -388,7 +397,7 @@ class _CatalogRowState extends State<_CatalogRow> {
     final messenger = ScaffoldMessenger.of(ctx);
     setState(() => _syncing = true);
     try {
-      await CatalogsApi.syncCatalog(catalogId: id);
+      await CatalogsApi.syncCatalog(dio: widget.dio, catalogId: id);
       if (mounted) {
         messenger.showSnackBar(const SnackBar(
           content: Text('Sincronización iniciada'),
