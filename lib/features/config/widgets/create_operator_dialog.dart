@@ -50,7 +50,7 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
   Future<void> _loadChannelTypes() async {
     setState(() => _channelTypesLoading = true);
     try {
-      final channels = await ChannelsApi.listChannels();
+      final channels = await ChannelsApi.listChannels(dio: ref.read(apiClientProvider).dio);
       final types = channels
           .map((ch) => ch['channel_type'] as String? ?? '')
           .where((t) => t.isNotEmpty)

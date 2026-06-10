@@ -85,7 +85,7 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       final results = await Future.wait([
-        ChannelsApi.listChannels(),
+        ChannelsApi.listChannels(dio: ref.read(apiClientProvider).dio),
         AiWorkersApi.listWorkers(dio: ref.read(apiClientProvider).dio),
       ]);
       if (!mounted) return;
@@ -116,9 +116,9 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
     final isActive = channel['is_active'] as bool? ?? false;
     try {
       if (isActive) {
-        await ChannelsApi.updateChannel(channelId: id, isActive: false);
+        await ChannelsApi.updateChannel(dio: ref.read(apiClientProvider).dio, channelId: id, isActive: false);
       } else {
-        await ChannelsApi.activateChannel(channelId: id);
+        await ChannelsApi.activateChannel(dio: ref.read(apiClientProvider).dio, channelId: id);
       }
       ref.read(channelStateVersionProvider.notifier).state++;
       await _fetchAll();
@@ -142,7 +142,7 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
                 orElse: () => <String, dynamic>{},
               )
             : <String, dynamic>{};
-        return _CreateChannelStepper(
+        return _CreateChannelStepper(dio: ref.read(apiClientProvider).dio,
           tenantWorkerId: widget.tenantWorkerId ?? '',
           workerData: currentWorker.isNotEmpty ? currentWorker : null,
         );
@@ -487,9 +487,11 @@ class _ChannelLogo extends StatelessWidget {
 
 class _CreateChannelStepper extends StatefulWidget {
   const _CreateChannelStepper({
+    required this.dio,
     required this.tenantWorkerId,
     this.workerData,
   });
+  final Dio dio;
   final String tenantWorkerId;
   final Map<String, dynamic>? workerData;
 
@@ -718,6 +720,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
       final Map<String, dynamic> result;
       if (_channelType == 'telegram') {
         result = await ChannelsApi.createChannel(
+          dio: widget.dio,
           tenantWorkerId: _workerId!,
           displayName:    _nameCtrl.text.trim(),
           color:          _color,
@@ -726,6 +729,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
         );
       } else {
         result = await ChannelsApi.createChannel(
+          dio: widget.dio,
           tenantWorkerId: _workerId!,
           displayName:    _nameCtrl.text.trim(),
           color:          _color,
@@ -736,7 +740,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
         );
         final id = result['id'] as String? ?? result['channel_id'] as String? ?? '';
         if (id.isNotEmpty) {
-          ChannelsApi.syncTemplates(channelId: id)
+          ChannelsApi.syncTemplates(dio: widget.dio, channelId: id)
               .catchError((e) => <String, dynamic>{});
         }
       }
@@ -801,7 +805,7 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
       final eventType = data['event_type'] as String? ?? '';
       // Fire-and-forget telemetry for actionable events
       if (eventType == 'signup_cancelled' || eventType == 'signup_error') {
-        ChannelsApi.postSignupEvent(data).ignore();
+        ChannelsApi.postSignupEvent(data, dio: widget.dio).ignore();
       }
       // 'fb_login_cancelled' and 'sdk_not_ready' are expected — no POST needed
     } catch (_) {
@@ -820,9 +824,10 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
     _embeddedSignupInProgress = true;
     try {
       if (!hasSignupData) {
-        ChannelsApi.postSignupEvent({'event_type': 'missing_signup_data'}).ignore();
+        ChannelsApi.postSignupEvent({'event_type': 'missing_signup_data'}, dio: widget.dio).ignore();
       }
       final result = await ChannelsApi.embeddedSignup(
+        dio: widget.dio,
         code: code,
         phoneNumberId: phoneNumberId,
         wabaId: wabaId,
@@ -870,11 +875,13 @@ class _CreateChannelStepperState extends State<_CreateChannelStepper> {
         setState(() { _verifying = false; _botUsername = result['username'] as String?; _step++; });
       } else {
         await ChannelsApi.verifyCredentials(
+          dio: widget.dio,
           phoneNumberId: _phoneCtrl.text.trim(),
           accessToken:   _tokenCtrl.text.trim(),
         );
         if (!mounted) return;
         await ChannelsApi.activateWhatsapp(
+          dio: widget.dio,
           phoneNumberId: _phoneCtrl.text.trim(),
           wabaId:        _wabaCtrl.text.trim(),
           accessToken:   _tokenCtrl.text.trim(),

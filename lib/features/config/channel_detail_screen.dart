@@ -105,7 +105,7 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
     setState(() { _loading = true; _error = null; });
     try {
       _tenantId = ref.read(activeTenantIdProvider);
-      final channel = await ChannelsApi.getChannel(channelId: widget.channelId);
+      final channel = await ChannelsApi.getChannel(dio: ref.read(apiClientProvider).dio, channelId: widget.channelId);
       if (!mounted) return;
       final isWa = (channel['channel_type'] as String? ?? '') == 'whatsapp';
       _tabCtrl?.dispose();
@@ -134,13 +134,14 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
     try {
       if (current) {
         final updated = await ChannelsApi.updateChannel(
+          dio: ref.read(apiClientProvider).dio,
           channelId: widget.channelId,
           isActive: false,
         );
         if (!mounted) return;
         setState(() { _channel = updated; _toggling = false; });
       } else {
-        await ChannelsApi.activateChannel(channelId: widget.channelId);
+        await ChannelsApi.activateChannel(dio: ref.read(apiClientProvider).dio, channelId: widget.channelId);
         if (!mounted) return;
         await _load();
       }
@@ -173,6 +174,7 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
         return;
       }
       await ChannelsApi.deleteChannel(
+        dio: ref.read(apiClientProvider).dio,
         tenantWorkerId: tenantWorkerId,
         channelId: widget.channelId,
       );
@@ -282,6 +284,7 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
             children: [
               _InfoTab(
                 channel: ch,
+                dio: ref.read(apiClientProvider).dio,
                 onUpdated: (updated) {
                   if (mounted) setState(() => _channel = updated);
                 },
@@ -339,6 +342,7 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
             children: [
               _TelegramInfoPanel(
                 channel: ch,
+                dio: ref.read(apiClientProvider).dio,
                 onUpdated: (updated) {
                   if (mounted) setState(() => _channel = updated);
                 },
@@ -690,11 +694,13 @@ class _DeleteChannelDialogState extends State<_DeleteChannelDialog> {
 class _InfoTab extends StatefulWidget {
   const _InfoTab({
     required this.channel,
+    required this.dio,
     required this.onUpdated,
     required this.onError,
     required this.onSuccess,
   });
   final Map<String, dynamic> channel;
+  final Dio dio;
   final ValueChanged<Map<String, dynamic>> onUpdated;
   final ValueChanged<String> onError;
   final ValueChanged<String> onSuccess;
@@ -727,6 +733,7 @@ class _InfoTabState extends State<_InfoTab> {
     setState(() => _saving = true);
     try {
       final updated = await ChannelsApi.updateChannel(
+        dio: widget.dio,
         channelId: widget.channel['id'] as String,
         displayName: name,
       );
@@ -1184,11 +1191,13 @@ class _TemplatesTabState extends State<_TemplatesTab> {
 class _TelegramInfoPanel extends StatefulWidget {
   const _TelegramInfoPanel({
     required this.channel,
+    required this.dio,
     required this.onUpdated,
     required this.onError,
     required this.onSuccess,
   });
   final Map<String, dynamic> channel;
+  final Dio dio;
   final ValueChanged<Map<String, dynamic>> onUpdated;
   final ValueChanged<String> onError;
   final ValueChanged<String> onSuccess;
@@ -1230,6 +1239,7 @@ class _TelegramInfoPanelState extends State<_TelegramInfoPanel> {
     setState(() => _saving = true);
     try {
       final updated = await ChannelsApi.updateChannel(
+        dio: widget.dio,
         channelId: widget.channel['id'] as String,
         displayName: name,
       );
@@ -1397,6 +1407,7 @@ class _WelcomeTabState extends State<_WelcomeTab> {
     setState(() => _saving = true);
     try {
       await ChannelsApi.updateWelcomeTemplate(
+        dio: widget.dio,
         channelId: widget.channel['id'] as String,
         templateId: _selectedId!,
       );

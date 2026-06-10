@@ -135,7 +135,7 @@ class _ConversationsBodyState extends ConsumerState<_ConversationsBody> {
     setState(() => _loadingChannels = true);
     final tenantId = ref.read(activeTenantIdProvider);
     try {
-      final all = await ChannelsApi.listChannels();
+      final all = await ChannelsApi.listChannels(dio: ref.read(apiClientProvider).dio);
       final active = all
           .where((c) => c['is_active'] as bool? ?? false)
           .toList()
