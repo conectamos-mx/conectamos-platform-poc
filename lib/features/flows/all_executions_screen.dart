@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:html' as html;
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -192,6 +193,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
       debugPrint('[Search] query="$_searchText" fields=$_activeFieldSearches');
       final fieldEntry = _activeFieldSearches.entries.firstOrNull;
       final data = await ExecutionsApi.listExecutions(
+        dio:         ref.read(apiClientProvider).dio,
         tenantId:    tenantId,
         status:      _filterStatus.isNotEmpty ? _filterStatus : null,
         workerIds:   _filterWorkerIds.isNotEmpty ? _filterWorkerIds : null,
@@ -231,7 +233,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
         '${ref.read(activeTenantIdProvider)}');
     if (tenantId.isEmpty) return;
     try {
-      final views = await ExecutionsApi.listViews(tenantId: tenantId);
+      final views = await ExecutionsApi.listViews(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
       debugPrint('[Views] response: ${views.toString().substring(0, views.toString().length.clamp(0, 200))}');
       if (mounted) {
         setState(() {
@@ -377,6 +379,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     if (tenantId.isEmpty) return;
     try {
       final fields = await ExecutionsApi.getSearchableFields(
+        dio: ref.read(apiClientProvider).dio,
         tenantId: tenantId,
         workerIds: _filterWorkerIds.isEmpty ? null : _filterWorkerIds,
       );
@@ -560,6 +563,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
                   children: [
                     if (_showFilterSidebar)
                       _FilterSidebar(
+                        dio:                ref.read(apiClientProvider).dio,
                         filterStatus:       _filterStatus,
                         filterChannelType:  _filterChannelType,
                         filterDateRange:    _filterDateRange,
@@ -1547,6 +1551,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     final tenantId = ref.read(activeTenantIdProvider);
     try {
       final view = await ExecutionsApi.createView(
+        dio: ref.read(apiClientProvider).dio,
         tenantId: tenantId,
         name:     name,
         filters:  _currentFiltersMap(),
@@ -1567,7 +1572,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
 
   Future<void> _deleteView(String viewId) async {
     try {
-      await ExecutionsApi.deleteView(viewId: viewId);
+      await ExecutionsApi.deleteView(dio: ref.read(apiClientProvider).dio, viewId: viewId);
       if (!mounted) return;
       setState(() {
         _savedViews = _savedViews.where((v) => v['id'] != viewId).toList();
@@ -2053,6 +2058,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     try {
       final fieldEntry = _activeFieldSearches.entries.firstOrNull;
       final bytes = await ExecutionsApi.exportExecutions(
+        dio:         ref.read(apiClientProvider).dio,
         tenantId:    tenantId,
         status:      _filterStatus.isEmpty ? null : _filterStatus,
         workerIds:   _filterWorkerIds.isEmpty ? null : _filterWorkerIds,
@@ -2971,6 +2977,7 @@ class _GroupingChipState extends State<_GroupingChip> {
 
 class _FilterSidebar extends StatefulWidget {
   const _FilterSidebar({
+    required this.dio,
     required this.filterStatus,
     required this.filterChannelType,
     required this.filterDateRange,
@@ -2993,6 +3000,7 @@ class _FilterSidebar extends StatefulWidget {
     required this.hasWorkers,
   });
 
+  final Dio                                       dio;
   final List<String>                              filterStatus;
   final String?                                   filterChannelType;
   final String?                                   filterDateRange;
@@ -3028,7 +3036,7 @@ class _FilterSidebarState extends State<_FilterSidebar> {
   }
 
   Future<void> _loadStatuses() async {
-    final statuses = await ExecutionsApi.getExecutionStatuses();
+    final statuses = await ExecutionsApi.getExecutionStatuses(dio: widget.dio);
     if (mounted) setState(() => _availableStatuses = statuses);
   }
 

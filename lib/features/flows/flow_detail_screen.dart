@@ -213,7 +213,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
       final tenantId = ref.read(activeTenantIdProvider);
       final results = await Future.wait([
         FlowsApi.getFlow(dio: ref.read(apiClientProvider).dio, flowId: widget.flowId),
-        OperatorRolesApi.listRoles(tenantId: tenantId),
+        OperatorRolesApi.listRoles(dio: ref.read(apiClientProvider).dio, tenantId: tenantId),
       ]);
       if (!mounted) return;
       final flow = results[0] as Map<String, dynamic>;
@@ -1016,6 +1016,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
                       onAddField: () => _openFieldDialog(),
                     ),
                     _ComportamientoTab(
+                      dio: ref.read(apiClientProvider).dio,
                       conditions: _conditions,
                       flowFields: _fields,
                       canManage: canManage,
@@ -2775,6 +2776,7 @@ class _EmptyState extends StatelessWidget {
 
 class _ComportamientoTab extends StatefulWidget {
   const _ComportamientoTab({
+    required this.dio,
     required this.conditions,
     required this.flowFields,
     required this.canManage,
@@ -2791,6 +2793,7 @@ class _ComportamientoTab extends StatefulWidget {
     required this.onTriggerSourcesChanged,
   });
 
+  final Dio dio;
   final List<Map<String, dynamic>> conditions;
   final List<Map<String, dynamic>> flowFields;
   final bool canManage;
@@ -2858,6 +2861,7 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
     if (widget.tenantWorkerId.isEmpty) return;
     try {
       final channels = await ChannelsApi.listChannelsByWorker(
+        dio: widget.dio,
         tenantWorkerId: widget.tenantWorkerId,
       );
       final waChannel = channels.firstWhere(
@@ -2876,7 +2880,7 @@ class _ComportamientoTabState extends State<_ComportamientoTab> {
   Future<void> _loadTemplates(String channelId) async {
     setState(() => _loadingTemplates = true);
     try {
-      final all = await ChannelsApi.listTemplates(channelId: channelId);
+      final all = await ChannelsApi.listTemplates(dio: widget.dio, channelId: channelId);
       if (!mounted) return;
       setState(() {
         _approvedTemplates =
@@ -4875,7 +4879,7 @@ class _ActionDialogState extends State<_ActionDialog> {
   Future<void> _loadGroups() async {
     setState(() => _loadingGroups = true);
     try {
-      final data = await GroupsApi.listGroupsByTenant();
+      final data = await GroupsApi.listGroupsByTenant(dio: widget.dio);
       if (mounted) setState(() { _groups = data; _loadingGroups = false; });
     } catch (e) {
       if (mounted) setState(() => _loadingGroups = false);
@@ -4885,7 +4889,7 @@ class _ActionDialogState extends State<_ActionDialog> {
   Future<void> _loadControlTowers() async {
     setState(() => _loadingControlTowers = true);
     try {
-      final data = await GroupsApi.listControlTowers();
+      final data = await GroupsApi.listControlTowers(dio: widget.dio);
       if (mounted) setState(() { _controlTowers = data; _loadingControlTowers = false; });
     } catch (e) {
       if (mounted) setState(() => _loadingControlTowers = false);
@@ -5102,7 +5106,7 @@ class _ActionDialogState extends State<_ActionDialog> {
   Future<void> _checkGoogleOAuthForAction() async {
     setState(() => _checkingGoogleOAuth = true);
     try {
-      final status = await ConnectionsApi.getGoogleStatus();
+      final status = await ConnectionsApi.getGoogleStatus(dio: widget.dio);
       if (mounted) setState(() => _googleConnected = status['connected'] == true);
     } catch (_) {
       if (mounted) setState(() => _googleConnected = false);
@@ -5141,6 +5145,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     });
     try {
       final headers = await ConnectionsApi.getSheetHeaders(
+        dio: widget.dio,
         spreadsheetId: spreadsheetId,
         sheetName: sheetName,
       );
@@ -5237,6 +5242,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     if (widget.tenantWorkerId.isEmpty) return;
     try {
       final channels = await ChannelsApi.listChannelsByWorker(
+        dio: widget.dio,
         tenantWorkerId: widget.tenantWorkerId,
       );
       final waChannel = channels.firstWhere(
@@ -5253,7 +5259,7 @@ class _ActionDialogState extends State<_ActionDialog> {
   Future<void> _loadTemplatesForAction(String channelId) async {
     setState(() => _loadingTemplates = true);
     try {
-      final all = await ChannelsApi.listTemplates(channelId: channelId);
+      final all = await ChannelsApi.listTemplates(dio: widget.dio, channelId: channelId);
       if (!mounted) return;
       setState(() {
         _approvedTemplates =

@@ -275,7 +275,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
 
   Future<void> _loadGoogleStatus() async {
     try {
-      final status = await ConnectionsApi.getGoogleStatus();
+      final status = await ConnectionsApi.getGoogleStatus(dio: ref.read(apiClientProvider).dio);
       if (!mounted) return;
       final connected = status['connected'] as bool? ?? false;
       setState(() {
@@ -298,7 +298,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
     try {
       final tenantId = ref.read(activeTenantIdProvider);
       if (tenantId.isEmpty) return;
-      final status = await ConnectionsApi.getMicrosoftStatus(tenantId: tenantId);
+      final status = await ConnectionsApi.getMicrosoftStatus(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
       if (!mounted) return;
       final connections = (status['connections'] as List?) ?? [];
       final microsoftConn = connections
@@ -408,7 +408,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
 
   Future<void> _connectGsheets() async {
     try {
-      final authUrl = await ConnectionsApi.getGoogleAuthUrl();
+      final authUrl = await ConnectionsApi.getGoogleAuthUrl(dio: ref.read(apiClientProvider).dio);
       final popup = html.window.open(
         authUrl,
         'google_oauth',
@@ -466,7 +466,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
   Future<void> _connectMicrosoft() async {
     try {
       final tenantId = ref.read(activeTenantIdProvider);
-      final authUrl = await ConnectionsApi.getMicrosoftAuthUrl(tenantId: tenantId);
+      final authUrl = await ConnectionsApi.getMicrosoftAuthUrl(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
       final popup = html.window.open(
         authUrl,
         'microsoft_oauth',
@@ -555,7 +555,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
           _gsheetsConnectedAt = null;
         });
         try {
-          await ConnectionsApi.disconnectGoogle();
+          await ConnectionsApi.disconnectGoogle(dio: ref.read(apiClientProvider).dio);
         } catch (e) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -579,7 +579,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
         });
         try {
           final tenantId = ref.read(activeTenantIdProvider);
-          await ConnectionsApi.disconnectMicrosoft(tenantId: tenantId);
+          await ConnectionsApi.disconnectMicrosoft(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
         } catch (e) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -2788,7 +2788,7 @@ class _CreateTenantIntegrationDialogState
 
   Future<void> _loadWorkers() async {
     try {
-      final list = await AiWorkersApi.listWorkers();
+      final list = await AiWorkersApi.listWorkers(dio: ref.read(apiClientProvider).dio);
       if (!mounted) return;
       setState(() {
         _workers = list;

@@ -1,6 +1,5 @@
+import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-import 'api_client.dart';
 
 class EscalacionesApi {
   static SupabaseClient get _sb => Supabase.instance.client;
@@ -8,6 +7,7 @@ class EscalacionesApi {
   // ── REST ──────────────────────────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> getEscalaciones({
+    required Dio dio,
     String? status,
     String? assignedTo,
   }) async {
@@ -16,7 +16,7 @@ class EscalacionesApi {
     if (assignedTo != null && assignedTo.isNotEmpty) {
       params['assigned_to'] = assignedTo;
     }
-    final res = await ApiClient.instance.get(
+    final res = await dio.get(
       '/escalations',
       queryParameters: params,
     );
@@ -29,6 +29,7 @@ class EscalacionesApi {
 
   static Future<void> patch(
     String id, {
+    required Dio dio,
     required String action,
     String? assignedTo,
     String? resolutionNotes,
@@ -36,7 +37,7 @@ class EscalacionesApi {
     final body = <String, dynamic>{'action': action};
     if (assignedTo != null) body['assigned_to'] = assignedTo;
     if (resolutionNotes != null) body['resolution_notes'] = resolutionNotes;
-    await ApiClient.instance.patch('/escalations/$id', data: body);
+    await dio.patch('/escalations/$id', data: body);
   }
 
   // ── Supabase ──────────────────────────────────────────────────────────────

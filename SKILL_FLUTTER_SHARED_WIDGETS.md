@@ -1534,3 +1534,32 @@ PhoneFieldWidget(
 **Cuándo usarlo:** En TODOS los campos de teléfono con selector de país. Reemplaza
 cualquier `TextField` manual con hint de teléfono. El caller NO necesita validar E.164
 manualmente — el widget lo formatea internamente vía `PhoneNormalizer`.
+
+### 2.21 ImagePickerAvatar · `lib/shared/widgets/image_picker_avatar.dart`
+
+Avatar circular con botón de cámara superpuesto. Al hacer tap abre `FilePicker` (imágenes),
+sube el archivo vía `GroupsApi.uploadControlTowerIcon` y notifica al padre con la URL resultante.
+Muestra spinner durante la subida. Usa `AppAvatar` internamente.
+
+```dart
+import '../../shared/widgets/image_picker_avatar.dart';
+
+ImagePickerAvatar(
+  dio: ref.read(apiClientProvider).dio,
+  imageUrl: _iconUrl,
+  fallback: const Icon(Icons.group, size: 40, color: AppColors.ctText3),
+  onImageSelected: (url) => setState(() => _iconUrl = url),
+)
+```
+
+| Prop | Tipo | Default | Descripción |
+|------|------|---------|-------------|
+| `dio` | `Dio` | requerido | Instancia Dio para la llamada de upload |
+| `imageUrl` | `String?` | null | URL de la imagen actual (nullable) |
+| `fallback` | `Widget` | requerido | Widget a mostrar cuando no hay imagen (icono, iniciales, etc.) |
+| `onImageSelected` | `ValueChanged<String>` | requerido | Callback con la URL de la imagen subida |
+| `size` | `double` | 80 | Diámetro del avatar en px |
+
+**Cuándo usarlo:** En formularios de creación/edición que necesitan avatar con upload
+(torres de control, perfiles). No usar para avatares de solo lectura — ahí usar `AppAvatar`
+directamente.

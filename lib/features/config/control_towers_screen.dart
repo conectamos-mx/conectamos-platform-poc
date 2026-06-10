@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/groups_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -58,7 +59,7 @@ class _ControlTowersScreenState extends ConsumerState<ControlTowersScreen> {
     if (!mounted) return;
     setState(() { _loading = true; _error = null; });
     try {
-      final data = await GroupsApi.listControlTowers();
+      final data = await GroupsApi.listControlTowers(dio: ref.read(apiClientProvider).dio);
       if (!mounted) return;
       setState(() { _towers = data; _loading = false; });
     } catch (e) {
@@ -71,7 +72,7 @@ class _ControlTowersScreenState extends ConsumerState<ControlTowersScreen> {
   void _openEdit(Map<String, dynamic> tower) async {
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => _EditTowerDialog(tower: tower, onSaved: _load),
+      builder: (_) => _EditTowerDialog(tower: tower, dio: ref.read(apiClientProvider).dio, onSaved: _load),
     );
     if (result == true) _load();
   }
@@ -102,7 +103,7 @@ class _ControlTowersScreenState extends ConsumerState<ControlTowersScreen> {
     if (confirm != true) return;
 
     try {
-      await GroupsApi.deleteControlTower(towerId: towerId);
+      await GroupsApi.deleteControlTower(dio: ref.read(apiClientProvider).dio, towerId: towerId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Torre eliminada'), backgroundColor: AppColors.ctOk),
@@ -119,7 +120,7 @@ class _ControlTowersScreenState extends ConsumerState<ControlTowersScreen> {
   void _openSendMessage(Map<String, dynamic> tower) async {
     await showDialog(
       context: context,
-      builder: (_) => _SendMessageDialog(tower: tower),
+      builder: (_) => _SendMessageDialog(tower: tower, dio: ref.read(apiClientProvider).dio),
     );
   }
 
@@ -386,10 +387,12 @@ class _DetailRow extends StatelessWidget {
 class _EditTowerDialog extends StatefulWidget {
   const _EditTowerDialog({
     required this.tower,
+    required this.dio,
     required this.onSaved,
   });
 
   final Map<String, dynamic> tower;
+  final Dio dio;
   final VoidCallback onSaved;
 
   @override
@@ -429,6 +432,7 @@ class _EditTowerDialogState extends State<_EditTowerDialog> {
 
     try {
       await GroupsApi.updateControlTower(
+        dio: widget.dio,
         towerId: widget.tower['id'] as String,
         displayName: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
@@ -507,9 +511,10 @@ class _EditTowerDialogState extends State<_EditTowerDialog> {
 // ── Send Message Dialog ───────────────────────────────────────────────────
 
 class _SendMessageDialog extends StatefulWidget {
-  const _SendMessageDialog({required this.tower});
+  const _SendMessageDialog({required this.tower, required this.dio});
 
   final Map<String, dynamic> tower;
+  final Dio dio;
 
   @override
   State<_SendMessageDialog> createState() => _SendMessageDialogState();
@@ -533,6 +538,7 @@ class _SendMessageDialogState extends State<_SendMessageDialog> {
 
     try {
       await GroupsApi.sendMessageToTower(
+        dio: widget.dio,
         towerId: widget.tower['id'] as String,
         message: _messageCtrl.text.trim(),
       );

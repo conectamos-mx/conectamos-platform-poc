@@ -1991,7 +1991,7 @@ class _ManageChannelsDialogState extends ConsumerState<_ManageChannelsDialog> {
   Future<void> _load() async {
     try {
       final results = await Future.wait([
-        ChannelsApi.listChannels(),
+        ChannelsApi.listChannels(dio: ref.read(apiClientProvider).dio),
         IamApi.getUserChannels(dio: ref.read(apiClientProvider).dio, tenantUserId: widget.tenantUserId),
       ]);
       if (!mounted) return;

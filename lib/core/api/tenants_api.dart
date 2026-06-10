@@ -1,11 +1,13 @@
-import 'api_client.dart';
+import 'package:dio/dio.dart';
 
 class TenantsApi {
-  static Future<List<Map<String, dynamic>>> getTenants(
-      {String? userId}) async {
+  static Future<List<Map<String, dynamic>>> getTenants({
+    required Dio dio,
+    String? userId,
+  }) async {
     final queryParams =
         userId != null ? {'user_id': userId} : null;
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/tenants',
       queryParameters: queryParams,
     );

@@ -935,10 +935,10 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
     try {
       Map<String, dynamic> status;
       if (_isGoogle) {
-        status = await ConnectionsApi.getGoogleStatus();
+        status = await ConnectionsApi.getGoogleStatus(dio: ref.read(apiClientProvider).dio);
       } else {
         final raw =
-            await ConnectionsApi.getMicrosoftStatus(tenantId: tenantId);
+            await ConnectionsApi.getMicrosoftStatus(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
         final connections = raw['connections'] as List? ?? [];
         final ms = connections.firstWhere(
           (c) => c['provider'] == 'microsoft' && c['status'] == 'active',
@@ -977,11 +977,11 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
       final String authUrl;
       final String successMsg;
       if (_isGoogle) {
-        authUrl = await ConnectionsApi.getGoogleAuthUrl();
+        authUrl = await ConnectionsApi.getGoogleAuthUrl(dio: ref.read(apiClientProvider).dio);
         successMsg = 'google=success';
       } else {
         authUrl =
-            await ConnectionsApi.getMicrosoftAuthUrl(tenantId: tenantId);
+            await ConnectionsApi.getMicrosoftAuthUrl(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
         successMsg = 'microsoft=success';
       }
       html.window.open(

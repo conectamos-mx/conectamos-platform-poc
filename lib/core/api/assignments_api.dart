@@ -1,12 +1,13 @@
-import 'package:conectamos_platform/core/api/api_client.dart';
+import 'package:dio/dio.dart';
 
 class AssignmentsApi {
   static Future<List<Map<String, dynamic>>> listAssignments({
+    required Dio dio,
     required String tenantId,
     String? operatorId,
     String? scopeDate,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/api/v1/assignments',
       queryParameters: {
         'operator_id': ?operatorId,
@@ -22,15 +23,17 @@ class AssignmentsApi {
   }
 
   static Future<Map<String, dynamic>> getAssignment({
+    required Dio dio,
     required String tenantId,
     required String assignmentId,
   }) async {
     final response =
-        await ApiClient.instance.get('/api/v1/assignments/$assignmentId');
+        await dio.get('/api/v1/assignments/$assignmentId');
     return Map<String, dynamic>.from(response.data as Map);
   }
 
   static Future<Map<String, dynamic>> createAssignment({
+    required Dio dio,
     required String tenantId,
     required String operatorId,
     required DateTime scopeStart,
@@ -41,7 +44,7 @@ class AssignmentsApi {
   }) async {
     final scope =
         '[${scopeStart.toUtc().toIso8601String()},${scopeEnd.toUtc().toIso8601String()})';
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/api/v1/assignments/ingest',
       data: {
         'operator_id': operatorId,
@@ -55,9 +58,10 @@ class AssignmentsApi {
   }
 
   static Future<void> deleteAssignment({
+    required Dio dio,
     required String tenantId,
     required String assignmentId,
   }) async {
-    await ApiClient.instance.delete('/api/v1/assignments/$assignmentId');
+    await dio.delete('/api/v1/assignments/$assignmentId');
   }
 }

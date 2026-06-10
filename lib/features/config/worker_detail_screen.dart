@@ -104,7 +104,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
       _error = null;
     });
     try {
-      final workers = await AiWorkersApi.listTenantWorkers();
+      final workers = await AiWorkersApi.listTenantWorkers(dio: ref.read(apiClientProvider).dio);
       final worker = workers.firstWhere(
         (w) => (w['id'] as String?) == widget.workerId,
         orElse: () => <String, dynamic>{},
@@ -243,6 +243,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
         children: [
           _ConfigTab(
             worker: _worker ?? {},
+            dio: ref.read(apiClientProvider).dio,
             onWorkerUpdated: _load,
             onTabCanales: () => _tabCtrl.animateTo(1),
             onTabFlujos: () => _tabCtrl.animateTo(2),
@@ -293,7 +294,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
                     ),
                   ],
                 ),
-          _ControlTowersTab(workerId: widget.workerId),
+          _ControlTowersTab(workerId: widget.workerId, dio: ref.read(apiClientProvider).dio),
           _selectedFlowId == null
               ? _WorkerFlowsTab(
                   workerId: widget.workerId,
@@ -314,12 +315,14 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
 class _ConfigTab extends StatefulWidget {
   const _ConfigTab({
     required this.worker,
+    required this.dio,
     required this.onWorkerUpdated,
     this.onTabCanales,
     this.onTabFlujos,
   });
 
   final Map<String, dynamic> worker;
+  final Dio dio;
   final VoidCallback onWorkerUpdated;
   final VoidCallback? onTabCanales;
   final VoidCallback? onTabFlujos;
@@ -354,7 +357,7 @@ class _ConfigTabState extends State<_ConfigTab> {
     if (_confirmCtrl.text.trim() != _workerName) return;
     setState(() { _firingWorker = true; });
     try {
-      await AiWorkersApi.fireWorker(widget.worker['id'] as String);
+      await AiWorkersApi.fireWorker(widget.worker['id'] as String, dio: widget.dio);
       if (!mounted) return;
       setState(() { _showFireModal = false; _firingWorker = false; });
       context.go('/workers');
@@ -386,9 +389,9 @@ class _ConfigTabState extends State<_ConfigTab> {
           flex: 5,
           child: Column(
             children: [
-              _IdentityCard(worker: widget.worker, onSaved: widget.onWorkerUpdated),
+              _IdentityCard(worker: widget.worker, dio: widget.dio, onSaved: widget.onWorkerUpdated),
               const SizedBox(height: 16),
-              _StatusCard(worker: widget.worker, onSaved: widget.onWorkerUpdated),
+              _StatusCard(worker: widget.worker, dio: widget.dio, onSaved: widget.onWorkerUpdated),
               const SizedBox(height: 16),
               _DangerZoneCard(onFire: () {
                 _confirmCtrl.clear();
@@ -763,9 +766,10 @@ class _SectionCard extends StatelessWidget {
 // ── _IdentityCard ─────────────────────────────────────────────────────────────
 
 class _IdentityCard extends StatefulWidget {
-  const _IdentityCard({required this.worker, required this.onSaved});
+  const _IdentityCard({required this.worker, required this.dio, required this.onSaved});
 
   final Map<String, dynamic> worker;
+  final Dio dio;
   final VoidCallback onSaved;
 
   @override
@@ -798,6 +802,7 @@ class _IdentityCardState extends State<_IdentityCard> {
     setState(() => _savingName = true);
     try {
       await AiWorkersApi.updateWorker(
+        dio: widget.dio,
         tenantWorkerId: widget.worker['id'] as String,
         displayName: _nameCtrl.text.trim().isEmpty ? null : _nameCtrl.text.trim(),
       );
@@ -984,9 +989,10 @@ class _IdentityCardState extends State<_IdentityCard> {
 // ── _StatusCard ───────────────────────────────────────────────────────────────
 
 class _StatusCard extends StatefulWidget {
-  const _StatusCard({required this.worker, required this.onSaved});
+  const _StatusCard({required this.worker, required this.dio, required this.onSaved});
 
   final Map<String, dynamic> worker;
+  final Dio dio;
   final VoidCallback onSaved;
 
   @override
@@ -1001,6 +1007,7 @@ class _StatusCardState extends State<_StatusCard> {
     setState(() { _togglingActive = true; });
     try {
       await AiWorkersApi.updateWorker(
+        dio: widget.dio,
         tenantWorkerId: widget.worker['id'] as String,
         isActive: !current,
       );
@@ -1382,7 +1389,7 @@ class _WorkerFlowsTabState extends ConsumerState<_WorkerFlowsTab> {
       final tenantId = ref.read(activeTenantIdProvider);
       final results = await Future.wait([
         FlowsApi.getFlowsByWorker(dio: ref.read(apiClientProvider).dio, tenantWorkerId: widget.workerId),
-        OperatorRolesApi.listRoles(tenantId: tenantId),
+        OperatorRolesApi.listRoles(dio: ref.read(apiClientProvider).dio, tenantId: tenantId),
       ]);
       if (!mounted) return;
       final flows = List<Map<String, dynamic>>.from(results[0] as List);
@@ -1952,7 +1959,7 @@ class _NewFlowDialogState extends ConsumerState<_NewFlowDialog> {
   Future<void> _loadRoles() async {
     setState(() => _loadingRoles = true);
     try {
-      final roles = await OperatorRolesApi.listRoles(tenantId: widget.tenantId);
+      final roles = await OperatorRolesApi.listRoles(dio: ref.read(apiClientProvider).dio, tenantId: widget.tenantId);
       if (mounted) {
         setState(() => _availableRoles = List<Map<String, dynamic>>.from(roles));
       }
@@ -2261,8 +2268,9 @@ class _SummaryRow extends StatelessWidget {
 // ── _ControlTowersTab ─────────────────────────────────────────────────────
 
 class _ControlTowersTab extends StatefulWidget {
-  const _ControlTowersTab({required this.workerId});
+  const _ControlTowersTab({required this.workerId, required this.dio});
   final String workerId;
+  final Dio dio;
 
   @override
   State<_ControlTowersTab> createState() => _ControlTowersTabState();
@@ -2283,7 +2291,7 @@ class _ControlTowersTabState extends State<_ControlTowersTab> {
     if (!mounted) return;
     setState(() { _loading = true; _error = null; });
     try {
-      final all = await GroupsApi.listControlTowers();
+      final all = await GroupsApi.listControlTowers(dio: widget.dio);
       // Filtrar por worker_id
       final filtered = all.where((t) => t['worker_id'] == widget.workerId).toList();
       if (!mounted) return;
@@ -2305,6 +2313,7 @@ class _ControlTowersTabState extends State<_ControlTowersTab> {
       context: context,
       builder: (_) => _EditTowerDialog(
         tower: tower,
+        dio: widget.dio,
         onSaved: _load,
       ),
     );
@@ -2337,7 +2346,7 @@ class _ControlTowersTabState extends State<_ControlTowersTab> {
     if (confirm != true) return;
 
     try {
-      await GroupsApi.deleteControlTower(towerId: towerId);
+      await GroupsApi.deleteControlTower(dio: widget.dio, towerId: towerId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Torre "$displayName" eliminada')),
@@ -2373,6 +2382,7 @@ class _ControlTowersTabState extends State<_ControlTowersTab> {
                     context: context,
                     builder: (_) => _CreateTowerDialog(
                       workerId: widget.workerId,
+                      dio: widget.dio,
                       onSaved: _load,
                     ),
                   );
@@ -2522,10 +2532,12 @@ class _TowerCard extends StatelessWidget {
 class _CreateTowerDialog extends StatefulWidget {
   const _CreateTowerDialog({
     required this.workerId,
+    required this.dio,
     required this.onSaved,
   });
 
   final String workerId;
+  final Dio dio;
   final VoidCallback onSaved;
 
   @override
@@ -2596,6 +2608,7 @@ class _CreateTowerDialogState extends State<_CreateTowerDialog> {
 
     try {
       await GroupsApi.createControlTower(
+        dio: widget.dio,
         workerId: widget.workerId,
         displayName: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
@@ -2637,6 +2650,7 @@ class _CreateTowerDialogState extends State<_CreateTowerDialog> {
               // Avatar picker
               Center(
                 child: ImagePickerAvatar(
+                  dio: widget.dio,
                   imageUrl: _iconUrl,
                   fallback: const Icon(
                     Icons.group,
@@ -2705,10 +2719,12 @@ class _CreateTowerDialogState extends State<_CreateTowerDialog> {
 class _EditTowerDialog extends StatefulWidget {
   const _EditTowerDialog({
     required this.tower,
+    required this.dio,
     required this.onSaved,
   });
 
   final Map<String, dynamic> tower;
+  final Dio dio;
   final VoidCallback onSaved;
 
   @override
@@ -2762,6 +2778,7 @@ class _EditTowerDialogState extends State<_EditTowerDialog> {
 
     try {
       await GroupsApi.updateControlTower(
+        dio: widget.dio,
         towerId: widget.tower['id'] as String,
         displayName: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
@@ -2804,6 +2821,7 @@ class _EditTowerDialogState extends State<_EditTowerDialog> {
               // Avatar picker
               Center(
                 child: ImagePickerAvatar(
+                  dio: widget.dio,
                   imageUrl: _iconUrl,
                   fallback: const Icon(
                     Icons.group,

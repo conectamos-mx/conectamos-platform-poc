@@ -1,16 +1,16 @@
-import 'package:conectamos_platform/core/api/api_client.dart';
 import 'package:dio/dio.dart';
 
 class GroupsApi {
-  static Future<List<Map<String, dynamic>>> listGroupsByTenant() async {
-    final response = await ApiClient.instance.get('/groups/by-tenant');
+  static Future<List<Map<String, dynamic>>> listGroupsByTenant({required Dio dio}) async {
+    final response = await dio.get('/groups/by-tenant');
     return List<Map<String, dynamic>>.from(response.data);
   }
 
   static Future<List<Map<String, dynamic>>> listGroups({
+    required Dio dio,
     required String channelId,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/groups',
       queryParameters: {'channel_id': channelId},
     );
@@ -18,11 +18,12 @@ class GroupsApi {
   }
 
   static Future<Map<String, dynamic>> createGroup({
+    required Dio dio,
     required String channelId,
     required String subject,
     String? description,
   }) async {
-    final response = await ApiClient.instance.post('/groups', data: {
+    final response = await dio.post('/groups', data: {
       'channel_id': channelId,
       'subject': subject,
       'description': ?description,
@@ -31,17 +32,19 @@ class GroupsApi {
   }
 
   static Future<Map<String, dynamic>> getGroup({
+    required Dio dio,
     required String groupId,
   }) async {
-    final response = await ApiClient.instance.get('/groups/$groupId');
+    final response = await dio.get('/groups/$groupId');
     return Map<String, dynamic>.from(response.data);
   }
 
   static Future<Map<String, dynamic>> updateGroup({
+    required Dio dio,
     required String groupId,
     required String displayName,
   }) async {
-    final response = await ApiClient.instance.patch(
+    final response = await dio.patch(
       '/groups/$groupId',
       data: {'display_name': displayName},
     );
@@ -49,25 +52,28 @@ class GroupsApi {
   }
 
   static Future<void> deleteGroup({
+    required Dio dio,
     required String groupId,
   }) async {
-    await ApiClient.instance.delete('/groups/$groupId');
+    await dio.delete('/groups/$groupId');
   }
 
   static Future<List<Map<String, dynamic>>> getVisibility({
+    required Dio dio,
     required String groupId,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/groups/$groupId/visibility',
     );
     return List<Map<String, dynamic>>.from(response.data);
   }
 
   static Future<List<Map<String, dynamic>>> addVisibility({
+    required Dio dio,
     required String groupId,
     required List<String> tenantUserIds,
   }) async {
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/groups/$groupId/visibility',
       data: {'tenant_user_ids': tenantUserIds},
     );
@@ -75,29 +81,31 @@ class GroupsApi {
   }
 
   static Future<void> removeVisibility({
+    required Dio dio,
     required String groupId,
     required String tenantUserId,
   }) async {
-    await ApiClient.instance.delete(
+    await dio.delete(
       '/groups/$groupId/visibility/$tenantUserId',
     );
   }
 
   // ── Control Towers ──────────────────────────────────────────────────────
 
-  static Future<List<Map<String, dynamic>>> listControlTowers() async {
-    final response = await ApiClient.instance.get('/control-towers');
+  static Future<List<Map<String, dynamic>>> listControlTowers({required Dio dio}) async {
+    final response = await dio.get('/control-towers');
     return List<Map<String, dynamic>>.from(response.data);
   }
 
   static Future<Map<String, dynamic>> createControlTower({
+    required Dio dio,
     required String workerId,
     required String displayName,
     String? description,
     required List<String> participantPhones,
     String? iconUrl,
   }) async {
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/control-towers',
       data: {
         'worker_id': workerId,
@@ -111,13 +119,15 @@ class GroupsApi {
   }
 
   static Future<Map<String, dynamic>> getControlTower({
+    required Dio dio,
     required String towerId,
   }) async {
-    final response = await ApiClient.instance.get('/control-towers/$towerId');
+    final response = await dio.get('/control-towers/$towerId');
     return Map<String, dynamic>.from(response.data);
   }
 
   static Future<Map<String, dynamic>> updateControlTower({
+    required Dio dio,
     required String towerId,
     String? displayName,
     String? description,
@@ -125,7 +135,7 @@ class GroupsApi {
     List<String>? participants,
     String? iconUrl,
   }) async {
-    final response = await ApiClient.instance.put(
+    final response = await dio.put(
       '/control-towers/$towerId',
       data: {
         if (displayName != null) 'display_name': displayName,
@@ -139,16 +149,18 @@ class GroupsApi {
   }
 
   static Future<void> deleteControlTower({
+    required Dio dio,
     required String towerId,
   }) async {
-    await ApiClient.instance.delete('/control-towers/$towerId');
+    await dio.delete('/control-towers/$towerId');
   }
 
   static Future<Map<String, dynamic>> sendMessageToTower({
+    required Dio dio,
     required String towerId,
     required String message,
   }) async {
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/control-towers/$towerId/send-message',
       data: {'message': message},
     );
@@ -156,6 +168,7 @@ class GroupsApi {
   }
 
   static Future<String> uploadControlTowerIcon({
+    required Dio dio,
     required List<int> fileBytes,
     required String fileName,
   }) async {
@@ -165,7 +178,7 @@ class GroupsApi {
         filename: fileName,
       ),
     });
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/control-towers/upload-icon',
       data: formData,
     );

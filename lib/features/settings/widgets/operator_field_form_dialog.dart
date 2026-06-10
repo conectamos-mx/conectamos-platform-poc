@@ -29,11 +29,13 @@ class OperatorFieldFormDialog extends StatefulWidget {
   const OperatorFieldFormDialog({
     super.key,
     required this.tenantId,
+    required this.dio,
     this.field,
     required this.onSaved,
   });
 
   final String tenantId;
+  final Dio dio;
   final Map<String, dynamic>? field; // null = create mode
   final VoidCallback onSaved;
 
@@ -112,12 +114,14 @@ class _OperatorFieldFormDialogState extends State<OperatorFieldFormDialog> {
       if (widget.isEdit) {
         await OperatorFieldsApi.updateOperatorField(
           widget.field!['id'] as String,
+          dio: widget.dio,
           label: label,
           isRequired: _isRequired,
           options: _isSelect ? _options : null,
         );
       } else {
         await OperatorFieldsApi.createOperatorField(
+          dio: widget.dio,
           label: label,
           fieldType: _selectedType,
           isRequired: _isRequired,

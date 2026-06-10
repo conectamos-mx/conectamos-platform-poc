@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/templates_api.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/text_styles.dart';
@@ -11,7 +13,7 @@ enum _HeaderType { none, text, image, video, file }
 
 // ── Dialog principal ───────────────────────────────────────────────────────────
 
-class TemplateCreateDialog extends StatefulWidget {
+class TemplateCreateDialog extends ConsumerStatefulWidget {
   const TemplateCreateDialog({
     super.key,
     required this.channelId,
@@ -22,10 +24,10 @@ class TemplateCreateDialog extends StatefulWidget {
   final String tenantId;
 
   @override
-  State<TemplateCreateDialog> createState() => _TemplateCreateDialogState();
+  ConsumerState<TemplateCreateDialog> createState() => _TemplateCreateDialogState();
 }
 
-class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
+class _TemplateCreateDialogState extends ConsumerState<TemplateCreateDialog> {
   final _nameCtrl        = TextEditingController();
   final _headerTextCtrl  = TextEditingController();
   final _headerUrlCtrl   = TextEditingController();
@@ -273,6 +275,7 @@ class _TemplateCreateDialogState extends State<TemplateCreateDialog> {
           .toList();
 
       await TemplatesApi.createTemplate(
+        dio:              ref.read(apiClientProvider).dio,
         name:             name,
         category:         _category,
         language:         _language,

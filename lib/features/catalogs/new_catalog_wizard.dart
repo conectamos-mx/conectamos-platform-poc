@@ -233,7 +233,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
   Future<void> _checkGoogleOAuth() async {
     setState(() => _checkingOAuth = true);
     try {
-      final status = await ConnectionsApi.getGoogleStatus();
+      final status = await ConnectionsApi.getGoogleStatus(dio: widget.dio);
       setState(() => _googleConnected = status['connected'] == true);
     } catch (_) {
       setState(() => _googleConnected = false);
@@ -253,7 +253,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
     setState(() => _checkingMicrosoftOAuth = true);
     try {
       final status = await ConnectionsApi.getMicrosoftStatus(
-          tenantId: widget.tenantId);
+          dio: widget.dio, tenantId: widget.tenantId);
       final connections = status['connections'] as List? ?? [];
       final msConn = connections.firstWhere(
         (c) => c['provider'] == 'microsoft',
