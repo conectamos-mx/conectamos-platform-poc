@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' show pi;
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -123,7 +124,7 @@ class _OverviewScreenState extends ConsumerState<OverviewScreen> {
                     const SizedBox(width: 14),
                     Expanded(flex: 10, child: const _DayThread()),
                     const SizedBox(width: 14),
-                    Expanded(flex: 10, child: _Attention(tenantId: tenantId)),
+                    Expanded(flex: 10, child: _Attention(tenantId: tenantId, dio: ref.read(apiClientProvider).dio)),
                   ],
                 ),
                 const SizedBox(height: 32),
@@ -1687,8 +1688,9 @@ class _WorkerCardState extends State<_WorkerCard>
 // ── _Attention ────────────────────────────────────────────────────────────────
 
 class _Attention extends StatefulWidget {
-  const _Attention({required this.tenantId});
+  const _Attention({required this.tenantId, required this.dio});
   final String tenantId;
+  final Dio dio;
 
   @override
   State<_Attention> createState() => _AttentionState();
@@ -1714,7 +1716,7 @@ class _AttentionState extends State<_Attention> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final raw = await EscalacionesApi.getEscalaciones();
+      final raw = await EscalacionesApi.getEscalaciones(dio: widget.dio);
       final filtered = raw
           .where((e) => (e['status'] as String? ?? '') != 'resolved')
           .take(4)
