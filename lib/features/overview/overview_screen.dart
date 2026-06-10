@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/ai_workers_api.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/escalaciones_api.dart';
 import '../../core/api/operators_api.dart';
 import '../../core/api/overview_api.dart';
@@ -709,15 +710,15 @@ class _MiniMetricChip extends StatelessWidget {
 
 // ── _OperatorsSection ─────────────────────────────────────────────────────────
 
-class _OperatorsSection extends StatefulWidget {
+class _OperatorsSection extends ConsumerStatefulWidget {
   const _OperatorsSection({super.key, required this.tenantId});
   final String tenantId;
 
   @override
-  State<_OperatorsSection> createState() => _OperatorsSectionState();
+  ConsumerState<_OperatorsSection> createState() => _OperatorsSectionState();
 }
 
-class _OperatorsSectionState extends State<_OperatorsSection> {
+class _OperatorsSectionState extends ConsumerState<_OperatorsSection> {
   String _viewMode     = 'chips'; // 'chips' | 'cards'
   String _filterStatus = 'all';
 
@@ -741,7 +742,7 @@ class _OperatorsSectionState extends State<_OperatorsSection> {
     if (widget.tenantId.isEmpty) return;
     setState(() { _loading = true; _error = null; });
     try {
-      final raw = await OperatorsApi.listOperators();
+      final raw = await OperatorsApi.listOperators(dio: ref.read(apiClientProvider).dio);
       setState(() { _operators = raw; _loading = false; });
     } catch (e) {
       setState(() { _error = e.toString(); _loading = false; });

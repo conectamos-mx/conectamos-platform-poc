@@ -1063,7 +1063,7 @@ class _ArchivedPanelState extends ConsumerState<_ArchivedPanel> {
     if (_operators.isNotEmpty || _loadingOps) return;
     setState(() => _loadingOps = true);
     try {
-      final ops = await OperatorsApi.listOperators();
+      final ops = await OperatorsApi.listOperators(dio: ref.read(apiClientProvider).dio);
       if (mounted) setState(() { _operators = ops; _loadingOps = false; });
     } catch (_) {
       if (mounted) setState(() => _loadingOps = false);
@@ -6069,7 +6069,7 @@ class _NewMessageDialogState extends ConsumerState<_NewMessageDialog> {
     setState(() { _loadingAll = true; _loadError = null; });
     try {
       final results = await Future.wait([
-        OperatorsApi.listOperators(),
+        OperatorsApi.listOperators(dio: ref.read(apiClientProvider).dio),
         ref.read(apiClientProvider).dio.get('/templates'),
       ]);
       final ops = results[0] as List<Map<String, dynamic>>;
