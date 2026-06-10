@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/catalogs_api.dart';
 import '../../core/api/connections_api.dart';
 import '../../core/api/flows_api.dart';
@@ -1178,14 +1179,14 @@ class _ContentArea extends StatelessWidget {
 
 // ── Catálogos conectados ──────────────────────────────────────────────────────
 
-class _CatalogsSection extends StatefulWidget {
+class _CatalogsSection extends ConsumerStatefulWidget {
   const _CatalogsSection();
 
   @override
-  State<_CatalogsSection> createState() => _CatalogsSectionState();
+  ConsumerState<_CatalogsSection> createState() => _CatalogsSectionState();
 }
 
-class _CatalogsSectionState extends State<_CatalogsSection> {
+class _CatalogsSectionState extends ConsumerState<_CatalogsSection> {
   bool _loading = true;
   List<Map<String, dynamic>> _catalogs = [];
 
@@ -1196,15 +1197,11 @@ class _CatalogsSectionState extends State<_CatalogsSection> {
   }
 
   Future<void> _load() async {
-    // tenantId from closest ConsumerWidget ancestor is not available here
-    // since _CatalogsSection is a plain StatefulWidget inside a StatelessWidget.
-    // We read the provider via context once it's available.
     setState(() => _loading = true);
     try {
-      // Provider is accessible via ProviderScope.containerOf
-      final container = ProviderScope.containerOf(context, listen: false);
-      final tenantId = container.read(activeTenantIdProvider);
-      final data = await CatalogsApi.listCatalogs(tenantId: tenantId);
+      final tenantId = ref.read(activeTenantIdProvider);
+      final dio = ref.read(apiClientProvider).dio;
+      final data = await CatalogsApi.listCatalogs(dio: dio, tenantId: tenantId);
       if (mounted) setState(() { _catalogs = data; _loading = false; });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
@@ -2376,7 +2373,7 @@ class _IntegrationsManagementSheetState
       _error = null;
     });
     try {
-      final all = await FlowsApi.listIntegrationsByTenant();
+      final all = await FlowsApi.listIntegrationsByTenant(dio: ref.read(apiClientProvider).dio);
       if (!mounted) return;
       final filtered = all.where((i) {
         final t = (i['integration_type'] as String? ?? '').toLowerCase();
@@ -2400,7 +2397,7 @@ class _IntegrationsManagementSheetState
     if (_deleting) return;
     setState(() => _deleting = true);
     try {
-      await FlowsApi.deleteIntegrationById(integrationId: id);
+      await FlowsApi.deleteIntegrationById(dio: ref.read(apiClientProvider).dio, integrationId: id);
       if (!mounted) return;
       await _load();
     } catch (e) {
@@ -2812,6 +2809,7 @@ class _CreateTenantIntegrationDialogState
     });
     try {
       final result = await FlowsApi.createIntegrationForTenant(
+        dio: ref.read(apiClientProvider).dio,
         name: _nameCtrl.text.trim(),
         integrationType: _type,
         tenantWorkerId: _workerId!,

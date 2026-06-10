@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/operator_roles_api.dart';
 import '../../core/api/operators_api.dart';
 import '../../core/providers/permissions_provider.dart';
@@ -48,7 +49,7 @@ class _OperatorsScreenState extends ConsumerState<OperatorsScreen> {
     try {
       final tenantId = ref.read(activeTenantIdProvider);
       final results = await Future.wait([
-        OperatorsApi.listOperators(),
+        OperatorsApi.listOperators(dio: ref.read(apiClientProvider).dio),
         OperatorRolesApi.listRoles(tenantId: tenantId),
       ]);
       if (mounted) {
@@ -367,7 +368,7 @@ class _OperatorsBodyState extends State<_OperatorsBody> {
 
 // ── Fila de operador ──────────────────────────────────────────────────────────
 
-class _OperatorRow extends StatefulWidget {
+class _OperatorRow extends ConsumerStatefulWidget {
   const _OperatorRow({
     required this.op,
     required this.roles,
@@ -382,10 +383,10 @@ class _OperatorRow extends StatefulWidget {
   final bool canManage;
 
   @override
-  State<_OperatorRow> createState() => _OperatorRowState();
+  ConsumerState<_OperatorRow> createState() => _OperatorRowState();
 }
 
-class _OperatorRowState extends State<_OperatorRow> {
+class _OperatorRowState extends ConsumerState<_OperatorRow> {
   bool _hovered = false;
 
   Future<void> _patchStatus(BuildContext ctx, String status) async {
@@ -393,7 +394,7 @@ class _OperatorRowState extends State<_OperatorRow> {
     if (id.isEmpty) return;
     final messenger = ScaffoldMessenger.of(ctx);
     try {
-      await OperatorsApi.patchStatus(id: id, status: status);
+      await OperatorsApi.patchStatus(dio: ref.read(apiClientProvider).dio, id: id, status: status);
       widget.onRefresh();
     } catch (_) {
       if (mounted) {

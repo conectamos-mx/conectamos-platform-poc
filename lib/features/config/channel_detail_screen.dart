@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/channels_api.dart';
 import '../../core/api/groups_api.dart';
 import '../../core/api/iam_api.dart';
@@ -2002,7 +2003,7 @@ class _CreateGroupDialogState extends State<_CreateGroupDialog> {
 
 // ── Group detail dialog ──────────────────────────────────────────────────────
 
-class _GroupDetailDialog extends StatefulWidget {
+class _GroupDetailDialog extends ConsumerStatefulWidget {
   const _GroupDetailDialog({
     required this.group,
     required this.onError,
@@ -2013,10 +2014,10 @@ class _GroupDetailDialog extends StatefulWidget {
   final ValueChanged<String> onSuccess;
 
   @override
-  State<_GroupDetailDialog> createState() => _GroupDetailDialogState();
+  ConsumerState<_GroupDetailDialog> createState() => _GroupDetailDialogState();
 }
 
-class _GroupDetailDialogState extends State<_GroupDetailDialog> {
+class _GroupDetailDialogState extends ConsumerState<_GroupDetailDialog> {
   late final TextEditingController _nameCtrl;
   bool _savingName = false;
   bool _changed = false;
@@ -2079,7 +2080,7 @@ class _GroupDetailDialogState extends State<_GroupDetailDialog> {
     // Fetch all tenant users
     List<Map<String, dynamic>> allUsers = [];
     try {
-      allUsers = await IamApi.getUsers();
+      allUsers = await IamApi.getUsers(dio: ref.read(apiClientProvider).dio);
     } catch (e) {
       widget.onError(_dioError(e));
       return;

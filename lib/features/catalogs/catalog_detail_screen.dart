@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/catalogs_api.dart';
 import '../../core/api/connections_api.dart';
 import '../../core/providers/permissions_provider.dart';
@@ -69,7 +70,9 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
     });
     try {
       final tenantId = ref.read(activeTenantIdProvider);
+      final dio = ref.read(apiClientProvider).dio;
       final data = await CatalogsApi.getCatalogBySlug(
+        dio: dio,
         tenantId: tenantId,
         slug: widget.slug,
       );
@@ -97,10 +100,12 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
     final catalogId = _catalog?['id'] as String? ?? '';
     if (catalogId.isEmpty) return;
     final tenantId = ref.read(activeTenantIdProvider);
+    final dio = ref.read(apiClientProvider).dio;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _saving = true);
     try {
       await CatalogsApi.updateCatalog(
+        dio: dio,
         tenantId: tenantId,
         catalogId: catalogId,
         body: _pendingPatch,
@@ -166,7 +171,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
     if (confirmed != true || !mounted) return;
     setState(() => _deleting = true);
     try {
-      await CatalogsApi.deleteCatalog(catalogId: catalogId);
+      await CatalogsApi.deleteCatalog(dio: ref.read(apiClientProvider).dio, catalogId: catalogId);
       if (mounted) context.go('/catalogs', extra: {'refresh': true});
     } catch (e) {
       if (mounted) {
@@ -186,7 +191,7 @@ class _CatalogDetailScreenState extends ConsumerState<CatalogDetailScreen>
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _syncing = true);
     try {
-      await CatalogsApi.syncCatalog(catalogId: catalogId);
+      await CatalogsApi.syncCatalog(dio: ref.read(apiClientProvider).dio, catalogId: catalogId);
       if (mounted) {
         messenger.showSnackBar(const SnackBar(
           content: Text('Sincronización iniciada'),
@@ -900,6 +905,7 @@ class _SourceTabState extends ConsumerState<_SourceTab> {
     try {
       final tenantId = ref.read(activeTenantIdProvider);
       final result = await CatalogsApi.sheetsPreview(
+        dio: ref.read(apiClientProvider).dio,
         tenantId: tenantId,
         sheetUrl: _sheetUrlCtrl.text.trim(),
         sheetName: sheetName ?? _selectedSheet,
@@ -1556,6 +1562,7 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
     try {
       final q = _searchCtrl.text.trim();
       final result = await CatalogsApi.listItemsPaged(
+        dio: ref.read(apiClientProvider).dio,
         tenantId: tenantId,
         catalogId: _catalogId,
         page: _page,
@@ -1933,6 +1940,7 @@ class _ItemDetailSheetState extends ConsumerState<_ItemDetailSheet> {
                         final tenantId =
                             ref.read(activeTenantIdProvider);
                         await CatalogsApi.updateItem(
+                          dio: ref.read(apiClientProvider).dio,
                           tenantId: tenantId,
                           catalogId: _catalogId,
                           itemId: _itemId,
@@ -1980,6 +1988,7 @@ class _ItemDetailSheetState extends ConsumerState<_ItemDetailSheet> {
     try {
       final tenantId = ref.read(activeTenantIdProvider);
       final result = await CatalogsApi.deleteItem(
+        dio: ref.read(apiClientProvider).dio,
         tenantId: tenantId,
         catalogId: _catalogId,
         itemId: _itemId,
@@ -2153,7 +2162,7 @@ class _AddItemSheetState extends ConsumerState<_AddItemSheet> {
     setState(() => _saving = true);
     try {
       await CatalogsApi.createItem(
-          tenantId: tenantId, catalogId: catalogId, data: data);
+          dio: ref.read(apiClientProvider).dio, tenantId: tenantId, catalogId: catalogId, data: data);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
@@ -2323,7 +2332,7 @@ class _SyncTabState extends ConsumerState<_SyncTab> {
     setState(() { _loading = true; _error = null; });
     try {
       final logs = await CatalogsApi.listSyncLog(
-          tenantId: tenantId, catalogId: _catalogId);
+          dio: ref.read(apiClientProvider).dio, tenantId: tenantId, catalogId: _catalogId);
       if (mounted) setState(() { _logs = logs; _loading = false; });
     } catch (e) {
       if (mounted) {
@@ -2579,7 +2588,7 @@ class _UsoTabState extends ConsumerState<_UsoTab> {
     setState(() { _loading = true; _error = null; });
     try {
       final usages = await CatalogsApi.getUsages(
-          tenantId: tenantId, catalogId: _catalogId);
+          dio: ref.read(apiClientProvider).dio, tenantId: tenantId, catalogId: _catalogId);
       if (mounted) setState(() { _usages = usages; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });

@@ -365,7 +365,7 @@ class _GeneralInfoCardState extends ConsumerState<_GeneralInfoCard> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final res = await ApiClient.instance.get('/tenants/$_currentTenantId');
+      final res = await ref.read(apiClientProvider).dio.get('/tenants/$_currentTenantId');
       final d = Map<String, dynamic>.from(res.data as Map);
       if (!mounted) return;
       _displayNameCtrl.text = d['display_name']?.toString() ?? d['name']?.toString() ?? '';
@@ -391,7 +391,7 @@ class _GeneralInfoCardState extends ConsumerState<_GeneralInfoCard> {
   Future<void> _save() async {
     setState(() { _saving = true; _error = null; _success = null; });
     try {
-      await ApiClient.instance.put('/tenants/$_currentTenantId', data: {
+      await ref.read(apiClientProvider).dio.put('/tenants/$_currentTenantId', data: {
         'display_name':    _displayNameCtrl.text.trim(),
         'legal_name':      _legalNameCtrl.text.trim(),
         'rfc':             _rfcCtrl.text.trim(),
@@ -507,7 +507,7 @@ class _BillingCardState extends ConsumerState<_BillingCard> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final res = await ApiClient.instance.get('/tenants/$_currentTenantId');
+      final res = await ref.read(apiClientProvider).dio.get('/tenants/$_currentTenantId');
       final d = Map<String, dynamic>.from(res.data as Map);
       if (!mounted) return;
       _requiereCfdi     = d['requiere_cfdi'] == true;
@@ -524,7 +524,7 @@ class _BillingCardState extends ConsumerState<_BillingCard> {
   Future<void> _save() async {
     setState(() { _saving = true; _error = null; _success = null; });
     try {
-      await ApiClient.instance.put('/tenants/$_currentTenantId', data: {
+      await ref.read(apiClientProvider).dio.put('/tenants/$_currentTenantId', data: {
         'requiere_cfdi':  _requiereCfdi,
         'regimen_fiscal': _regimenCtrl.text.trim(),
         'uso_cfdi':       _usoCfdiCtrl.text.trim(),
@@ -655,7 +655,7 @@ final _usersListProvider =
     FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>(
   (ref, tenantId) async {
     if (tenantId.isEmpty) return [];
-    return IamApi.getUsers();
+    return IamApi.getUsers(dio: ref.read(apiClientProvider).dio);
   },
 );
 
@@ -663,7 +663,7 @@ final _rolesMapProvider =
     FutureProvider.autoDispose.family<Map<String, String>, String>(
   (ref, tenantId) async {
     if (tenantId.isEmpty) return {};
-    final roles = await IamApi.getRoles();
+    final roles = await IamApi.getRoles(dio: ref.read(apiClientProvider).dio);
     final map = <String, String>{};
     for (final e in roles) {
       final id   = e['id']?.toString() ?? '';
@@ -906,7 +906,7 @@ class _UserRowState extends ConsumerState<_UserRow> {
     if (_id.isEmpty) return;
     setState(() => _acting = true);
     try {
-      await IamApi.updateUser(_id, body);
+      await IamApi.updateUser(_id, body, dio: ref.read(apiClientProvider).dio);
       widget.onRefresh();
     } catch (_) {
       if (mounted) setState(() => _acting = false);
@@ -917,7 +917,7 @@ class _UserRowState extends ConsumerState<_UserRow> {
     if (_id.isEmpty) return;
     setState(() => _acting = true);
     try {
-      await IamApi.resendInvite(_id);
+      await IamApi.resendInvite(_id, dio: ref.read(apiClientProvider).dio);
       if (mounted) setState(() => _acting = false);
     } catch (_) {
       if (mounted) setState(() => _acting = false);
@@ -928,7 +928,7 @@ class _UserRowState extends ConsumerState<_UserRow> {
     final email = _email;
     if (email.isEmpty) return;
     try {
-      await IamApi.resetPassword(email);
+      await IamApi.resetPassword(email, dio: ref.read(apiClientProvider).dio);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Enlace enviado a $email', style: AppTextStyles.body),
@@ -1117,7 +1117,7 @@ class _UserRowState extends ConsumerState<_UserRow> {
       if (confirmed != true || _id.isEmpty) return;
       setState(() => _acting = true);
       try {
-        await IamApi.revokeInvitation(_id);
+        await IamApi.revokeInvitation(_id, dio: ref.read(apiClientProvider).dio);
         widget.onRefresh();
       } on DioException catch (e) {
         if (!mounted) return;
@@ -1391,7 +1391,7 @@ class _StatusBadge extends StatelessWidget {
 
 // ── Dialog: Editar usuario ────────────────────────────────────────────────────
 
-class _EditUserDialog extends StatefulWidget {
+class _EditUserDialog extends ConsumerStatefulWidget {
   const _EditUserDialog({
     required this.userId,
     required this.initialNombre,
@@ -1404,10 +1404,10 @@ class _EditUserDialog extends StatefulWidget {
   final VoidCallback onSaved;
 
   @override
-  State<_EditUserDialog> createState() => _EditUserDialogState();
+  ConsumerState<_EditUserDialog> createState() => _EditUserDialogState();
 }
 
-class _EditUserDialogState extends State<_EditUserDialog> {
+class _EditUserDialogState extends ConsumerState<_EditUserDialog> {
   late final TextEditingController _nombreCtrl;
   String _phoneE164 = '';
   String _initialLocalNumber = '';
@@ -1446,7 +1446,7 @@ class _EditUserDialogState extends State<_EditUserDialog> {
       await IamApi.updateUser(widget.userId, {
         'nombre':   nombre,
         'telefono': _phoneE164,
-      });
+      }, dio: ref.read(apiClientProvider).dio);
       if (!mounted) return;
       widget.onSaved();
       Navigator.pop(context);
@@ -1563,7 +1563,7 @@ class _ChangeRoleDialogState extends ConsumerState<_ChangeRoleDialog> {
 
   Future<void> _loadRoles() async {
     try {
-      final roles = await IamApi.getRoles();
+      final roles = await IamApi.getRoles(dio: ref.read(apiClientProvider).dio);
       if (!mounted) return;
       setState(() {
         _roles        = roles;
@@ -1579,7 +1579,7 @@ class _ChangeRoleDialogState extends ConsumerState<_ChangeRoleDialog> {
     if (_roleId == null || _roleId!.isEmpty) return;
     setState(() { _saving = true; _error = null; });
     try {
-      await IamApi.updateUserRole(widget.userId, _roleId!);
+      await IamApi.updateUserRole(widget.userId, _roleId!, dio: ref.read(apiClientProvider).dio);
       if (!mounted) return;
       widget.onChanged();
       Navigator.pop(context);
@@ -1730,7 +1730,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
 
   Future<void> _loadRoles() async {
     try {
-      final roles = await IamApi.getRoles();
+      final roles = await IamApi.getRoles(dio: ref.read(apiClientProvider).dio);
       if (!mounted) return;
       setState(() {
         _availableRoles = roles;
@@ -1962,7 +1962,7 @@ class _InviteUserDialogState extends ConsumerState<_InviteUserDialog> {
 
 // ── Dialog: Gestionar canales ─────────────────────────────────────────────────
 
-class _ManageChannelsDialog extends StatefulWidget {
+class _ManageChannelsDialog extends ConsumerStatefulWidget {
   const _ManageChannelsDialog({
     required this.tenantUserId,
     required this.tenantId,
@@ -1973,10 +1973,10 @@ class _ManageChannelsDialog extends StatefulWidget {
   final String userName;
 
   @override
-  State<_ManageChannelsDialog> createState() => _ManageChannelsDialogState();
+  ConsumerState<_ManageChannelsDialog> createState() => _ManageChannelsDialogState();
 }
 
-class _ManageChannelsDialogState extends State<_ManageChannelsDialog> {
+class _ManageChannelsDialogState extends ConsumerState<_ManageChannelsDialog> {
   List<Map<String, dynamic>> _channels = [];
   Set<String> _assigned = {};
   bool _loading = true;
@@ -1992,7 +1992,7 @@ class _ManageChannelsDialogState extends State<_ManageChannelsDialog> {
     try {
       final results = await Future.wait([
         ChannelsApi.listChannels(),
-        IamApi.getUserChannels(tenantUserId: widget.tenantUserId),
+        IamApi.getUserChannels(dio: ref.read(apiClientProvider).dio, tenantUserId: widget.tenantUserId),
       ]);
       if (!mounted) return;
       final channels   = results[0];
@@ -2025,11 +2025,13 @@ class _ManageChannelsDialogState extends State<_ManageChannelsDialog> {
     try {
       if (checked) {
         await IamApi.assignChannel(
+          dio: ref.read(apiClientProvider).dio,
           tenantUserId: widget.tenantUserId,
           channelId: channelId,
         );
       } else {
         await IamApi.removeChannel(
+          dio: ref.read(apiClientProvider).dio,
           tenantUserId: widget.tenantUserId,
           channelId: channelId,
         );
@@ -2217,7 +2219,7 @@ class _CommunicationSectionState
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final res = await ApiClient.instance.get('/tenants/$_currentTenantId');
+      final res = await ref.read(apiClientProvider).dio.get('/tenants/$_currentTenantId');
       final d = Map<String, dynamic>.from(res.data as Map);
       if (!mounted) return;
       setState(() {
@@ -2232,7 +2234,7 @@ class _CommunicationSectionState
   Future<void> _toggle(bool value) async {
     setState(() => _showSupervisorName = value);
     try {
-      await ApiClient.instance.put(
+      await ref.read(apiClientProvider).dio.put(
         '/tenants/$_currentTenantId',
         data: {'show_supervisor_name': value},
       );

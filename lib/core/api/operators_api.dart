@@ -3,17 +3,18 @@ import 'package:conectamos_platform/core/api/api_client.dart';
 import 'package:dio/dio.dart';
 
 class OperatorsApi {
-  static Future<List<Map<String, dynamic>>> listOperators() async {
-    final response = await ApiClient.instance.get('/operators');
+  static Future<List<Map<String, dynamic>>> listOperators({required Dio dio}) async {
+    final response = await dio.get('/operators');
     return List<Map<String, dynamic>>.from(response.data);
   }
 
-  static Future<Map<String, dynamic>> getOperator(String operatorId) async {
-    final response = await ApiClient.instance.get('/operators/$operatorId');
+  static Future<Map<String, dynamic>> getOperator(String operatorId, {required Dio dio}) async {
+    final response = await dio.get('/operators/$operatorId');
     return Map<String, dynamic>.from(response.data);
   }
 
   static Future<Map<String, dynamic>> createOperator({
+    required Dio dio,
     required String displayName,
     required String phone,
     List<String> roleIds = const [],
@@ -34,7 +35,7 @@ class OperatorsApi {
       metadata['phone_secondary'] = phoneSecondary;
     }
 
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/operators',
       data: {
         'display_name': displayName,
@@ -57,6 +58,7 @@ class OperatorsApi {
   }
 
   static Future<Map<String, dynamic>> updateOperator({
+    required Dio dio,
     required String id,
     required String displayName,
     required String phone,
@@ -72,7 +74,7 @@ class OperatorsApi {
       extraMeta['phone_secondary'] = phoneSecondary;
     }
 
-    final response = await ApiClient.instance.put(
+    final response = await dio.put(
       '/operators/$id',
       data: {
         'display_name': displayName,
@@ -90,10 +92,11 @@ class OperatorsApi {
   }
 
   static Future<void> patchStatus({
+    required Dio dio,
     required String id,
     required String status,
   }) async {
-    await ApiClient.instance.patch(
+    await dio.patch(
       '/operators/$id/status',
       data: {'status': status},
     );
@@ -102,9 +105,10 @@ class OperatorsApi {
   /// GET /operators/{id}/available-channel-types?tenant_id=
   /// Returns the channel types the operator actually has via assigned flows.
   static Future<List<String>> getAvailableChannelTypes({
+    required Dio dio,
     required String operatorId,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/operators/$operatorId/available-channel-types',
     );
     final data = response.data;
@@ -118,10 +122,11 @@ class OperatorsApi {
 
   /// PATCH /operators/{id} — persists the ordered list of preferred channel types.
   static Future<void> patchPreferredChannelTypes({
+    required Dio dio,
     required String id,
     required List<String> types,
   }) async {
-    await ApiClient.instance.put(
+    await dio.put(
       '/operators/$id',
       data: {'preferred_channel_types': types},
     );
@@ -129,27 +134,30 @@ class OperatorsApi {
 
   /// PUT /operators/{id} — updates the operator's role_ids array.
   static Future<void> patchRoleIds({
+    required Dio dio,
     required String id,
     required List<String> roleIds,
   }) async {
-    await ApiClient.instance.put(
+    await dio.put(
       '/operators/$id',
       data: {'role_ids': roleIds},
     );
   }
 
   static Future<List<Map<String, dynamic>>> listOperatorFlows({
+    required Dio dio,
     required String operatorId,
   }) async {
-    final response = await ApiClient.instance.get('/operators/$operatorId/flows');
+    final response = await dio.get('/operators/$operatorId/flows');
     return List<Map<String, dynamic>>.from(response.data);
   }
 
   static Future<void> assignFlow({
+    required Dio dio,
     required String operatorId,
     required String flowDefinitionId,
   }) async {
-    await ApiClient.instance.post(
+    await dio.post(
       '/operators/$operatorId/flows',
       data: {
         'flow_definition_id': flowDefinitionId,
@@ -158,20 +166,22 @@ class OperatorsApi {
   }
 
   static Future<void> removeFlow({
+    required Dio dio,
     required String operatorId,
     required String flowDefinitionId,
   }) async {
-    await ApiClient.instance.delete('/operators/$operatorId/flows/$flowDefinitionId');
+    await dio.delete('/operators/$operatorId/flows/$flowDefinitionId');
   }
 
   /// Sends a Telegram invite to the operator via the given channel.
   /// Returns the response body (may include expires_at).
   static Future<Map<String, dynamic>> sendTelegramInvite({
+    required Dio dio,
     required String operatorId,
     required String channelId,
     String? phone,
   }) async {
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/operators/$operatorId/send-telegram-invite',
       data: {
         'channel_id': channelId,
@@ -186,9 +196,10 @@ class OperatorsApi {
   /// GET /operators/{id}/available-telegram-channels
   /// Returns: {"channels": [{"channel_id": "uuid", "bot_username": "...", "worker_name": "..."}, ...]}
   static Future<List<Map<String, dynamic>>> getAvailableTelegramChannels(
-    String operatorId,
-  ) async {
-    final response = await ApiClient.instance.get(
+    String operatorId, {
+    required Dio dio,
+  }) async {
+    final response = await dio.get(
       '/operators/$operatorId/available-telegram-channels',
     );
     final data = response.data;
@@ -199,6 +210,7 @@ class OperatorsApi {
   }
 
   static Future<Map<String, dynamic>> importDryRun({
+    required Dio dio,
     required Uint8List fileBytes,
     required String fileName,
     String strategy = 'all_or_nothing',
@@ -207,7 +219,7 @@ class OperatorsApi {
       'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
       'strategy': strategy,
     });
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/operators/import',
       data: formData,
       queryParameters: {'dry_run': 'true'},
@@ -216,6 +228,7 @@ class OperatorsApi {
   }
 
   static Future<Map<String, dynamic>> importOperators({
+    required Dio dio,
     required Uint8List fileBytes,
     required String fileName,
     String strategy = 'all_or_nothing',
@@ -224,7 +237,7 @@ class OperatorsApi {
       'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
       'strategy': strategy,
     });
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/operators/import',
       data: formData,
     );
@@ -232,6 +245,7 @@ class OperatorsApi {
   }
 
   static Future<Map<String, dynamic>> linkToUser({
+    required Dio dio,
     required String operatorId,
     String? tenantUserId,
     String? phone,
@@ -241,7 +255,7 @@ class OperatorsApi {
     final body = <String, dynamic>{};
     if (tenantUserId != null) body['tenant_user_id'] = tenantUserId;
     if (phone != null) body['phone'] = phone;
-    final res = await ApiClient.instance.post(
+    final res = await dio.post(
       '/operators/$operatorId/link-to-user',
       data: body,
     );
@@ -251,18 +265,20 @@ class OperatorsApi {
   }
 
   static Future<void> unlinkFromUser({
+    required Dio dio,
     required String operatorId,
   }) async {
-    await ApiClient.instance.post(
+    await dio.post(
       '/operators/$operatorId/unlink-from-user',
     );
   }
 
   /// `GET /operators/lookup?phone=E164`
   static Future<Map<String, dynamic>> lookupByPhone({
+    required Dio dio,
     required String phone,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/operators/lookup',
       queryParameters: {'phone': phone},
     );
@@ -271,6 +287,7 @@ class OperatorsApi {
 
   /// POST /operators (new creation contract with optional tenant-user link)
   static Future<Map<String, dynamic>> createOperatorV2({
+    required Dio dio,
     required String displayName,
     required String phone,
     List<String> roleIds = const [],
@@ -278,7 +295,7 @@ class OperatorsApi {
     List<String>? preferredChannelTypes,
     bool createDespiteSoftDeleted = false,
   }) async {
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/operators',
       data: {
         'display_name': displayName,
@@ -296,10 +313,11 @@ class OperatorsApi {
 
   /// POST /operators/:id/restore
   static Future<Map<String, dynamic>> restoreOperator({
+    required Dio dio,
     required String id,
     String? linkToTenantUserId,
   }) async {
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/operators/$id/restore',
       data: {
         'link_to_tenant_user_id': ?linkToTenantUserId,

@@ -159,6 +159,7 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
         extension: file.extension ?? 'jpg',
       );
       await OperatorsApi.updateOperator(
+        dio: ref.read(apiClientProvider).dio,
         id: widget.operatorId,
         displayName: _op!['display_name'] as String? ?? _op!['name'] as String? ?? '',
         phone: _op!['phone'] as String? ?? '',
@@ -189,7 +190,7 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
       _error = null;
     });
     try {
-      final op = await OperatorsApi.getOperator(widget.operatorId);
+      final op = await OperatorsApi.getOperator(widget.operatorId, dio: ref.read(apiClientProvider).dio);
       if (mounted) setState(() { _op = op; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
@@ -218,7 +219,7 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
     if (ok != true || !mounted) return;
 
     try {
-      await OperatorsApi.patchStatus(id: widget.operatorId, status: status);
+      await OperatorsApi.patchStatus(dio: ref.read(apiClientProvider).dio, id: widget.operatorId, status: status);
       if (mounted) setState(() => _op = {..._op!, 'status': status});
     } catch (_) {
       if (mounted) {
@@ -244,7 +245,7 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
 
     try {
       final res =
-          await ApiClient.instance.delete('/operators/${widget.operatorId}');
+          await ref.read(apiClientProvider).dio.delete('/operators/${widget.operatorId}');
       final data = res.data is Map
           ? Map<String, dynamic>.from(res.data as Map)
           : <String, dynamic>{};
@@ -478,15 +479,15 @@ class _OperatorDetailScreenState extends ConsumerState<OperatorDetailScreen>
 
 // ── Banners contextuales ────────────────────────────────────────────────────
 
-class _BannersSection extends StatefulWidget {
+class _BannersSection extends ConsumerStatefulWidget {
   const _BannersSection({required this.op});
   final Map<String, dynamic> op;
 
   @override
-  State<_BannersSection> createState() => _BannersSectionState();
+  ConsumerState<_BannersSection> createState() => _BannersSectionState();
 }
 
-class _BannersSectionState extends State<_BannersSection> {
+class _BannersSectionState extends ConsumerState<_BannersSection> {
   bool _resending = false;
 
   String _fmtExpiry(DateTime dt) {
@@ -534,6 +535,7 @@ class _BannersSectionState extends State<_BannersSection> {
     setState(() => _resending = true);
     try {
       await OperatorsApi.sendTelegramInvite(
+        dio: ref.read(apiClientProvider).dio,
         operatorId: operatorId,
         channelId: channelId,
       );
@@ -811,6 +813,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
 
     try {
       await OperatorsApi.updateOperator(
+        dio: ref.read(apiClientProvider).dio,
         id: id,
         displayName: name,
         phone: phone,
@@ -861,7 +864,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     }
     final id = widget.op['id'] as String? ?? '';
     try {
-      await OperatorsApi.patchRoleIds(id: id, roleIds: _selectedRoleIds);
+      await OperatorsApi.patchRoleIds(dio: ref.read(apiClientProvider).dio, id: id, roleIds: _selectedRoleIds);
     } catch (e) {
       if (!mounted) return;
       String msg = 'Error al actualizar roles';
@@ -902,6 +905,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     final id = widget.op['id'] as String? ?? '';
     try {
       await OperatorsApi.patchPreferredChannelTypes(
+        dio: ref.read(apiClientProvider).dio,
         id: id,
         types: _editingChannelsOrder,
       );
@@ -950,6 +954,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     final op = widget.op;
     try {
       await OperatorsApi.updateOperator(
+        dio: ref.read(apiClientProvider).dio,
         id: id,
         displayName: op['display_name'] as String? ?? op['name'] as String? ?? '',
         phone: op['phone'] as String? ?? '',
@@ -1079,6 +1084,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     final op = widget.op;
     try {
       await OperatorsApi.updateOperator(
+        dio: ref.read(apiClientProvider).dio,
         id: id,
         displayName: op['display_name'] as String? ?? op['name'] as String? ?? '',
         phone: op['phone'] as String? ?? '',
@@ -1323,7 +1329,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     final operatorId = widget.op['id'] as String? ?? '';
     if (operatorId.isEmpty) return;
     try {
-      final channels = await OperatorsApi.getAvailableTelegramChannels(operatorId);
+      final channels = await OperatorsApi.getAvailableTelegramChannels(operatorId, dio: ref.read(apiClientProvider).dio);
       if (mounted) setState(() => _availableTgChannels = channels);
     } catch (_) {
       if (mounted) setState(() => _availableTgChannels = []);
@@ -1336,6 +1342,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     setState(() => _sendingTgInvite = true);
     try {
       await OperatorsApi.sendTelegramInvite(
+        dio: ref.read(apiClientProvider).dio,
         operatorId: operatorId,
         channelId: channelId,
       );
@@ -1376,6 +1383,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     setState(() => _loadingTypes = true);
     try {
       final available = await OperatorsApi.getAvailableChannelTypes(
+        dio: ref.read(apiClientProvider).dio,
         operatorId: operatorId,
       );
       if (!mounted) return;
@@ -1704,6 +1712,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
                         if (ok != true) return;
                         try {
                           await OperatorsApi.unlinkFromUser(
+                            dio: ref.read(apiClientProvider).dio,
                             operatorId: op['id'] as String,
                           );
                           widget.onReload();
@@ -2188,15 +2197,15 @@ class _FlowCard extends StatelessWidget {
 
 // ── Tab HISTORIAL ──────────────────────────────────────────────────────────────
 
-class _HistorialTab extends StatefulWidget {
+class _HistorialTab extends ConsumerStatefulWidget {
   const _HistorialTab({required this.operatorId});
   final String operatorId;
 
   @override
-  State<_HistorialTab> createState() => _HistorialTabState();
+  ConsumerState<_HistorialTab> createState() => _HistorialTabState();
 }
 
-class _HistorialTabState extends State<_HistorialTab> {
+class _HistorialTabState extends ConsumerState<_HistorialTab> {
   List<Map<String, dynamic>>? _sessions;
   bool _loading = true;
 
@@ -2208,7 +2217,7 @@ class _HistorialTabState extends State<_HistorialTab> {
 
   Future<void> _load() async {
     try {
-      final res = await ApiClient.instance
+      final res = await ref.read(apiClientProvider).dio
           .get('/operators/${widget.operatorId}/sessions');
       final data = res.data;
       final List raw = data is List
@@ -2584,7 +2593,7 @@ class _FieldRow extends StatelessWidget {
 
 // ── _LinkUserDialog ─────────────────────────────────────────────────────────
 
-class _LinkUserDialog extends StatefulWidget {
+class _LinkUserDialog extends ConsumerStatefulWidget {
   const _LinkUserDialog({
     required this.operatorId,
     required this.onSuccess,
@@ -2593,10 +2602,10 @@ class _LinkUserDialog extends StatefulWidget {
   final VoidCallback onSuccess;
 
   @override
-  State<_LinkUserDialog> createState() => _LinkUserDialogState();
+  ConsumerState<_LinkUserDialog> createState() => _LinkUserDialogState();
 }
 
-class _LinkUserDialogState extends State<_LinkUserDialog> {
+class _LinkUserDialogState extends ConsumerState<_LinkUserDialog> {
   final _phoneCtrl = TextEditingController();
   bool _loading = false;
   String? _fieldError;
@@ -2627,6 +2636,7 @@ class _LinkUserDialogState extends State<_LinkUserDialog> {
 
     try {
       await OperatorsApi.linkToUser(
+        dio: ref.read(apiClientProvider).dio,
         operatorId: widget.operatorId,
         phone: cleaned,
       );

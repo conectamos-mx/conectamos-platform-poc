@@ -8,6 +8,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/utils/date_format.dart' as dtfmt;
 import '../../core/utils/xlsx_helpers.dart';
@@ -24,7 +25,7 @@ typedef _DashKey = ({String slug, String? start, String? end, String? filterKey,
 
 /// Carga la lista de dashboards desde API.
 final dashboardsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  return FlowsApi.listDashboardConfigurations();
+  return FlowsApi.listDashboardConfigurations(dio: ref.read(apiClientProvider).dio);
 });
 
 /// Rango de fechas seleccionado. null = hoy (sin filtro explícito)
@@ -37,7 +38,8 @@ final dashboardMetaFilterValueProvider = StateProvider<String?>((ref) => null);
 final dashboardKpisProvider =
     FutureProvider.family<Map<String, dynamic>, _DashKey>((ref, key) async {
   return FlowsApi.getDashboardKpis(
-    key.slug,
+    dio: ref.read(apiClientProvider).dio,
+    dashboardSlug: key.slug,
     dateRangeStart: key.start,
     dateRangeEnd: key.end,
   );
@@ -46,7 +48,8 @@ final dashboardKpisProvider =
 final dashboardChartsProvider =
     FutureProvider.family<Map<String, dynamic>, _DashKey>((ref, key) async {
   return FlowsApi.getDashboardCharts(
-    key.slug,
+    dio: ref.read(apiClientProvider).dio,
+    dashboardSlug: key.slug,
     dateRangeStart: key.start,
     dateRangeEnd: key.end,
   );
@@ -55,7 +58,8 @@ final dashboardChartsProvider =
 final dashboardActivityProvider =
     FutureProvider.family<List<Map<String, dynamic>>, _DashKey>((ref, key) async {
   return FlowsApi.getDashboardActivity(
-    key.slug,
+    dio: ref.read(apiClientProvider).dio,
+    dashboardSlug: key.slug,
     dateRangeStart: key.start,
     dateRangeEnd: key.end,
   );
