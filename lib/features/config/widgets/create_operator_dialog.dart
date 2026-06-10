@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/api/api_error.dart';
 import '../../../core/api/channels_api.dart';
 import '../../../core/api/iam_api.dart';
@@ -150,7 +151,7 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
   Future<void> _loadTenantUsers() async {
     setState(() => _tenantUsersLoading = true);
     try {
-      final users = await IamApi.getUsers();
+      final users = await IamApi.getUsers(dio: ref.read(apiClientProvider).dio);
       if (mounted) {
         setState(() {
           _unlinkTenantUsers = users
