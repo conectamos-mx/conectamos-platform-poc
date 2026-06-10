@@ -223,7 +223,7 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
     if (phone == _lastLookedUpPhone && _lookupResult != null) return;
     setState(() => _lookupLoading = true);
     try {
-      final result = await OperatorsApi.lookupByPhone(phone: phone);
+      final result = await OperatorsApi.lookupByPhone(dio: ref.read(apiClientProvider).dio, phone: phone);
       if (mounted && phone == _phoneE164) {
         setState(() {
           _lookupResult = result;
@@ -324,6 +324,7 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
           ? _linkTenantUserId
           : null;
       await OperatorsApi.createOperatorV2(
+        dio: ref.read(apiClientProvider).dio,
         displayName: name,
         phone: _phoneE164,
         roleIds: _selectedRoleIds,
@@ -531,6 +532,7 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
         : null;
     try {
       await OperatorsApi.restoreOperator(
+        dio: ref.read(apiClientProvider).dio,
         id: id,
         linkToTenantUserId: effectiveLinkId,
       );

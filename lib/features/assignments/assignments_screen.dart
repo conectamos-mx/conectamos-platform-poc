@@ -113,7 +113,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
           scopeDate: wm.isoDate(day),
         );
       });
-      final operatorsFuture = OperatorsApi.listOperators();
+      final operatorsFuture = OperatorsApi.listOperators(dio: ref.read(apiClientProvider).dio);
       final dayResults = await Future.wait(dayFutures);
       final operators = await operatorsFuture;
       final data = dayResults.expand((list) => list).toList();

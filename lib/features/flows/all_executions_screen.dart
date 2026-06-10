@@ -293,7 +293,7 @@ class _AllExecutionsScreenState extends ConsumerState<AllExecutionsScreen> {
     final tenantId = ref.read(activeTenantIdProvider);
     if (tenantId.isEmpty) return;
     try {
-      final list = await OperatorsApi.listOperators();
+      final list = await OperatorsApi.listOperators(dio: ref.read(apiClientProvider).dio);
       if (mounted) {
         setState(() {
           _availableOperators = list;
