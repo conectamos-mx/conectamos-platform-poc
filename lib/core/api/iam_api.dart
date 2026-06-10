@@ -1,10 +1,8 @@
 import 'package:dio/dio.dart';
 
-import 'package:conectamos_platform/core/api/api_client.dart';
-
 class IamApi {
-  static Future<List<Map<String, dynamic>>> getUsers() async {
-    final res = await ApiClient.instance.get('/iam/users');
+  static Future<List<Map<String, dynamic>>> getUsers({required Dio dio}) async {
+    final res = await dio.get('/iam/users');
     final data = res.data;
     final List raw = data is List
         ? data
@@ -12,8 +10,8 @@ class IamApi {
     return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
-  static Future<List<Map<String, dynamic>>> getRoles() async {
-    final res = await ApiClient.instance.get('/iam/roles');
+  static Future<List<Map<String, dynamic>>> getRoles({required Dio dio}) async {
+    final res = await dio.get('/iam/roles');
     final data = res.data;
     final List raw = data is List
         ? data
@@ -23,37 +21,39 @@ class IamApi {
 
   static Future<void> updateUser(
     String id,
-    Map<String, dynamic> data,
-  ) async {
-    await ApiClient.instance.patch('/iam/users/$id', data: data);
+    Map<String, dynamic> data, {
+    required Dio dio,
+  }) async {
+    await dio.patch('/iam/users/$id', data: data);
   }
 
-  static Future<void> updateUserRole(String id, String roleId) async {
-    await ApiClient.instance.patch(
+  static Future<void> updateUserRole(String id, String roleId, {required Dio dio}) async {
+    await dio.patch(
       '/iam/users/$id/role',
       data: {'role_id': roleId},
     );
   }
 
-  static Future<void> resendInvite(String id) async {
-    await ApiClient.instance.post('/iam/users/$id/resend-invite');
+  static Future<void> resendInvite(String id, {required Dio dio}) async {
+    await dio.post('/iam/users/$id/resend-invite');
   }
 
-  static Future<void> inviteUser(Map<String, dynamic> data, {Dio? dio}) async {
-    await (dio ?? ApiClient.instance).post('/iam/invite', data: data);
+  static Future<void> inviteUser(Map<String, dynamic> data, {required Dio dio}) async {
+    await dio.post('/iam/invite', data: data);
   }
 
-  static Future<void> resetPassword(String email) async {
-    await ApiClient.instance.post(
+  static Future<void> resetPassword(String email, {required Dio dio}) async {
+    await dio.post(
       '/iam/password-reset',
       data: {'email': email},
     );
   }
 
   static Future<List<Map<String, dynamic>>> getUserChannels({
+    required Dio dio,
     required String tenantUserId,
   }) async {
-    final res = await ApiClient.instance.get(
+    final res = await dio.get(
       '/supervisor-channel-access',
       queryParameters: {'tenant_user_id': tenantUserId},
     );
@@ -63,10 +63,11 @@ class IamApi {
   }
 
   static Future<void> assignChannel({
+    required Dio dio,
     required String tenantUserId,
     required String channelId,
   }) async {
-    await ApiClient.instance.post(
+    await dio.post(
       '/supervisor-channel-access',
       data: {
         'tenant_user_id': tenantUserId,
@@ -76,10 +77,11 @@ class IamApi {
   }
 
   static Future<void> removeChannel({
+    required Dio dio,
     required String tenantUserId,
     required String channelId,
   }) async {
-    await ApiClient.instance.delete(
+    await dio.delete(
       '/supervisor-channel-access',
       data: {
         'tenant_user_id': tenantUserId,
@@ -89,10 +91,11 @@ class IamApi {
   }
 
   static Future<Map<String, dynamic>> linkOperator({
+    required Dio dio,
     required String tenantUserId,
     required String phone,
   }) async {
-    final res = await ApiClient.instance.post(
+    final res = await dio.post(
       '/iam/users/$tenantUserId/link-operator',
       data: {'phone': phone},
     );
@@ -102,15 +105,16 @@ class IamApi {
   }
 
   static Future<void> unlinkOperator({
+    required Dio dio,
     required String tenantUserId,
   }) async {
-    await ApiClient.instance.post(
+    await dio.post(
       '/iam/users/$tenantUserId/unlink-operator',
     );
   }
 
-  static Future<Map<String, dynamic>> getInvitation(String token, {Dio? dio}) async {
-    final res = await (dio ?? ApiClient.instance).get('/iam/invite/$token');
+  static Future<Map<String, dynamic>> getInvitation(String token, {required Dio dio}) async {
+    final res = await dio.get('/iam/invite/$token');
     return res.data is Map
         ? Map<String, dynamic>.from(res.data as Map)
         : <String, dynamic>{};
@@ -119,9 +123,9 @@ class IamApi {
   static Future<void> acceptInvitation(
     String token, {
     required String password,
-    Dio? dio,
+    required Dio dio,
   }) async {
-    await (dio ?? ApiClient.instance).post(
+    await dio.post(
       '/iam/invite/$token/accept',
       data: {'password': password},
     );
@@ -131,7 +135,7 @@ class IamApi {
     await dio.delete('/iam/users/$id');
   }
 
-  static Future<void> revokeInvitation(String id) async {
-    await ApiClient.instance.delete('/iam/invitations/$id');
+  static Future<void> revokeInvitation(String id, {required Dio dio}) async {
+    await dio.delete('/iam/invitations/$id');
   }
 }
