@@ -2,6 +2,7 @@
 // Single point of TZ conversion in the FE. All date utils delegate here.
 // Fallback on invalid IANA zone: format in UTC + visible "(UTC)" marker.
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:intl/intl.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
@@ -34,6 +35,20 @@ void setActiveZone(String iana) {
   }
 }
 
+// ── Test-only now override ───────────────────────────────────────────────────
+
+DateTime? _nowOverrideUtc;
+
+/// Override the "now" instant used by [nowInZone] for deterministic tests.
+///
+/// [nowUtc] must be a UTC instant (or null to restore real clock).
+/// Use in tests that assert calendar-day semantics (Hoy/Ayer/group labels).
+/// Always call `setNowForTest(null)` in tearDown to avoid leaking state.
+@visibleForTesting
+void setNowForTest(DateTime? nowUtc) {
+  _nowOverrideUtc = nowUtc;
+}
+
 // ── Canonical conversion ─────────────────────────────────────────────────────
 
 /// Format [utcInstant] in the active tenant timezone using [fmt].
@@ -52,9 +67,14 @@ void setActiveZone(String iana) {
 }
 
 /// DateTime.now() in active tenant timezone. Falls back to UTC.
+/// If [setNowForTest] has been called with a non-null value, uses that
+/// instant instead of the real clock — for deterministic calendar-day tests.
 ({DateTime now, bool utcFallback}) nowInZone() {
   if (_activeLocation == null) {
-    return (now: DateTime.now().toUtc(), utcFallback: true);
+    return (now: _nowOverrideUtc?.toUtc() ?? DateTime.now().toUtc(), utcFallback: true);
+  }
+  if (_nowOverrideUtc != null) {
+    return (now: tz.TZDateTime.from(_nowOverrideUtc!, _activeLocation!), utcFallback: false);
   }
   return (now: tz.TZDateTime.now(_activeLocation!), utcFallback: false);
 }
