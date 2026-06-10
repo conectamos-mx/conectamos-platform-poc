@@ -6,11 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:patrol_finders/patrol_finders.dart';
 
-import 'package:conectamos_platform/core/api/api_client.dart';
 import 'package:conectamos_platform/core/providers/permissions_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'helpers/in_memory_key_value_store.dart';
 import 'helpers/mock_api_interceptor.dart';
 import 'helpers/test_overrides.dart';
 
@@ -49,21 +46,6 @@ const _kSupervisorGrants = <String, bool>{
 
 const _kSupervisorRoleId = 'supervisor-mock';
 
-void _initStaticApiClient(MockApiInterceptor mock) {
-  final store = InMemoryKeyValueStore();
-  final fakeClient = SupabaseClient(
-    'http://localhost:0',
-    'fake-anon-key',
-    authOptions: const AuthClientOptions(autoRefreshToken: false),
-  );
-  ApiClient.resetForTest();
-  ApiClient.init(
-    supabaseClient: fakeClient,
-    storage: store,
-    testInterceptor: mock,
-  );
-}
-
 void _mockSupportingRoutes(MockApiInterceptor mock) {
   mock.when('/operators', body: []);
   mock.when('/workers', body: []);
@@ -71,7 +53,6 @@ void _mockSupportingRoutes(MockApiInterceptor mock) {
   mock.when('/tenants/{id}/kpis', body: <String, dynamic>{});
   mock.when('/iam/users', body: []);
   mock.when('/iam/roles', body: []);
-  // Needed by viewer-mock panel's _load() via ApiClient.instance
   mock.when('/iam/roles/{id}/permissions', body: []);
   // Settings screen general section loads tenant info
   mock.when('/tenants/{id}', body: <String, dynamic>{});
@@ -102,7 +83,6 @@ void main() {
 
         final mock = MockApiInterceptor();
         _mockSupportingRoutes(mock);
-        _initStaticApiClient(mock);
 
         // Build app with seeded provider override for supervisor role
         final seededState = RolePermState(

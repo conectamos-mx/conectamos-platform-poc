@@ -29,6 +29,13 @@ dart run build_runner build --delete-conflicting-outputs
 
 Unit tests live in `test/unit/` — run with `flutter test test/unit/`.
 
+Integration tests live in `test/integration/` — run with:
+```bash
+flutter test test/integration/ --platform chrome \
+  --dart-define=MOCK_MODE=true \
+  --dart-define=API_BASE_URL=https://platform-api-dev.conectamos.ai
+```
+
 ---
 
 ## Architecture overview

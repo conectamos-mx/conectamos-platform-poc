@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 //   mock.when('/tenants/{id}/kpis', body: {'operators_active': 5});
 //   mock.when('/iam/users/{id}', method: 'DELETE', body: null);
 //   mock.whenError('/tenants/{id}/kpis');
-//   ApiClient.init(supabaseClient: ..., storage: ..., interceptor: mock);
+//   buildTestAppWithMock(mock);  // injects mock via apiClientProvider
 //
 // Path patterns: literal segments match exactly; {param} matches any single segment.
 // Method matching (optional, PLA-103):
