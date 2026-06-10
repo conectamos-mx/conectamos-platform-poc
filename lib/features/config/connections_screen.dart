@@ -2373,7 +2373,7 @@ class _IntegrationsManagementSheetState
       _error = null;
     });
     try {
-      final all = await FlowsApi.listIntegrationsByTenant();
+      final all = await FlowsApi.listIntegrationsByTenant(dio: ref.read(apiClientProvider).dio);
       if (!mounted) return;
       final filtered = all.where((i) {
         final t = (i['integration_type'] as String? ?? '').toLowerCase();
@@ -2397,7 +2397,7 @@ class _IntegrationsManagementSheetState
     if (_deleting) return;
     setState(() => _deleting = true);
     try {
-      await FlowsApi.deleteIntegrationById(integrationId: id);
+      await FlowsApi.deleteIntegrationById(dio: ref.read(apiClientProvider).dio, integrationId: id);
       if (!mounted) return;
       await _load();
     } catch (e) {
@@ -2809,6 +2809,7 @@ class _CreateTenantIntegrationDialogState
     });
     try {
       final result = await FlowsApi.createIntegrationForTenant(
+        dio: ref.read(apiClientProvider).dio,
         name: _nameCtrl.text.trim(),
         integrationType: _type,
         tenantWorkerId: _workerId!,

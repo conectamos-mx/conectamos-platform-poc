@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/ai_workers_api.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/api/groups_api.dart';
 import '../../core/api/operator_roles_api.dart';
@@ -1380,7 +1381,7 @@ class _WorkerFlowsTabState extends ConsumerState<_WorkerFlowsTab> {
     try {
       final tenantId = ref.read(activeTenantIdProvider);
       final results = await Future.wait([
-        FlowsApi.getFlowsByWorker(tenantWorkerId: widget.workerId),
+        FlowsApi.getFlowsByWorker(dio: ref.read(apiClientProvider).dio, tenantWorkerId: widget.workerId),
         OperatorRolesApi.listRoles(tenantId: tenantId),
       ]);
       if (!mounted) return;
@@ -1898,7 +1899,7 @@ String _flowSlugify(String input) {
       .replaceAll(RegExp(r'^-+|-+$'), '');
 }
 
-class _NewFlowDialog extends StatefulWidget {
+class _NewFlowDialog extends ConsumerStatefulWidget {
   const _NewFlowDialog({
     required this.tenantId,
     required this.workerId,
@@ -1909,10 +1910,10 @@ class _NewFlowDialog extends StatefulWidget {
   final void Function(String flowId) onCreated;
 
   @override
-  State<_NewFlowDialog> createState() => _NewFlowDialogState();
+  ConsumerState<_NewFlowDialog> createState() => _NewFlowDialogState();
 }
 
-class _NewFlowDialogState extends State<_NewFlowDialog> {
+class _NewFlowDialogState extends ConsumerState<_NewFlowDialog> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   String? _slugError;
@@ -1972,6 +1973,7 @@ class _NewFlowDialogState extends State<_NewFlowDialog> {
   Future<void> _submit() async {
     try {
       final result = await FlowsApi.createFlow(
+        dio: ref.read(apiClientProvider).dio,
         tenantWorkerId: widget.workerId,
         name: _nameCtrl.text.trim(),
         slug: _slug,

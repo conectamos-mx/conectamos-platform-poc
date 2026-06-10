@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -74,7 +75,7 @@ class _ExecutionsScreenState extends ConsumerState<ExecutionsScreen> {
       _error = null;
     });
     try {
-      final data = await FlowsApi.listPendingExecutions();
+      final data = await FlowsApi.listPendingExecutions(dio: ref.read(apiClientProvider).dio);
       if (!mounted) return;
       setState(() {
         _executions = data;
@@ -367,6 +368,7 @@ class _ExecutionDetailSheetState
     try {
       final executionId = widget.execution['id'] as String;
       final detail = await FlowsApi.getExecution(
+        dio: ref.read(apiClientProvider).dio,
         executionId: executionId,
       );
       if (!mounted) return;
@@ -449,6 +451,7 @@ class _ExecutionDetailSheetState
             .map((e) => MapEntry(e.key, e.value.text.trim())),
       );
       await FlowsApi.submitExecution(
+        dio: ref.read(apiClientProvider).dio,
         executionId: executionId,
         fields: fields,
       );

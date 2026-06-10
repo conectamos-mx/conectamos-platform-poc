@@ -1613,7 +1613,7 @@ class _NewAssignmentDialogState extends State<_NewAssignmentDialog> {
     try {
       final catalogs =
           await CatalogsApi.listCatalogs(dio: widget.dio, tenantId: widget.tenantId);
-      final flows = await FlowsApi.listFlows();
+      final flows = await FlowsApi.listFlows(dio: widget.dio);
       if (mounted) {
         setState(() {
           _catalogs = catalogs;
