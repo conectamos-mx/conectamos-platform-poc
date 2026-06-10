@@ -47,7 +47,7 @@ class _OverviewScreenState extends ConsumerState<OverviewScreen> {
     if (tenantId.isEmpty) return;
     setState(() { _kpisLoading = true; _kpisErrorMsg = null; });
     try {
-      final data = await OverviewApi.getKpis(tenantId: tenantId);
+      final data = await OverviewApi.getKpis(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
       setState(() {
         _kpis = data;
         _kpisLoading = false;
