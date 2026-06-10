@@ -294,7 +294,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
                     ),
                   ],
                 ),
-          _ControlTowersTab(workerId: widget.workerId),
+          _ControlTowersTab(workerId: widget.workerId, dio: ref.read(apiClientProvider).dio),
           _selectedFlowId == null
               ? _WorkerFlowsTab(
                   workerId: widget.workerId,
@@ -2268,8 +2268,9 @@ class _SummaryRow extends StatelessWidget {
 // ── _ControlTowersTab ─────────────────────────────────────────────────────
 
 class _ControlTowersTab extends StatefulWidget {
-  const _ControlTowersTab({required this.workerId});
+  const _ControlTowersTab({required this.workerId, required this.dio});
   final String workerId;
+  final Dio dio;
 
   @override
   State<_ControlTowersTab> createState() => _ControlTowersTabState();
@@ -2290,7 +2291,7 @@ class _ControlTowersTabState extends State<_ControlTowersTab> {
     if (!mounted) return;
     setState(() { _loading = true; _error = null; });
     try {
-      final all = await GroupsApi.listControlTowers();
+      final all = await GroupsApi.listControlTowers(dio: widget.dio);
       // Filtrar por worker_id
       final filtered = all.where((t) => t['worker_id'] == widget.workerId).toList();
       if (!mounted) return;
@@ -2312,6 +2313,7 @@ class _ControlTowersTabState extends State<_ControlTowersTab> {
       context: context,
       builder: (_) => _EditTowerDialog(
         tower: tower,
+        dio: widget.dio,
         onSaved: _load,
       ),
     );
@@ -2344,7 +2346,7 @@ class _ControlTowersTabState extends State<_ControlTowersTab> {
     if (confirm != true) return;
 
     try {
-      await GroupsApi.deleteControlTower(towerId: towerId);
+      await GroupsApi.deleteControlTower(dio: widget.dio, towerId: towerId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Torre "$displayName" eliminada')),
@@ -2380,6 +2382,7 @@ class _ControlTowersTabState extends State<_ControlTowersTab> {
                     context: context,
                     builder: (_) => _CreateTowerDialog(
                       workerId: widget.workerId,
+                      dio: widget.dio,
                       onSaved: _load,
                     ),
                   );
@@ -2529,10 +2532,12 @@ class _TowerCard extends StatelessWidget {
 class _CreateTowerDialog extends StatefulWidget {
   const _CreateTowerDialog({
     required this.workerId,
+    required this.dio,
     required this.onSaved,
   });
 
   final String workerId;
+  final Dio dio;
   final VoidCallback onSaved;
 
   @override
@@ -2603,6 +2608,7 @@ class _CreateTowerDialogState extends State<_CreateTowerDialog> {
 
     try {
       await GroupsApi.createControlTower(
+        dio: widget.dio,
         workerId: widget.workerId,
         displayName: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
@@ -2644,6 +2650,7 @@ class _CreateTowerDialogState extends State<_CreateTowerDialog> {
               // Avatar picker
               Center(
                 child: ImagePickerAvatar(
+                  dio: widget.dio,
                   imageUrl: _iconUrl,
                   fallback: const Icon(
                     Icons.group,
@@ -2712,10 +2719,12 @@ class _CreateTowerDialogState extends State<_CreateTowerDialog> {
 class _EditTowerDialog extends StatefulWidget {
   const _EditTowerDialog({
     required this.tower,
+    required this.dio,
     required this.onSaved,
   });
 
   final Map<String, dynamic> tower;
+  final Dio dio;
   final VoidCallback onSaved;
 
   @override
@@ -2769,6 +2778,7 @@ class _EditTowerDialogState extends State<_EditTowerDialog> {
 
     try {
       await GroupsApi.updateControlTower(
+        dio: widget.dio,
         towerId: widget.tower['id'] as String,
         displayName: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
@@ -2811,6 +2821,7 @@ class _EditTowerDialogState extends State<_EditTowerDialog> {
               // Avatar picker
               Center(
                 child: ImagePickerAvatar(
+                  dio: widget.dio,
                   imageUrl: _iconUrl,
                   fallback: const Icon(
                     Icons.group,

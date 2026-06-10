@@ -4875,7 +4875,7 @@ class _ActionDialogState extends State<_ActionDialog> {
   Future<void> _loadGroups() async {
     setState(() => _loadingGroups = true);
     try {
-      final data = await GroupsApi.listGroupsByTenant();
+      final data = await GroupsApi.listGroupsByTenant(dio: widget.dio);
       if (mounted) setState(() { _groups = data; _loadingGroups = false; });
     } catch (e) {
       if (mounted) setState(() => _loadingGroups = false);
@@ -4885,7 +4885,7 @@ class _ActionDialogState extends State<_ActionDialog> {
   Future<void> _loadControlTowers() async {
     setState(() => _loadingControlTowers = true);
     try {
-      final data = await GroupsApi.listControlTowers();
+      final data = await GroupsApi.listControlTowers(dio: widget.dio);
       if (mounted) setState(() { _controlTowers = data; _loadingControlTowers = false; });
     } catch (e) {
       if (mounted) setState(() => _loadingControlTowers = false);

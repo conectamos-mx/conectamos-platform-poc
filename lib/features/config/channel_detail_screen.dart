@@ -1570,7 +1570,7 @@ class _GroupsTabState extends ConsumerState<_GroupsTab> {
     if (!mounted) return;
     setState(() => _loading = true);
     try {
-      final list = await GroupsApi.listGroups(channelId: _channelId);
+      final list = await GroupsApi.listGroups(dio: ref.read(apiClientProvider).dio, channelId: _channelId);
       if (!mounted) return;
       setState(() {
         _groups = list;
@@ -1602,6 +1602,7 @@ class _GroupsTabState extends ConsumerState<_GroupsTab> {
       barrierDismissible: true,
       builder: (_) => _CreateGroupDialog(
         channelId: _channelId,
+        dio: ref.read(apiClientProvider).dio,
         onError: widget.onError,
       ),
     );
@@ -1658,7 +1659,7 @@ class _GroupsTabState extends ConsumerState<_GroupsTab> {
     );
     if (confirm != true || !mounted) return;
     try {
-      await GroupsApi.deleteGroup(groupId: groupId);
+      await GroupsApi.deleteGroup(dio: ref.read(apiClientProvider).dio, groupId: groupId);
       widget.onSuccess('Grupo eliminado');
       _loadGroups();
     } catch (e) {
@@ -1889,9 +1890,11 @@ class _GroupsTabState extends ConsumerState<_GroupsTab> {
 class _CreateGroupDialog extends StatefulWidget {
   const _CreateGroupDialog({
     required this.channelId,
+    required this.dio,
     required this.onError,
   });
   final String channelId;
+  final Dio dio;
   final ValueChanged<String> onError;
 
   @override
@@ -1916,6 +1919,7 @@ class _CreateGroupDialogState extends State<_CreateGroupDialog> {
     setState(() => _saving = true);
     try {
       await GroupsApi.createGroup(
+        dio: widget.dio,
         channelId: widget.channelId,
         subject: name,
         description:
@@ -2050,7 +2054,7 @@ class _GroupDetailDialogState extends ConsumerState<_GroupDetailDialog> {
 
   Future<void> _loadVisibility() async {
     try {
-      final vis = await GroupsApi.getVisibility(groupId: _groupId);
+      final vis = await GroupsApi.getVisibility(dio: ref.read(apiClientProvider).dio, groupId: _groupId);
       if (mounted) setState(() { _visibility = vis; _loadingVis = false; });
     } catch (_) {
       if (mounted) setState(() => _loadingVis = false);
@@ -2062,7 +2066,7 @@ class _GroupDetailDialogState extends ConsumerState<_GroupDetailDialog> {
     if (name.isEmpty) return;
     setState(() => _savingName = true);
     try {
-      await GroupsApi.updateGroup(groupId: _groupId, displayName: name);
+      await GroupsApi.updateGroup(dio: ref.read(apiClientProvider).dio, groupId: _groupId, displayName: name);
       widget.onSuccess('Nombre actualizado');
       _changed = true;
       if (mounted) setState(() => _savingName = false);
@@ -2075,6 +2079,7 @@ class _GroupDetailDialogState extends ConsumerState<_GroupDetailDialog> {
   Future<void> _removeVisibility(String tenantUserId) async {
     try {
       await GroupsApi.removeVisibility(
+        dio: ref.read(apiClientProvider).dio,
           groupId: _groupId, tenantUserId: tenantUserId);
       _changed = true;
       _loadVisibility();
@@ -2109,6 +2114,7 @@ class _GroupDetailDialogState extends ConsumerState<_GroupDetailDialog> {
     if (selected != null && selected.isNotEmpty) {
       try {
         await GroupsApi.addVisibility(
+          dio: ref.read(apiClientProvider).dio,
             groupId: _groupId, tenantUserIds: selected);
         _changed = true;
         _loadVisibility();
