@@ -4630,6 +4630,10 @@ class _ActionDialogState extends State<_ActionDialog> {
   String? _excelHeadersError;
   bool _microsoftConnected = false;
   bool _checkingMicrosoftOAuth = false;
+  bool _loadingOnedriveFiles = false;
+  List<Map<String, dynamic>> _onedriveFiles = [];
+  String? _selectedExcelFileId;
+  String? _selectedExcelFileName;
 
   // notify_group
   // notify_group / enviar notificación
@@ -4848,7 +4852,8 @@ class _ActionDialogState extends State<_ActionDialog> {
       }
       if (_type == 'excel_onedrive_append_row' || _type == 'excel_onedrive_update_row') {
         final cfg = a['config'] as Map? ?? {};
-        _excelFileIdCtrl.text = cfg['file_id'] as String? ?? '';
+        _selectedExcelFileId = cfg['file_id'] as String? ?? '';
+        _excelFileIdCtrl.text = _selectedExcelFileId ?? '';
         _excelSheetNameCtrl.text = cfg['sheet_name'] as String? ?? 'Sheet1';
         _hasHeaders = cfg['has_headers'] as bool? ?? false;
         final mapping = cfg['column_mapping'] as Map? ?? {};
@@ -5176,12 +5181,29 @@ class _ActionDialogState extends State<_ActionDialog> {
       debugPrint('[_checkMicrosoftOAuthForAction] Is connected: $isConnected');
       if (mounted) {
         setState(() => _microsoftConnected = isConnected);
+        if (isConnected) _loadOnedriveFilesForAction();
       }
     } catch (e) {
       debugPrint('[_checkMicrosoftOAuthForAction] Error: $e');
       if (mounted) setState(() => _microsoftConnected = false);
     } finally {
       if (mounted) setState(() => _checkingMicrosoftOAuth = false);
+    }
+  }
+
+  Future<void> _loadOnedriveFilesForAction() async {
+    setState(() => _loadingOnedriveFiles = true);
+    try {
+      final files = await ConnectionsApi.getOnedriveFiles(tenantId: widget.tenantId);
+      if (mounted) {
+        setState(() {
+          _onedriveFiles = files;
+          _loadingOnedriveFiles = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[_loadOnedriveFilesForAction] Error: $e');
+      if (mounted) setState(() => _loadingOnedriveFiles = false);
     }
   }
 
@@ -7250,11 +7272,41 @@ class _ActionDialogState extends State<_ActionDialog> {
                     ),
                   )
                 else ...[
-                  _FormField(
-                    label: 'ID de archivo de Excel',
-                    controller: _excelFileIdCtrl,
-                    placeholder: 'ej. 01ABCDEF1234567890',
-                  ),
+                  if (_loadingOnedriveFiles) ...[
+                    const SizedBox(height: 12),
+                    const LinearProgressIndicator(color: AppColors.ctTeal),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Cargando archivos de OneDrive…',
+                      style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+                    ),
+                  ] else if (_onedriveFiles.isEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'No se encontraron archivos Excel en OneDrive',
+                      style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+                    ),
+                  ] else ...[
+                    Text('Archivo Excel', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 6),
+                    AppDropdown<String?>(
+                      hint: 'Selecciona un archivo…',
+                      value: _selectedExcelFileId,
+                      items: _onedriveFiles.map((f) {
+                        final id = f['id'] as String?;
+                        final name = f['name'] as String? ?? id ?? '';
+                        return AppDropdownItem<String?>(value: id, label: name);
+                      }).toList(),
+                      onChanged: (v) {
+                        setState(() {
+                          _selectedExcelFileId = v;
+                          _selectedExcelFileName = _onedriveFiles
+                              .firstWhere((f) => f['id'] == v, orElse: () => {})['name'] as String?;
+                          _excelFileIdCtrl.text = v ?? '';
+                        });
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   _FormField(
                     label: 'Nombre de la hoja',

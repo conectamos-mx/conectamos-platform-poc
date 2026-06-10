@@ -81,4 +81,18 @@ class ConnectionsApi {
       queryParameters: {'tenant_id': tenantId},
     );
   }
+
+  /// Lists Excel files from OneDrive for the tenant.
+  static Future<List<Map<String, dynamic>>> getOnedriveFiles({
+    required String tenantId,
+  }) async {
+    final response = await ApiClient.instance.get(
+      '/api/v1/catalogs/tools/onedrive-files',
+      queryParameters: {'tenant_id': tenantId},
+    );
+    final raw = response.data;
+    final list = raw is Map ? (raw['files'] ?? []) : (raw is List ? raw : []);
+    return List<Map<String, dynamic>>.from(
+        (list as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
+  }
 }
