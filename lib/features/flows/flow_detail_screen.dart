@@ -5102,7 +5102,7 @@ class _ActionDialogState extends State<_ActionDialog> {
   Future<void> _checkGoogleOAuthForAction() async {
     setState(() => _checkingGoogleOAuth = true);
     try {
-      final status = await ConnectionsApi.getGoogleStatus();
+      final status = await ConnectionsApi.getGoogleStatus(dio: widget.dio);
       if (mounted) setState(() => _googleConnected = status['connected'] == true);
     } catch (_) {
       if (mounted) setState(() => _googleConnected = false);
@@ -5141,6 +5141,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     });
     try {
       final headers = await ConnectionsApi.getSheetHeaders(
+        dio: widget.dio,
         spreadsheetId: spreadsheetId,
         sheetName: sheetName,
       );
