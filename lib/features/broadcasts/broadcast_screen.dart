@@ -22,7 +22,7 @@ final _bcastOperatorsProvider =
     FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>(
   (ref, tenantId) async {
     if (tenantId.isEmpty) return [];
-    final res = await ApiClient.instance.get('/operators');
+    final res = await ref.read(apiClientProvider).dio.get('/operators');
     final data = res.data;
     final List raw = data is List ? data : [];
     return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -33,7 +33,7 @@ final _bcastTemplatesProvider =
     FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>(
   (ref, tenantId) async {
     if (tenantId.isEmpty) return [];
-    final res = await ApiClient.instance.get(
+    final res = await ref.read(apiClientProvider).dio.get(
       '/templates',
       queryParameters: {'status': 'APPROVED'},
     );
@@ -54,7 +54,7 @@ final _bcastTenantCredsProvider =
   (ref, tenantId) async {
     if (tenantId.isEmpty) return null;
     try {
-      final res = await ApiClient.instance.get('/tenants/$tenantId');
+      final res = await ref.read(apiClientProvider).dio.get('/tenants/$tenantId');
       return (res.data as Map?)?['wa_waba_id']?.toString();
     } catch (_) {
       return null;
@@ -67,7 +67,7 @@ final _bcastHistoryProvider =
   (ref, tenantId) async {
     if (tenantId.isEmpty) return [];
     try {
-      final res = await ApiClient.instance.get('/broadcasts');
+      final res = await ref.read(apiClientProvider).dio.get('/broadcasts');
       final data = res.data;
       final List raw = data is List ? data : (data['items'] ?? []) as List;
       return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -221,7 +221,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         };
       }
 
-      final res = await ApiClient.instance.post(
+      final res = await ref.read(apiClientProvider).dio.post(
         '/broadcasts',
         data: body,
         options: Options(
