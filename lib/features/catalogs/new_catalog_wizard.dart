@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:dio/dio.dart';
+
 import '../../core/api/catalogs_api.dart';
 import '../../core/api/connections_api.dart';
 import '../../core/theme/app_theme.dart';
@@ -16,8 +18,10 @@ class NewCatalogWizard extends StatefulWidget {
   const NewCatalogWizard({
     super.key,
     required this.tenantId,
+    required this.dio,
   });
   final String tenantId;
+  final Dio dio;
 
   @override
   State<NewCatalogWizard> createState() => _NewCatalogWizardState();
@@ -140,7 +144,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
   Future<void> _loadFieldTypes() async {
     setState(() => _loadingFieldTypes = true);
     try {
-      final types = await CatalogsApi.getFieldTypes();
+      final types = await CatalogsApi.getFieldTypes(dio: widget.dio);
       if (mounted) setState(() => _fieldTypes = types);
     } catch (_) {
       // silencioso — fallback a lista vacía
@@ -268,7 +272,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
     setState(() => _loadingOnedriveFiles = true);
     try {
       final files = await CatalogsApi.getOnedriveFiles(
-          tenantId: widget.tenantId);
+          dio: widget.dio, tenantId: widget.tenantId);
       if (!mounted) return;
       setState(() {
         _onedriveFiles = files;
@@ -291,6 +295,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
     setState(() { _loadingOnedrivePreview = true; _previewLoaded = false; });
     try {
       final result = await CatalogsApi.getOnedrivePreview(
+        dio: widget.dio,
         tenantId: widget.tenantId,
         fileId: _selectedFileId!,
         sheetName: sheetName ?? _selectedSheet,
@@ -322,6 +327,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
     setState(() { _loadingPreview = true; _previewLoaded = false; });
     try {
       final result = await CatalogsApi.sheetsPreview(
+        dio: widget.dio,
         tenantId: widget.tenantId,
         sheetUrl: _sheetUrlCtrl.text.trim(),
         sheetName: sheetName ?? _selectedSheet,
@@ -438,11 +444,11 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
       };
 
       final created = await CatalogsApi.createCatalog(
-          tenantId: widget.tenantId, body: body);
+          dio: widget.dio, tenantId: widget.tenantId, body: body);
 
       final createdId = created['id'] as String?;
       if (createdId != null && _sourceType != 'manual') {
-        unawaited(CatalogsApi.syncCatalog(catalogId: createdId));
+        unawaited(CatalogsApi.syncCatalog(dio: widget.dio, catalogId: createdId));
       }
 
       final slug = created['slug'] as String? ?? _slugCtrl.text.trim();
