@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/executions_api.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/providers/permissions_provider.dart';
@@ -69,7 +70,7 @@ class _ExecutionDetailScreenState
     });
     try {
       final results = await Future.wait([
-        FlowsApi.getExecution(executionId: widget.executionId),
+        FlowsApi.getExecution(dio: ref.read(apiClientProvider).dio, executionId: widget.executionId),
         ExecutionsApi.getMessages(executionId: widget.executionId)
             .catchError((_) => <Map<String, dynamic>>[]),
       ]);
@@ -299,6 +300,7 @@ final content = _MainContent(exec: exec, flow: flow);
                 setDialogState(() => loading = true);
                 try {
                   await FlowsApi.abandonExecution(
+                      dio: ref.read(apiClientProvider).dio,
                       executionId: executionId);
                   if (ctx.mounted) Navigator.pop(ctx);
                   if (mounted) {

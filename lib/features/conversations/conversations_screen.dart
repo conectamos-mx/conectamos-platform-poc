@@ -3226,7 +3226,7 @@ class _ApiChatHeader extends StatelessWidget {
 
 // ── _ActiveFlowPill ───────────────────────────────────────────────────────────
 
-class _ActiveFlowPill extends StatefulWidget {
+class _ActiveFlowPill extends ConsumerStatefulWidget {
   const _ActiveFlowPill({
     required this.operatorId,
     required this.tenantId,
@@ -3235,10 +3235,10 @@ class _ActiveFlowPill extends StatefulWidget {
   final String tenantId;
 
   @override
-  State<_ActiveFlowPill> createState() => _ActiveFlowPillState();
+  ConsumerState<_ActiveFlowPill> createState() => _ActiveFlowPillState();
 }
 
-class _ActiveFlowPillState extends State<_ActiveFlowPill> {
+class _ActiveFlowPillState extends ConsumerState<_ActiveFlowPill> {
   Map<String, dynamic>? _activeFlow;
   Timer? _timer;
 
@@ -3268,6 +3268,7 @@ class _ActiveFlowPillState extends State<_ActiveFlowPill> {
     if (!mounted) return;
     try {
       final flow = await FlowsApi.getActiveFlow(
+        dio: ref.read(apiClientProvider).dio,
         operatorId: widget.operatorId,
       );
       if (!mounted) return;

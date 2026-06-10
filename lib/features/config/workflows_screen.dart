@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/ai_workers_api.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/api/operator_roles_api.dart';
 import '../../core/providers/permissions_provider.dart';
@@ -92,10 +93,11 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
     if (!mounted) return;
     setState(() { _loading = true; _error = null; });
     try {
+      final dio = ref.read(apiClientProvider).dio;
       final results = await Future.wait([
         widget.tenantWorkerId != null
-            ? FlowsApi.getFlowsByWorker(tenantWorkerId: widget.tenantWorkerId!)
-            : FlowsApi.listFlows(),
+            ? FlowsApi.getFlowsByWorker(dio: dio, tenantWorkerId: widget.tenantWorkerId!)
+            : FlowsApi.listFlows(dio: dio),
         AiWorkersApi.listWorkers(),
       ]);
       if (!mounted) return;
@@ -124,7 +126,7 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
       ];
     });
     try {
-      await FlowsApi.updateFlow(flowId: id, isActive: !isActive);
+      await FlowsApi.updateFlow(dio: ref.read(apiClientProvider).dio, flowId: id, isActive: !isActive);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         backgroundColor: const Color(0xFF059669),
@@ -616,7 +618,7 @@ class _FieldRow extends StatelessWidget {
 
 // ── New flow wizard ──────────────────────────────────────────────────────────
 
-class _NewFlowDialog extends StatefulWidget {
+class _NewFlowDialog extends ConsumerStatefulWidget {
   const _NewFlowDialog({
     required this.tenantId,
     required this.workers,
@@ -629,10 +631,10 @@ class _NewFlowDialog extends StatefulWidget {
   final void Function(String flowId) onCreated;
 
   @override
-  State<_NewFlowDialog> createState() => _NewFlowDialogState();
+  ConsumerState<_NewFlowDialog> createState() => _NewFlowDialogState();
 }
 
-class _NewFlowDialogState extends State<_NewFlowDialog> {
+class _NewFlowDialogState extends ConsumerState<_NewFlowDialog> {
   // Step 1 — Identidad
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
@@ -708,6 +710,7 @@ class _NewFlowDialogState extends State<_NewFlowDialog> {
     if (_selectedWorkerId == null) return;
     try {
       final result = await FlowsApi.createFlow(
+        dio: ref.read(apiClientProvider).dio,
         tenantWorkerId: _selectedWorkerId!,
         name: _nameCtrl.text.trim(),
         slug: _slug,

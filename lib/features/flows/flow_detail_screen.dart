@@ -212,7 +212,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
     try {
       final tenantId = ref.read(activeTenantIdProvider);
       final results = await Future.wait([
-        FlowsApi.getFlow(flowId: widget.flowId),
+        FlowsApi.getFlow(dio: ref.read(apiClientProvider).dio, flowId: widget.flowId),
         OperatorRolesApi.listRoles(tenantId: tenantId),
       ]);
       if (!mounted) return;
@@ -282,7 +282,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
     final twId = _flow?['tenant_worker_id'] as String? ?? '';
     if (twId.isEmpty) return;
     try {
-      final flows = await FlowsApi.getFlowsByWorker(tenantWorkerId: twId);
+      final flows = await FlowsApi.getFlowsByWorker(dio: ref.read(apiClientProvider).dio, tenantWorkerId: twId);
       if (mounted) setState(() => _workerFlows = flows);
     } catch (_) {}
   }
@@ -292,6 +292,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
     setState(() => _saving = true);
     try {
       final updated = await FlowsApi.updateFlow(
+        dio: ref.read(apiClientProvider).dio,
         flowId: widget.flowId,
         name: _nameCtrl.text.trim(),
         slug: _derivedSlug,
@@ -512,6 +513,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
     final current = _flow?['is_active'] as bool? ?? false;
     try {
       final updated = await FlowsApi.updateFlow(
+        dio: ref.read(apiClientProvider).dio,
         flowId: widget.flowId,
         isActive: !current,
       );
@@ -559,7 +561,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
   Future<void> _executeDelete() async {
     setState(() => _deleting = true);
     try {
-      await FlowsApi.deleteFlow(flowId: widget.flowId);
+      await FlowsApi.deleteFlow(dio: ref.read(apiClientProvider).dio, flowId: widget.flowId);
       if (!mounted) return;
       setState(() => _showDeleteModal = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -591,6 +593,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
     setState(() => _saving = true);
     try {
       await FlowsApi.updateFlow(
+        dio: ref.read(apiClientProvider).dio,
         flowId: widget.flowId,
         name: _nameCtrl.text.trim(),
         slug: _derivedSlug,
@@ -4693,7 +4696,7 @@ class _ActionDialogState extends State<_ActionDialog> {
 
   Future<void> _loadActionTypes() async {
     try {
-      final types = await FlowsApi.getActionTypes();
+      final types = await FlowsApi.getActionTypes(dio: widget.dio);
       if (mounted) {
         setState(() {
           _availableActionTypes = types;
@@ -5208,6 +5211,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     setState(() => _loadingFlows = true);
     try {
       final flows = await FlowsApi.getFlowsByWorker(
+        dio: widget.dio,
         tenantWorkerId: widget.tenantWorkerId,
       );
       final filtered = flows
@@ -7565,7 +7569,7 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
 
   Future<void> _loadTypes() async {
     try {
-      final types = await FlowsApi.getPreconditionTypes();
+      final types = await FlowsApi.getPreconditionTypes(dio: widget.dio);
       if (mounted) setState(() => _availableTypes = types);
     } catch (e, st) {
       debugPrint('[_loadTypes] error: $e\n$st');
@@ -7576,6 +7580,7 @@ class _PrecondicionesTabState extends State<_PrecondicionesTab> {
     if (widget.tenantWorkerId.isEmpty) return;
     try {
       final flows = await FlowsApi.getFlowsByWorker(
+        dio: widget.dio,
         tenantWorkerId: widget.tenantWorkerId,
       );
       if (mounted) setState(() => _workerFlows = flows);
@@ -8490,7 +8495,7 @@ class _AddRuleDialogState extends State<_AddRuleDialog> {
     final flowId = flow['id'] as String?;
     if (flowId == null || flowId.isEmpty) return;
     _loadingFlowFields.add(slug);
-    FlowsApi.getFlow(flowId: flowId).then((data) {
+    FlowsApi.getFlow(dio: widget.dio, flowId: flowId).then((data) {
       if (!mounted) return;
       final rawFields = data['fields'] as List?;
       final fields = rawFields != null
