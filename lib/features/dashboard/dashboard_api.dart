@@ -1,7 +1,8 @@
-import 'package:conectamos_platform/core/api/api_client.dart';
+import 'package:dio/dio.dart';
 
 class DashboardApi {
   static Future<Map<String, dynamic>> fetchTableData({
+    required Dio dio,
     required String dashboardSlug,
     required String widgetId,
     String? dateRangeStart,
@@ -17,7 +18,7 @@ class DashboardApi {
     if (dateRangeEnd != null) params['date_range_end'] = dateRangeEnd;
     if (metadataFilterKey != null) params['metadata_filter_key'] = metadataFilterKey;
     if (metadataFilterValue != null) params['metadata_filter_value'] = metadataFilterValue;
-    final resp = await ApiClient.instance.get(
+    final resp = await dio.get(
       '/api/v1/dashboard/table-data',
       queryParameters: params,
     );
