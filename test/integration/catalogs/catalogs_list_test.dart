@@ -6,28 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:patrol_finders/patrol_finders.dart';
 
-import 'package:conectamos_platform/core/api/api_client.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import '../helpers/catalog_fixtures.dart';
-import '../helpers/in_memory_key_value_store.dart';
 import '../helpers/mock_api_interceptor.dart';
 import '../helpers/test_overrides.dart';
-
-void _initStaticApiClient(MockApiInterceptor mock) {
-  final store = InMemoryKeyValueStore();
-  final fakeClient = SupabaseClient(
-    'http://localhost:0',
-    'fake-anon-key',
-    authOptions: const AuthClientOptions(autoRefreshToken: false),
-  );
-  ApiClient.resetForTest();
-  ApiClient.init(
-    supabaseClient: fakeClient,
-    storage: store,
-    testInterceptor: mock,
-  );
-}
 
 void _mockSupportingRoutes(MockApiInterceptor mock) {
   mock.when('/operators', body: []);
@@ -51,7 +32,6 @@ void main() {
       final mock = MockApiInterceptor();
       mock.when('/api/v1/catalogs', body: kCatalogList);
       _mockSupportingRoutes(mock);
-      _initStaticApiClient(mock);
 
       await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();
@@ -101,7 +81,6 @@ void main() {
       // Mock the detail endpoint so navigation doesn't error
       mock.when('/api/v1/catalogs/by-slug/{slug}', body: kCatalog1);
       _mockSupportingRoutes(mock);
-      _initStaticApiClient(mock);
 
       await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();
@@ -148,7 +127,6 @@ void main() {
       mock.when('/api/v1/catalogs/{id}/sync',
           method: 'POST', body: <String, dynamic>{'status': 'running'});
       _mockSupportingRoutes(mock);
-      _initStaticApiClient(mock);
 
       await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();

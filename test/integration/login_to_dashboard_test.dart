@@ -6,26 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:patrol_finders/patrol_finders.dart';
 
-import 'package:conectamos_platform/core/api/api_client.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
-import 'helpers/in_memory_key_value_store.dart';
 import 'helpers/test_overrides.dart';
 
 void main() {
   setUpAll(() => initTestLocale());
-
-  setUp(() {
-    final store = InMemoryKeyValueStore();
-    final fakeClient = SupabaseClient(
-      'http://localhost:0',
-      'fake-anon-key',
-      authOptions: const AuthClientOptions(autoRefreshToken: false),
-    );
-    // Reset + init the static ApiClient for each test.
-    ApiClient.resetForTest();
-    ApiClient.init(supabaseClient: fakeClient, storage: store);
-  });
 
   testWidgets(
     'login → submit → navigates to overview (mock mode)',
