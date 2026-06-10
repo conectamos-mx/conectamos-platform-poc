@@ -11,6 +11,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/ai_workers_api.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/channels_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
@@ -85,7 +86,7 @@ class _ChannelsScreenState extends ConsumerState<ChannelsScreen> {
     try {
       final results = await Future.wait([
         ChannelsApi.listChannels(),
-        AiWorkersApi.listWorkers(),
+        AiWorkersApi.listWorkers(dio: ref.read(apiClientProvider).dio),
       ]);
       if (!mounted) return;
       final allChannels = results[0];

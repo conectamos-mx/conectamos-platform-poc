@@ -120,7 +120,7 @@ class _OverviewScreenState extends ConsumerState<OverviewScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 13, child: _WorkersFlows(tenantId: tenantId)),
+                    Expanded(flex: 13, child: _WorkersFlows(tenantId: tenantId, dio: ref.read(apiClientProvider).dio)),
                     const SizedBox(width: 14),
                     Expanded(flex: 10, child: const _DayThread()),
                     const SizedBox(width: 14),
@@ -1338,8 +1338,9 @@ class _MetaItem extends StatelessWidget {
 // ── _WorkersFlows ─────────────────────────────────────────────────────────────
 
 class _WorkersFlows extends StatefulWidget {
-  const _WorkersFlows({required this.tenantId});
+  const _WorkersFlows({required this.tenantId, required this.dio});
   final String tenantId;
+  final Dio dio;
 
   @override
   State<_WorkersFlows> createState() => _WorkersFlowsState();
@@ -1365,7 +1366,7 @@ class _WorkersFlowsState extends State<_WorkersFlows> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final raw = await AiWorkersApi.listWorkers();
+      final raw = await AiWorkersApi.listWorkers(dio: widget.dio);
       setState(() { _workers = raw; _loading = false; });
     } catch (e) {
       setState(() { _error = e.toString(); _loading = false; });

@@ -98,7 +98,7 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
         widget.tenantWorkerId != null
             ? FlowsApi.getFlowsByWorker(dio: dio, tenantWorkerId: widget.tenantWorkerId!)
             : FlowsApi.listFlows(dio: dio),
-        AiWorkersApi.listWorkers(),
+        AiWorkersApi.listWorkers(dio: dio),
       ]);
       if (!mounted) return;
       setState(() {

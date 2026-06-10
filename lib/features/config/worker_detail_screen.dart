@@ -104,7 +104,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
       _error = null;
     });
     try {
-      final workers = await AiWorkersApi.listTenantWorkers();
+      final workers = await AiWorkersApi.listTenantWorkers(dio: ref.read(apiClientProvider).dio);
       final worker = workers.firstWhere(
         (w) => (w['id'] as String?) == widget.workerId,
         orElse: () => <String, dynamic>{},
@@ -243,6 +243,7 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
         children: [
           _ConfigTab(
             worker: _worker ?? {},
+            dio: ref.read(apiClientProvider).dio,
             onWorkerUpdated: _load,
             onTabCanales: () => _tabCtrl.animateTo(1),
             onTabFlujos: () => _tabCtrl.animateTo(2),
@@ -314,12 +315,14 @@ class _WorkerDetailScreenState extends ConsumerState<WorkerDetailScreen>
 class _ConfigTab extends StatefulWidget {
   const _ConfigTab({
     required this.worker,
+    required this.dio,
     required this.onWorkerUpdated,
     this.onTabCanales,
     this.onTabFlujos,
   });
 
   final Map<String, dynamic> worker;
+  final Dio dio;
   final VoidCallback onWorkerUpdated;
   final VoidCallback? onTabCanales;
   final VoidCallback? onTabFlujos;
@@ -354,7 +357,7 @@ class _ConfigTabState extends State<_ConfigTab> {
     if (_confirmCtrl.text.trim() != _workerName) return;
     setState(() { _firingWorker = true; });
     try {
-      await AiWorkersApi.fireWorker(widget.worker['id'] as String);
+      await AiWorkersApi.fireWorker(widget.worker['id'] as String, dio: widget.dio);
       if (!mounted) return;
       setState(() { _showFireModal = false; _firingWorker = false; });
       context.go('/workers');
@@ -386,9 +389,9 @@ class _ConfigTabState extends State<_ConfigTab> {
           flex: 5,
           child: Column(
             children: [
-              _IdentityCard(worker: widget.worker, onSaved: widget.onWorkerUpdated),
+              _IdentityCard(worker: widget.worker, dio: widget.dio, onSaved: widget.onWorkerUpdated),
               const SizedBox(height: 16),
-              _StatusCard(worker: widget.worker, onSaved: widget.onWorkerUpdated),
+              _StatusCard(worker: widget.worker, dio: widget.dio, onSaved: widget.onWorkerUpdated),
               const SizedBox(height: 16),
               _DangerZoneCard(onFire: () {
                 _confirmCtrl.clear();
@@ -763,9 +766,10 @@ class _SectionCard extends StatelessWidget {
 // ── _IdentityCard ─────────────────────────────────────────────────────────────
 
 class _IdentityCard extends StatefulWidget {
-  const _IdentityCard({required this.worker, required this.onSaved});
+  const _IdentityCard({required this.worker, required this.dio, required this.onSaved});
 
   final Map<String, dynamic> worker;
+  final Dio dio;
   final VoidCallback onSaved;
 
   @override
@@ -798,6 +802,7 @@ class _IdentityCardState extends State<_IdentityCard> {
     setState(() => _savingName = true);
     try {
       await AiWorkersApi.updateWorker(
+        dio: widget.dio,
         tenantWorkerId: widget.worker['id'] as String,
         displayName: _nameCtrl.text.trim().isEmpty ? null : _nameCtrl.text.trim(),
       );
@@ -984,9 +989,10 @@ class _IdentityCardState extends State<_IdentityCard> {
 // ── _StatusCard ───────────────────────────────────────────────────────────────
 
 class _StatusCard extends StatefulWidget {
-  const _StatusCard({required this.worker, required this.onSaved});
+  const _StatusCard({required this.worker, required this.dio, required this.onSaved});
 
   final Map<String, dynamic> worker;
+  final Dio dio;
   final VoidCallback onSaved;
 
   @override
@@ -1001,6 +1007,7 @@ class _StatusCardState extends State<_StatusCard> {
     setState(() { _togglingActive = true; });
     try {
       await AiWorkersApi.updateWorker(
+        dio: widget.dio,
         tenantWorkerId: widget.worker['id'] as String,
         isActive: !current,
       );

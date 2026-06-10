@@ -2788,7 +2788,7 @@ class _CreateTenantIntegrationDialogState
 
   Future<void> _loadWorkers() async {
     try {
-      final list = await AiWorkersApi.listWorkers();
+      final list = await AiWorkersApi.listWorkers(dio: ref.read(apiClientProvider).dio);
       if (!mounted) return;
       setState(() {
         _workers = list;
