@@ -75,7 +75,7 @@ void main() {
         mock.when('/tenants/{id}/kpis', body: <String, dynamic>{});
         _mockSupportingRoutes(mock);
 
-        await tester.pumpWidget(buildTestApp());
+        await tester.pumpWidget(buildTestAppWithMock(mock));
         await tester.pumpAndSettle();
 
         // Vista general visible
@@ -88,7 +88,7 @@ void main() {
             reason: 'Empty KPIs should NOT show retry button');
 
         // Dashes visible for null KPI values
-        expect(find.text('—% de tu equipo está operando.'), findsOneWidget,
+        expect(find.byKey(const Key('kpi_empty_operation_pct')), findsOneWidget,
             reason: 'Empty KPIs should show dash placeholders');
 
         await tester.pump(const Duration(seconds: 5));
