@@ -171,6 +171,7 @@ class _ConversationsBodyState extends ConsumerState<_ConversationsBody> {
     try {
       final results = await Future.wait(
         otherChannels.map((ch) => ConversationsApi.listConversations(
+          dio: ref.read(apiClientProvider).dio,
           channelId: ch['id'] as String,
         )),
       );
@@ -654,9 +655,9 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
   static DateTime? getLastReadSync(String chatId) => _lastReadAtCache[chatId];
 
   static Future<void> setLastRead(
-      String chatId, DateTime time, String tenantId) async {
+      String chatId, DateTime time, String tenantId, {required Dio dio}) async {
     _lastReadAtCache[chatId] = time;
-    SupabaseReadReceipts.setLastRead(chatId, time, tenantId);
+    SupabaseReadReceipts.setLastRead(chatId, time, tenantId, dio: dio);
   }
 
   Future<void> _loadLastReadCache() async {
@@ -665,7 +666,7 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
     final tenantId = ref.read(activeTenantIdProvider);
     if (userId.isEmpty || tenantId.isEmpty) return;
     final data = await SupabaseReadReceipts.loadAll(
-        userId: userId, tenantId: tenantId);
+        dio: ref.read(apiClientProvider).dio, userId: userId, tenantId: tenantId);
     _lastReadAtCache.addAll(data);
     if (mounted) setState(() {});
   }
@@ -693,6 +694,7 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
       final wt = ref.read(selectedChannelWorkerTypeProvider);
       final isSales = wt == 'sales' || wt == 'custom';
       final convs = await ConversationsApi.listConversations(
+        dio: ref.read(apiClientProvider).dio,
         channelId: channelId,
         includeUnregistered: isSales,
       );
@@ -712,6 +714,7 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
     if (channelId == null) return;
     try {
       final all = await ConversationsApi.listConversations(
+        dio: ref.read(apiClientProvider).dio,
         channelId: channelId,
         includeUnregistered: true,
       );
@@ -964,7 +967,7 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
                         _preOpenLastRead.remove(chatId);
                       }
                       setLastRead(chatId, DateTime.now().toUtc(),
-                          ref.read(activeTenantIdProvider));
+                          ref.read(activeTenantIdProvider), dio: ref.read(apiClientProvider).dio);
                       setState(() { _unreadOverride[chatId] = 0; });
                       final chatOverrides = Map<String, int>.from(
                           ref.read(_chatReadOverrideProvider));
@@ -976,6 +979,7 @@ class _ConvoListState extends ConsumerState<_ConvoList> {
                       final channelId = ref.read(selectedChannelIdProvider) ?? '';
                       if (channelId.isNotEmpty) {
                         ConversationsApi.markChatRead(
+                          dio: ref.read(apiClientProvider).dio,
                           chatId: chatId,
                           channelId: channelId,
                         );
@@ -1081,6 +1085,7 @@ class _ArchivedPanelState extends ConsumerState<_ArchivedPanel> {
     if (operatorId == null || !mounted) return;
     try {
       await ConversationsApi.assignConversationOperator(
+        dio: ref.read(apiClientProvider).dio,
         chatId: chatId,
         channelId: widget.channelId,
         operatorId: operatorId,
@@ -1162,6 +1167,7 @@ class _ArchivedPanelState extends ConsumerState<_ArchivedPanel> {
 
     try {
       await ConversationsApi.deleteUnregisteredConversation(
+        dio: ref.read(apiClientProvider).dio,
         fromPhone: chatId,
         channelId: widget.channelId,
       );
@@ -1778,7 +1784,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
     // block any concurrent emit from enqueuing the same wamid.
     _processedReadIds.add(last.waId);
     if (!mounted) return;
-    await MessagesApi.markRead(last.waId, tenantId: tenantId, channelId: last.channelId);
+    await MessagesApi.markRead(last.waId, dio: ref.read(apiClientProvider).dio, tenantId: tenantId, channelId: last.channelId);
   }
 
   void _handleTyping() {
@@ -1798,7 +1804,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
       debugPrint('[_handleTyping] SKIP — no channel_id');
       return;
     }
-    MessagesApi.sendTyping(waId, tenantId: tenantId, channelId: channelId); // fire-and-forget
+    MessagesApi.sendTyping(waId, dio: ref.read(apiClientProvider).dio, tenantId: tenantId, channelId: channelId); // fire-and-forget
   }
 
   Future<void> _sendReaction(
@@ -1846,6 +1852,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
           return;
         }
         await MessagesApi.sendTelegramReaction(
+          dio: ref.read(apiClientProvider).dio,
           channelId: channelId,
           toChatId: toChatId,
           messageId: tgMessageId is int
@@ -1861,6 +1868,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
           return;
         }
         await MessagesApi.sendReaction(
+          dio: ref.read(apiClientProvider).dio,
           messageId: waId,
           emoji: emoji,
           toPhone: chatId,
@@ -1975,6 +1983,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
     if (mounted) setState(() { _sending = true; _isDragOver = false; });
     try {
       await MessagesApi.sendMedia(
+        dio: ref.read(apiClientProvider).dio,
         to: chatId,
         fileBytes: bytes,
         filename: filename,
@@ -2043,6 +2052,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
     final userId = Supabase.instance.client.auth.currentUser?.id;
     try {
       await MessagesApi.sendLocationRequest(
+        dio: ref.read(apiClientProvider).dio,
         to: chatId,
         channelId: channelId,
         sentByUserId: userId,
@@ -2309,7 +2319,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
               whatsAppWindowOpen(lastInbound?['received_at'] as String?);
 
       _ConvoListState.setLastRead(
-          chatId, DateTime.now().toUtc(), ref.read(activeTenantIdProvider));
+          chatId, DateTime.now().toUtc(), ref.read(activeTenantIdProvider), dio: ref.read(apiClientProvider).dio);
 
       setState(() {
         _apiMessages = messages;
@@ -2349,7 +2359,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
       }
 
       _ConvoListState.setLastRead(
-          chatId, DateTime.now().toUtc(), ref.read(activeTenantIdProvider));
+          chatId, DateTime.now().toUtc(), ref.read(activeTenantIdProvider), dio: ref.read(apiClientProvider).dio);
 
       setState(() {
         _apiMessages = [..._apiMessages, newMsg];
@@ -2433,9 +2443,9 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
     if (chatId == null) return;
     setState(() => _isSupervisorMode = true);
     try {
-      final sessionId = await SessionsApi.findActiveSessionId(chatId: chatId);
+      final sessionId = await SessionsApi.findActiveSessionId(dio: ref.read(apiClientProvider).dio, chatId: chatId);
       if (sessionId != null) {
-        await SessionsApi.patchStatus(sessionId: sessionId, status: 'supervisor');
+        await SessionsApi.patchStatus(dio: ref.read(apiClientProvider).dio, sessionId: sessionId, status: 'supervisor');
       }
     } catch (_) {
       // best-effort — supervisor mode is already enabled locally
@@ -2447,9 +2457,9 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
     if (chatId == null) return;
     setState(() => _isSupervisorMode = false);
     try {
-      final sessionId = await SessionsApi.findActiveSessionId(chatId: chatId);
+      final sessionId = await SessionsApi.findActiveSessionId(dio: ref.read(apiClientProvider).dio, chatId: chatId);
       if (sessionId != null) {
-        await SessionsApi.patchStatus(sessionId: sessionId, status: 'worker');
+        await SessionsApi.patchStatus(dio: ref.read(apiClientProvider).dio, sessionId: sessionId, status: 'worker');
       }
     } catch (_) {
       // best-effort
@@ -2478,6 +2488,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
       setState(() => _sending = true);
       try {
         await MessagesApi.sendLocation(
+          dio: ref.read(apiClientProvider).dio,
           to: chatId,
           channelId: channelId,
           googleMapsUrl: text,
@@ -2530,6 +2541,7 @@ class _ChatPanelState extends ConsumerState<_ChatPanel>
 
     try {
       await MessagesApi.sendWhatsAppMessage(
+          dio: ref.read(apiClientProvider).dio,
           to: chatId,
           text: text,
           channelId: channelId,
@@ -6199,6 +6211,7 @@ class _NewMessageDialogState extends ConsumerState<_NewMessageDialog> {
           return;
         }
         await MessagesApi.sendWhatsAppMessage(
+          dio: ref.read(apiClientProvider).dio,
           to: phone,
           text: text,
           channelId: channelId,

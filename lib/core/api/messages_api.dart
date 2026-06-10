@@ -1,11 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
-import 'package:conectamos_platform/core/api/api_client.dart';
 
 class MessagesApi {
-  static Future<List<Map<String, dynamic>>> listConversations() async {
-    final response = await ApiClient.instance.get(
+  static Future<List<Map<String, dynamic>>> listConversations({required Dio dio}) async {
+    final response = await dio.get(
       '/messages',
       queryParameters: {'limit': 500},
     );
@@ -22,10 +21,11 @@ class MessagesApi {
   }
 
   static Future<List<Map<String, dynamic>>> listMessages({
+    required Dio dio,
     String? chatId,
     int limit = 100,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/messages',
       queryParameters: {
         'chat_id': ?chatId,
@@ -36,12 +36,13 @@ class MessagesApi {
   }
 
   static Future<Map<String, dynamic>> sendMessage({
+    required Dio dio,
     required String to,
     required String text,
     required String channelId,
     String? phoneNumberId,
   }) async {
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/messages/send',
       queryParameters: {
         'to': to,
@@ -53,7 +54,7 @@ class MessagesApi {
     return Map<String, dynamic>.from(response.data);
   }
 
-  static Future<void> markRead(String waMessageId, {String? tenantId, required String channelId}) async {
+  static Future<void> markRead(String waMessageId, {required Dio dio, String? tenantId, required String channelId}) async {
     // ignore: avoid_print
     debugPrint('[MessagesApi.markRead] entry — waMessageId=$waMessageId tenantId=$tenantId channelId=$channelId');
     if (waMessageId.isEmpty || waMessageId == 'null') {
@@ -69,7 +70,7 @@ class MessagesApi {
       return;
     }
     try {
-      await ApiClient.instance.post(
+      await dio.post(
         '/messages/read',
         data: {'message_id': waMessageId, 'channel_id': channelId},
       );
@@ -79,12 +80,12 @@ class MessagesApi {
     }
   }
 
-  static Future<void> sendTyping(String waMessageId, {String? tenantId, required String channelId}) async {
+  static Future<void> sendTyping(String waMessageId, {required Dio dio, String? tenantId, required String channelId}) async {
     if (waMessageId.isEmpty || waMessageId == 'null') return;
     if (tenantId == null || tenantId.isEmpty) return;
     if (channelId.isEmpty) return;
     try {
-      await ApiClient.instance.post(
+      await dio.post(
         '/messages/typing',
         data: {'message_id': waMessageId, 'channel_id': channelId},
       );
@@ -94,6 +95,7 @@ class MessagesApi {
   /// Envía un mensaje outbound a través del backend.
   /// El backend llama a Meta Graph API y persiste el registro en wa_messages.
   static Future<void> sendWhatsAppMessage({
+    required Dio dio,
     required String to,
     required String text,
     required String channelId,
@@ -101,7 +103,7 @@ class MessagesApi {
     String? replyToMessageId,
   }) async {
     if (to.isEmpty || channelId.isEmpty) return;
-    await ApiClient.instance.post(
+    await dio.post(
       '/messages/send',
       data: {
         'to':                   to,
@@ -115,12 +117,13 @@ class MessagesApi {
 
   /// Envía una reacción emoji sobre un mensaje.
   static Future<void> sendReaction({
+    required Dio dio,
     required String messageId,
     required String emoji,
     required String toPhone,
     required String channelId,
   }) async {
-    await ApiClient.instance.post(
+    await dio.post(
       '/messages/send/reaction',
       data: {
         'message_id': messageId,
@@ -133,13 +136,14 @@ class MessagesApi {
 
   /// Envía una reacción emoji sobre un mensaje de Telegram.
   static Future<void> sendTelegramReaction({
+    required Dio dio,
     required String channelId,
     required int toChatId,
     required int messageId,
     required String emoji,
     String? sentByUserId,
   }) async {
-    await ApiClient.instance.post(
+    await dio.post(
       '/messages/send/reaction/telegram',
       data: {
         'channel_id':   channelId,
@@ -153,6 +157,7 @@ class MessagesApi {
 
   /// Envía un archivo multimedia (imagen, audio, documento) vía multipart.
   static Future<void> sendMedia({
+    required Dio dio,
     required String to,
     required Uint8List fileBytes,
     required String filename,
@@ -173,17 +178,18 @@ class MessagesApi {
       'sent_by_user_id': ?sentByUserId,
       'reply_to_message_id': ?replyToMessageId,
     });
-    await ApiClient.instance.post('/messages/send/media', data: formData);
+    await dio.post('/messages/send/media', data: formData);
   }
 
   /// Envía una ubicación de Google Maps parseando la URL.
   static Future<void> sendLocation({
+    required Dio dio,
     required String to,
     required String channelId,
     required String googleMapsUrl,
     String? sentByUserId,
   }) async {
-    await ApiClient.instance.post(
+    await dio.post(
       '/messages/send/location',
       data: {
         'to':              to,
@@ -196,11 +202,12 @@ class MessagesApi {
 
   /// Envía una solicitud de ubicación interactiva.
   static Future<void> sendLocationRequest({
+    required Dio dio,
     required String to,
     required String channelId,
     String? sentByUserId,
   }) async {
-    await ApiClient.instance.post(
+    await dio.post(
       '/messages/send/location-request',
       data: {
         'to':              to,
