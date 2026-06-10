@@ -22,6 +22,7 @@ permissions:
 jobs:
   test:
     name: Test
+    if: github.ref_name == 'main' || github.event.inputs.environment == 'production'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -36,7 +37,8 @@ jobs:
 
   deploy:
     name: Deploy (${{ github.event.inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }})
-    needs: test
+    needs: [test]
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }}
     env:
@@ -151,7 +153,7 @@ jobs:
     if: always()
     uses: conectamos-mx/.github/.github/workflows/notification.yml@main
     with:
-      status: ${{ (needs.test.result == 'success' && needs.deploy.result == 'success') && 'success' || 'failure' }}
+      status: ${{ (needs.test.result == 'success' || needs.test.result == 'skipped') && needs.deploy.result == 'success' && 'success' || 'failure' }}
       environment: ${{ (github.event.inputs.environment == 'production' || (github.event.inputs.environment == '' && github.ref_name == 'main')) && 'Production' || 'Development' }}
       service_name: "conectamos-platform"
       service_url: ${{ needs.deploy.result == 'success' && ((github.event.inputs.environment == 'production' || (github.event.inputs.environment == '' && github.ref_name == 'main')) && 'https://platform.conectamos.ai' || 'https://platform-dev.conectamos.ai') || 'N/A' }}
