@@ -6070,7 +6070,7 @@ class _NewMessageDialogState extends ConsumerState<_NewMessageDialog> {
     try {
       final results = await Future.wait([
         OperatorsApi.listOperators(),
-        ApiClient.instance.get('/templates'),
+        ref.read(apiClientProvider).dio.get('/templates'),
       ]);
       final ops = results[0] as List<Map<String, dynamic>>;
 
@@ -6180,7 +6180,7 @@ class _NewMessageDialogState extends ConsumerState<_NewMessageDialog> {
           orElse: () => {},
         );
         debugPrint('[_send] payload: to=$phone channel=$channelId template=${tpl['name'] ?? tpl['template_name']} lang=${tpl['language'] ?? tpl['lang']}');
-        await ApiClient.instance.post(
+        await ref.read(apiClientProvider).dio.post(
           '/messages/send',
           data: {
             'to': phone,
