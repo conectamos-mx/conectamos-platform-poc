@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/api/escalaciones_api.dart';
 import '../../../core/providers/escalaciones_provider.dart';
 import '../../../core/providers/permissions_provider.dart';
@@ -104,6 +105,7 @@ class _EscalacionDetailSheetState
     try {
       await EscalacionesApi.patch(
         widget.escalacion['id'] as String,
+        dio: ref.read(apiClientProvider).dio,
         action: action,
         assignedTo: assignedTo,
         resolutionNotes: resolutionNotes,

@@ -2,8 +2,6 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
-import 'package:conectamos_platform/core/api/api_client.dart';
-
 class ExecutionsApi {
   ExecutionsApi._();
 
@@ -11,6 +9,7 @@ class ExecutionsApi {
   /// Usa GET /api/v1/dashboard/executions.
   /// X-Tenant-ID es inyectado automáticamente por el interceptor de ApiClient.
   static Future<Map<String, dynamic>> listExecutions({
+    required Dio dio,
     required String tenantId,
     List<String>? status,
     List<String>? workerIds,
@@ -50,7 +49,7 @@ class ExecutionsApi {
     if (fieldKey != null) params['field_key'] = fieldKey;
     if (fieldValues != null && fieldValues.isNotEmpty) params['field_values'] = fieldValues;
 
-    final resp = await ApiClient.instance.get(
+    final resp = await dio.get(
       '/api/v1/dashboard/executions',
       queryParameters: params,
     );
@@ -64,9 +63,10 @@ class ExecutionsApi {
 
   /// Lista vistas guardadas del tenant.
   static Future<List<Map<String, dynamic>>> listViews({
+    required Dio dio,
     required String tenantId,
   }) async {
-    final resp = await ApiClient.instance.get(
+    final resp = await dio.get(
       '/api/v1/dashboard/views',
     );
     final data = resp.data;
@@ -79,11 +79,12 @@ class ExecutionsApi {
 
   /// Crea una vista guardada con los filtros actuales.
   static Future<Map<String, dynamic>> createView({
+    required Dio dio,
     required String tenantId,
     required String name,
     required Map<String, dynamic> filters,
   }) async {
-    final resp = await ApiClient.instance.post(
+    final resp = await dio.post(
       '/api/v1/dashboard/views',
       data: {
         'name':    name,
@@ -94,12 +95,13 @@ class ExecutionsApi {
   }
 
   /// Elimina una vista guardada.
-  static Future<void> deleteView({required String viewId}) async {
-    await ApiClient.instance.delete('/api/v1/dashboard/views/$viewId');
+  static Future<void> deleteView({required Dio dio, required String viewId}) async {
+    await dio.delete('/api/v1/dashboard/views/$viewId');
   }
 
   /// Exporta ejecuciones filtradas como XLSX (bytes).
   static Future<Uint8List> exportExecutions({
+    required Dio dio,
     required String tenantId,
     List<String>? status,
     List<String>? workerIds,
@@ -129,7 +131,7 @@ class ExecutionsApi {
     if (fieldKey != null) params['field_key'] = fieldKey;
     if (fieldValues != null && fieldValues.isNotEmpty) params['field_values'] = fieldValues;
 
-    final resp = await ApiClient.instance.get(
+    final resp = await dio.get(
       '/api/v1/dashboard/executions/export',
       queryParameters: params,
       options: Options(responseType: ResponseType.bytes),
@@ -138,9 +140,9 @@ class ExecutionsApi {
   }
 
   /// Retorna la lista de estatus disponibles para ejecuciones.
-  static Future<List<Map<String, String>>> getExecutionStatuses() async {
+  static Future<List<Map<String, String>>> getExecutionStatuses({required Dio dio}) async {
     try {
-      final response = await ApiClient.instance.get('/flow-executions/statuses');
+      final response = await dio.get('/flow-executions/statuses');
       final raw = response.data;
       final list = raw is Map ? (raw['statuses'] ?? []) : (raw is List ? raw : []);
       return (list as List)
@@ -165,9 +167,10 @@ class ExecutionsApi {
 
   /// Lista mensajes asociados a una ejecución.
   static Future<List<Map<String, dynamic>>> getMessages({
+    required Dio dio,
     required String executionId,
   }) async {
-    final resp = await ApiClient.instance.get(
+    final resp = await dio.get(
       '/api/v1/dashboard/executions/$executionId/messages',
     );
     final data = resp.data;
@@ -180,6 +183,7 @@ class ExecutionsApi {
 
   /// Campos buscables por clave de campo (para filtro avanzado).
   static Future<Map<String, dynamic>> getSearchableFields({
+    required Dio dio,
     required String tenantId,
     List<String>? workerIds,
   }) async {
@@ -188,7 +192,7 @@ class ExecutionsApi {
       params['worker_id'] = workerIds;
     }
 
-    final resp = await ApiClient.instance.get(
+    final resp = await dio.get(
       '/api/v1/dashboard/executions/searchable-fields',
       queryParameters: params,
     );

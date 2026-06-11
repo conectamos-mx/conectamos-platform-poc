@@ -1,12 +1,12 @@
 import 'package:dio/dio.dart';
-import 'package:conectamos_platform/core/api/api_client.dart';
 
 class TemplatesApi {
   /// Lista plantillas por canal y tenant.
   static Future<List<Map<String, dynamic>>> listTemplates({
+    required Dio dio,
     required String channelId,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/templates',
       queryParameters: {'channel_id': channelId},
     );
@@ -19,9 +19,10 @@ class TemplatesApi {
 
   /// Sincroniza plantillas desde Meta para un canal y tenant.
   static Future<void> syncTemplates({
+    required Dio dio,
     required String channelId,
   }) async {
-    await ApiClient.instance.post(
+    await dio.post(
       '/templates/sync',
       queryParameters: {'channel_id': channelId},
     );
@@ -29,10 +30,11 @@ class TemplatesApi {
 
   /// Obtiene la plantilla de bienvenida del sistema.
   static Future<Map<String, dynamic>?> getDefault({
+    required Dio dio,
     required String channelId,
   }) async {
     try {
-      final response = await ApiClient.instance.get(
+      final response = await dio.get(
         '/templates/default',
         queryParameters: {'channel_id': channelId},
       );
@@ -44,6 +46,7 @@ class TemplatesApi {
 
   /// Crea una nueva plantilla y la envía a Meta para aprobación.
   static Future<void> createTemplate({
+    required Dio dio,
     required String name,
     required String category,
     required String language,
@@ -58,7 +61,7 @@ class TemplatesApi {
     String? footerText,
     List<Map<String, dynamic>>? buttons,
   }) async {
-    await ApiClient.instance.post(
+    await dio.post(
       '/templates',
       data: {
         'name':       name,
@@ -87,10 +90,11 @@ class TemplatesApi {
 
   /// Elimina una plantilla por ID.
   static Future<void> deleteTemplate({
+    required Dio dio,
     required String templateId,
     required String channelId,
   }) async {
-    await ApiClient.instance.delete(
+    await dio.delete(
       '/templates/$templateId',
       queryParameters: {'channel_id': channelId},
     );

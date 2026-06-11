@@ -1,6 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../api/api_client.dart';
 import '../api/tenants_api.dart';
 import '../storage/key_value_store.dart';
 import '../utils/tz_format.dart' as tzf;
@@ -51,10 +53,12 @@ class TenantState {
 
 class TenantNotifier extends StateNotifier<TenantState> {
   TenantNotifier({
+    required this.dio,
     required this.storage,
     required this.supabaseClient,
   }) : super(const TenantState());
 
+  final Dio dio;
   final KeyValueStore storage;
   final SupabaseClient supabaseClient;
 
@@ -67,6 +71,7 @@ class TenantNotifier extends StateNotifier<TenantState> {
       final userId = supabaseUser?.id;
       final isSuperAdmin = supabaseUser?.appMetadata['role'] == 'super_admin';
       final list = await TenantsApi.getTenants(
+        dio: dio,
         userId: isSuperAdmin ? null : userId,
       );
       final tenants = list.map(TenantInfo.fromMap).toList();
@@ -106,6 +111,7 @@ class TenantNotifier extends StateNotifier<TenantState> {
 final tenantNotifierProvider =
     StateNotifierProvider<TenantNotifier, TenantState>(
   (ref) => TenantNotifier(
+    dio: ref.watch(apiClientProvider).dio,
     storage: ref.watch(keyValueStoreProvider),
     supabaseClient: ref.watch(supabaseClientProvider),
   ),

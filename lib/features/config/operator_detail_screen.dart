@@ -973,7 +973,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
   Future<void> _loadCustomFieldDefs() async {
     setState(() => _cfDefsLoading = true);
     try {
-      final defs = await OperatorFieldsApi.getOperatorFields();
+      final defs = await OperatorFieldsApi.getOperatorFields(dio: ref.read(apiClientProvider).dio);
       if (mounted) setState(() { _customFieldDefs = defs; _cfDefsLoading = false; });
     } catch (_) {
       if (mounted) setState(() => _cfDefsLoading = false);
@@ -1416,7 +1416,7 @@ class _DatosTabState extends ConsumerState<_DatosTab> {
     final tenantId = ref.read(activeTenantIdProvider);
     if (tenantId.isEmpty) return;
     try {
-      final roles = await OperatorRolesApi.listRoles(tenantId: tenantId);
+      final roles = await OperatorRolesApi.listRoles(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
       if (!mounted) return;
       setState(() => _availableRoles = roles);
     } catch (_) {}

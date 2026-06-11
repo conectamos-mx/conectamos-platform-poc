@@ -29,6 +29,15 @@ dart run build_runner build --delete-conflicting-outputs
 
 Unit tests live in `test/unit/` — run with `flutter test test/unit/`.
 
+Integration tests live in `test/integration/` — run with:
+```bash
+flutter test test/integration/ --platform chrome \
+  --dart-define=MOCK_MODE=true \
+  --dart-define=API_BASE_URL=http://mock.local
+```
+
+> API_BASE_URL es obligatorio aunque MOCK_MODE intercepte los requests: 2 tests resuelven el provider canónico (leak documentado en PLA-213). Workaround temporal hasta cerrar PLA-213.
+
 ---
 
 ## Architecture overview

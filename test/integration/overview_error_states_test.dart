@@ -5,10 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:patrol_finders/patrol_finders.dart';
 
-import 'package:conectamos_platform/core/api/api_client.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
-import 'helpers/in_memory_key_value_store.dart';
 import 'helpers/mock_api_interceptor.dart';
 import 'helpers/test_overrides.dart';
 
@@ -20,21 +16,6 @@ void _mockSupportingRoutes(MockApiInterceptor mock) {
   mock.when('/escalations', body: []);
   mock.when('/iam/users', body: []);
   mock.when('/iam/roles', body: []);
-}
-
-void _initApiClient(MockApiInterceptor mock) {
-  final store = InMemoryKeyValueStore();
-  final fakeClient = SupabaseClient(
-    'http://localhost:0',
-    'fake-anon-key',
-    authOptions: const AuthClientOptions(autoRefreshToken: false),
-  );
-  ApiClient.resetForTest();
-  ApiClient.init(
-    supabaseClient: fakeClient,
-    storage: store,
-    testInterceptor: mock,
-  );
 }
 
 void main() {
@@ -56,7 +37,6 @@ void main() {
         mock.whenError('/tenants/{id}/kpis');
         // Other sections succeed — isolate KPI error
         _mockSupportingRoutes(mock);
-        _initApiClient(mock);
 
         await tester.pumpWidget(buildTestApp());
         await tester.pumpAndSettle();
@@ -94,9 +74,8 @@ void main() {
         // KPIs succeed with empty body
         mock.when('/tenants/{id}/kpis', body: <String, dynamic>{});
         _mockSupportingRoutes(mock);
-        _initApiClient(mock);
 
-        await tester.pumpWidget(buildTestApp());
+        await tester.pumpWidget(buildTestAppWithMock(mock));
         await tester.pumpAndSettle();
 
         // Vista general visible
@@ -109,7 +88,7 @@ void main() {
             reason: 'Empty KPIs should NOT show retry button');
 
         // Dashes visible for null KPI values
-        expect(find.text('—% de tu equipo está operando.'), findsOneWidget,
+        expect(find.byKey(const Key('kpi_empty_operation_pct')), findsOneWidget,
             reason: 'Empty KPIs should show dash placeholders');
 
         await tester.pump(const Duration(seconds: 5));

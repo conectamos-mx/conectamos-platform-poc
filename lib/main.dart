@@ -4,7 +4,6 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'core/api/api_client.dart';
 import 'core/build_info.dart';
 import 'core/router/app_router.dart';
 import 'core/storage/key_value_store.dart';
@@ -39,10 +38,6 @@ Future<void> main() async {
   );
 
   final store = WebKeyValueStore();
-  ApiClient.init(
-    supabaseClient: Supabase.instance.client,
-    storage: store,
-  );
 
   runApp(
     ProviderScope(

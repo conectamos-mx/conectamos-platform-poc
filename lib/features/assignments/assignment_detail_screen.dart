@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/assignments_api.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
@@ -62,6 +63,7 @@ class _AssignmentDetailScreenState
     try {
       final tenantId = ref.read(activeTenantIdProvider);
       final data = await AssignmentsApi.getAssignment(
+        dio: ref.read(apiClientProvider).dio,
         tenantId: tenantId,
         assignmentId: widget.assignmentId,
       );

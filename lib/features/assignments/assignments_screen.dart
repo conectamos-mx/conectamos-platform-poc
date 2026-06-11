@@ -109,6 +109,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
       final dayFutures = List.generate(7, (i) {
         final day = monday.add(Duration(days: i));
         return AssignmentsApi.listAssignments(
+          dio: ref.read(apiClientProvider).dio,
           tenantId: tenantId,
           scopeDate: wm.isoDate(day),
         );
@@ -187,6 +188,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
     try {
       final tenantId = ref.read(activeTenantIdProvider);
       await AssignmentsApi.deleteAssignment(
+          dio: ref.read(apiClientProvider).dio,
           tenantId: tenantId, assignmentId: assignmentId);
       if (mounted) _loadAssignments();
     } catch (e) {
@@ -1685,6 +1687,7 @@ bool get _step1Valid =>
         'resources=${resources.length} flows=${flows.length}');
     try {
       await AssignmentsApi.createAssignment(
+        dio: widget.dio,
         tenantId: widget.tenantId,
         operatorId: _selectedOperatorId!,
         scopeStart: _scopeStart!,

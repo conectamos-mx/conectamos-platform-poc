@@ -1,14 +1,15 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:conectamos_platform/core/api/api_client.dart';
 
 class ConversationsApi {
   static Future<List<Map<String, dynamic>>> listConversations({
+    required Dio dio,
     required String channelId,
     bool includeUnregistered = false,
   }) async {
     final params = <String, dynamic>{'channel_id': channelId};
     if (includeUnregistered) params['include_unregistered'] = 'true';
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/conversations',
       queryParameters: params,
     );
@@ -22,10 +23,11 @@ class ConversationsApi {
   /// DELETE /wa-messages — hard-delete de mensajes sin operador (solo admin).
   /// from_phone es el chat_id del contacto no registrado.
   static Future<void> deleteUnregisteredConversation({
+    required Dio dio,
     required String fromPhone,
     required String channelId,
   }) async {
-    await ApiClient.instance.delete(
+    await dio.delete(
       '/wa-messages',
       queryParameters: {
         'from_phone': fromPhone,
@@ -36,11 +38,12 @@ class ConversationsApi {
 
   /// PATCH /conversations/assign — asigna un operador a un chat no registrado.
   static Future<void> assignConversationOperator({
+    required Dio dio,
     required String chatId,
     required String channelId,
     required String operatorId,
   }) async {
-    await ApiClient.instance.patch(
+    await dio.patch(
       '/conversations/assign',
       data: {
         'chat_id': chatId,
@@ -51,11 +54,12 @@ class ConversationsApi {
   }
 
   static Future<void> markChatRead({
+    required Dio dio,
     required String chatId,
     required String channelId,
   }) async {
     try {
-      await ApiClient.instance.post('/panel-read', data: {
+      await dio.post('/panel-read', data: {
         'chat_id': chatId,
         'channel_id': channelId,
       });

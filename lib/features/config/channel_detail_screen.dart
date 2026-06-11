@@ -105,7 +105,7 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
     setState(() { _loading = true; _error = null; });
     try {
       _tenantId = ref.read(activeTenantIdProvider);
-      final channel = await ChannelsApi.getChannel(channelId: widget.channelId);
+      final channel = await ChannelsApi.getChannel(dio: ref.read(apiClientProvider).dio, channelId: widget.channelId);
       if (!mounted) return;
       final isWa = (channel['channel_type'] as String? ?? '') == 'whatsapp';
       _tabCtrl?.dispose();
@@ -134,13 +134,14 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
     try {
       if (current) {
         final updated = await ChannelsApi.updateChannel(
+          dio: ref.read(apiClientProvider).dio,
           channelId: widget.channelId,
           isActive: false,
         );
         if (!mounted) return;
         setState(() { _channel = updated; _toggling = false; });
       } else {
-        await ChannelsApi.activateChannel(channelId: widget.channelId);
+        await ChannelsApi.activateChannel(dio: ref.read(apiClientProvider).dio, channelId: widget.channelId);
         if (!mounted) return;
         await _load();
       }
@@ -173,6 +174,7 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
         return;
       }
       await ChannelsApi.deleteChannel(
+        dio: ref.read(apiClientProvider).dio,
         tenantWorkerId: tenantWorkerId,
         channelId: widget.channelId,
       );
@@ -282,6 +284,7 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
             children: [
               _InfoTab(
                 channel: ch,
+                dio: ref.read(apiClientProvider).dio,
                 onUpdated: (updated) {
                   if (mounted) setState(() => _channel = updated);
                 },
@@ -291,6 +294,7 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
               _TemplatesTab(
                 channelId: widget.channelId,
                 tenantId: _tenantId,
+                dio: ref.read(apiClientProvider).dio,
                 onError: _showError,
                 onSuccess: _showSuccess,
               ),
@@ -338,6 +342,7 @@ class _ChannelDetailPanelState extends ConsumerState<ChannelDetailPanel>
             children: [
               _TelegramInfoPanel(
                 channel: ch,
+                dio: ref.read(apiClientProvider).dio,
                 onUpdated: (updated) {
                   if (mounted) setState(() => _channel = updated);
                 },
@@ -689,11 +694,13 @@ class _DeleteChannelDialogState extends State<_DeleteChannelDialog> {
 class _InfoTab extends StatefulWidget {
   const _InfoTab({
     required this.channel,
+    required this.dio,
     required this.onUpdated,
     required this.onError,
     required this.onSuccess,
   });
   final Map<String, dynamic> channel;
+  final Dio dio;
   final ValueChanged<Map<String, dynamic>> onUpdated;
   final ValueChanged<String> onError;
   final ValueChanged<String> onSuccess;
@@ -726,6 +733,7 @@ class _InfoTabState extends State<_InfoTab> {
     setState(() => _saving = true);
     try {
       final updated = await ChannelsApi.updateChannel(
+        dio: widget.dio,
         channelId: widget.channel['id'] as String,
         displayName: name,
       );
@@ -885,11 +893,13 @@ class _TemplatesTab extends StatefulWidget {
   const _TemplatesTab({
     required this.channelId,
     required this.tenantId,
+    required this.dio,
     required this.onError,
     required this.onSuccess,
   });
   final String channelId;
   final String tenantId;
+  final Dio dio;
   final ValueChanged<String> onError;
   final ValueChanged<String> onSuccess;
 
@@ -911,7 +921,7 @@ class _TemplatesTabState extends State<_TemplatesTab> {
   Future<void> _fetchTemplates() async {
     setState(() => _loading = true);
     try {
-      final list = await TemplatesApi.listTemplates(channelId: widget.channelId);
+      final list = await TemplatesApi.listTemplates(dio: widget.dio, channelId: widget.channelId);
       if (mounted) setState(() { _templates = list; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _templates = []; _loading = false; });
@@ -952,6 +962,7 @@ class _TemplatesTabState extends State<_TemplatesTab> {
     if (confirmed != true || !mounted) return;
     try {
       await TemplatesApi.deleteTemplate(
+        dio: widget.dio,
         templateId: template['id'] as String,
         channelId: widget.channelId,
       );
@@ -965,7 +976,7 @@ class _TemplatesTabState extends State<_TemplatesTab> {
   Future<void> _sync() async {
     setState(() => _syncing = true);
     try {
-      await TemplatesApi.syncTemplates(channelId: widget.channelId);
+      await TemplatesApi.syncTemplates(dio: widget.dio, channelId: widget.channelId);
       widget.onSuccess('Plantillas sincronizadas');
       await _fetchTemplates();
     } catch (e) {
@@ -1180,11 +1191,13 @@ class _TemplatesTabState extends State<_TemplatesTab> {
 class _TelegramInfoPanel extends StatefulWidget {
   const _TelegramInfoPanel({
     required this.channel,
+    required this.dio,
     required this.onUpdated,
     required this.onError,
     required this.onSuccess,
   });
   final Map<String, dynamic> channel;
+  final Dio dio;
   final ValueChanged<Map<String, dynamic>> onUpdated;
   final ValueChanged<String> onError;
   final ValueChanged<String> onSuccess;
@@ -1226,6 +1239,7 @@ class _TelegramInfoPanelState extends State<_TelegramInfoPanel> {
     setState(() => _saving = true);
     try {
       final updated = await ChannelsApi.updateChannel(
+        dio: widget.dio,
         channelId: widget.channel['id'] as String,
         displayName: name,
       );
@@ -1340,11 +1354,13 @@ class _WelcomeTab extends StatefulWidget {
   const _WelcomeTab({
     required this.channel,
     required this.tenantId,
+    required this.dio,
     required this.onError,
     required this.onSuccess,
   });
   final Map<String, dynamic> channel;
   final String tenantId;
+  final Dio dio;
   final ValueChanged<String> onError;
   final ValueChanged<String> onSuccess;
 
@@ -1367,6 +1383,7 @@ class _WelcomeTabState extends State<_WelcomeTab> {
   Future<void> _loadApproved() async {
     try {
       final all = await TemplatesApi.listTemplates(
+          dio: widget.dio,
           channelId: widget.channel['id'] as String);
       final approved = all
           .where((t) =>
@@ -1390,6 +1407,7 @@ class _WelcomeTabState extends State<_WelcomeTab> {
     setState(() => _saving = true);
     try {
       await ChannelsApi.updateWelcomeTemplate(
+        dio: widget.dio,
         channelId: widget.channel['id'] as String,
         templateId: _selectedId!,
       );
@@ -1563,7 +1581,7 @@ class _GroupsTabState extends ConsumerState<_GroupsTab> {
     if (!mounted) return;
     setState(() => _loading = true);
     try {
-      final list = await GroupsApi.listGroups(channelId: _channelId);
+      final list = await GroupsApi.listGroups(dio: ref.read(apiClientProvider).dio, channelId: _channelId);
       if (!mounted) return;
       setState(() {
         _groups = list;
@@ -1595,6 +1613,7 @@ class _GroupsTabState extends ConsumerState<_GroupsTab> {
       barrierDismissible: true,
       builder: (_) => _CreateGroupDialog(
         channelId: _channelId,
+        dio: ref.read(apiClientProvider).dio,
         onError: widget.onError,
       ),
     );
@@ -1651,7 +1670,7 @@ class _GroupsTabState extends ConsumerState<_GroupsTab> {
     );
     if (confirm != true || !mounted) return;
     try {
-      await GroupsApi.deleteGroup(groupId: groupId);
+      await GroupsApi.deleteGroup(dio: ref.read(apiClientProvider).dio, groupId: groupId);
       widget.onSuccess('Grupo eliminado');
       _loadGroups();
     } catch (e) {
@@ -1882,9 +1901,11 @@ class _GroupsTabState extends ConsumerState<_GroupsTab> {
 class _CreateGroupDialog extends StatefulWidget {
   const _CreateGroupDialog({
     required this.channelId,
+    required this.dio,
     required this.onError,
   });
   final String channelId;
+  final Dio dio;
   final ValueChanged<String> onError;
 
   @override
@@ -1909,6 +1930,7 @@ class _CreateGroupDialogState extends State<_CreateGroupDialog> {
     setState(() => _saving = true);
     try {
       await GroupsApi.createGroup(
+        dio: widget.dio,
         channelId: widget.channelId,
         subject: name,
         description:
@@ -2043,7 +2065,7 @@ class _GroupDetailDialogState extends ConsumerState<_GroupDetailDialog> {
 
   Future<void> _loadVisibility() async {
     try {
-      final vis = await GroupsApi.getVisibility(groupId: _groupId);
+      final vis = await GroupsApi.getVisibility(dio: ref.read(apiClientProvider).dio, groupId: _groupId);
       if (mounted) setState(() { _visibility = vis; _loadingVis = false; });
     } catch (_) {
       if (mounted) setState(() => _loadingVis = false);
@@ -2055,7 +2077,7 @@ class _GroupDetailDialogState extends ConsumerState<_GroupDetailDialog> {
     if (name.isEmpty) return;
     setState(() => _savingName = true);
     try {
-      await GroupsApi.updateGroup(groupId: _groupId, displayName: name);
+      await GroupsApi.updateGroup(dio: ref.read(apiClientProvider).dio, groupId: _groupId, displayName: name);
       widget.onSuccess('Nombre actualizado');
       _changed = true;
       if (mounted) setState(() => _savingName = false);
@@ -2068,6 +2090,7 @@ class _GroupDetailDialogState extends ConsumerState<_GroupDetailDialog> {
   Future<void> _removeVisibility(String tenantUserId) async {
     try {
       await GroupsApi.removeVisibility(
+        dio: ref.read(apiClientProvider).dio,
           groupId: _groupId, tenantUserId: tenantUserId);
       _changed = true;
       _loadVisibility();
@@ -2102,6 +2125,7 @@ class _GroupDetailDialogState extends ConsumerState<_GroupDetailDialog> {
     if (selected != null && selected.isNotEmpty) {
       try {
         await GroupsApi.addVisibility(
+          dio: ref.read(apiClientProvider).dio,
             groupId: _groupId, tenantUserIds: selected);
         _changed = true;
         _loadVisibility();

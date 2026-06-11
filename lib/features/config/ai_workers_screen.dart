@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/ai_workers_api.dart';
+import '../../core/api/api_client.dart';
 import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -71,9 +72,10 @@ class _AiWorkersScreenState extends ConsumerState<AiWorkersScreen> {
     if (!mounted) return;
     setState(() { _loading = true; _error = null; });
     try {
+      final dio = ref.read(apiClientProvider).dio;
       final results = await Future.wait([
-        AiWorkersApi.listWorkers(),
-        AiWorkersApi.listCatalog(),
+        AiWorkersApi.listWorkers(dio: dio),
+        AiWorkersApi.listCatalog(dio: dio),
       ]);
       if (!mounted) return;
       setState(() {
@@ -102,6 +104,7 @@ class _AiWorkersScreenState extends ConsumerState<AiWorkersScreen> {
     });
     try {
       await AiWorkersApi.updateWorker(
+        dio: ref.read(apiClientProvider).dio,
         tenantWorkerId: id,
         isActive: !isActive,
       );
@@ -130,6 +133,7 @@ class _AiWorkersScreenState extends ConsumerState<AiWorkersScreen> {
       builder: (_) => _RenameDialog(
         worker: worker,
         tenantId: ref.read(activeTenantIdProvider),
+        dio: ref.read(apiClientProvider).dio,
         onSaved: _fetchAll,
       ),
     );
@@ -143,6 +147,7 @@ class _AiWorkersScreenState extends ConsumerState<AiWorkersScreen> {
         catalog: _catalog,
         myWorkers: _myWorkers,
         tenantId: ref.read(activeTenantIdProvider),
+        dio: ref.read(apiClientProvider).dio,
         onContracted: () async {
           await _fetchAll();
           messenger.showSnackBar(const SnackBar(
@@ -670,10 +675,12 @@ class _RenameDialog extends StatefulWidget {
   const _RenameDialog({
     required this.worker,
     required this.tenantId,
+    required this.dio,
     required this.onSaved,
   });
   final Map<String, dynamic> worker;
   final String tenantId;
+  final Dio dio;
   final Future<void> Function() onSaved;
 
   @override
@@ -711,6 +718,7 @@ class _RenameDialogState extends State<_RenameDialog> {
     try {
       final id = widget.worker['id'] as String? ?? '';
       await AiWorkersApi.updateWorker(
+        dio: widget.dio,
         tenantWorkerId: id,
         displayName: name,
       );
@@ -834,11 +842,13 @@ class _CatalogDialog extends StatefulWidget {
     required this.catalog,
     required this.myWorkers,
     required this.tenantId,
+    required this.dio,
     required this.onContracted,
   });
   final List<Map<String, dynamic>> catalog;
   final List<Map<String, dynamic>> myWorkers;
   final String tenantId;
+  final Dio dio;
   final Future<void> Function() onContracted;
 
   @override
@@ -858,6 +868,7 @@ class _CatalogDialogState extends State<_CatalogDialog> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await AiWorkersApi.contractWorker(
+        dio: widget.dio,
         catalogWorkerId: catalogId,
       );
       if (!mounted) return;
