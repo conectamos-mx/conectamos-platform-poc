@@ -5356,13 +5356,14 @@ class _ActionDialogState extends State<_ActionDialog> {
       _excelHeadersError = null;
     });
     try {
-      await ConnectionsApi.getExcelHeaders(
+      final headers = await ConnectionsApi.getExcelHeaders(
         dio: widget.dio,
         fileId: fileId,
         sheetName: sheetName,
       );
       if (mounted) {
         setState(() {
+          _sheetHeaders = headers;
           _loadingExcelHeaders = false;
         });
       }
@@ -5370,6 +5371,7 @@ class _ActionDialogState extends State<_ActionDialog> {
       if (mounted) {
         setState(() {
           _excelHeadersError = 'Error al cargar headers: $e';
+          _sheetHeaders = [];
           _loadingExcelHeaders = false;
         });
       }
