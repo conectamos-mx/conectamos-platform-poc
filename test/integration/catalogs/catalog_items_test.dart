@@ -5,28 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:conectamos_platform/core/api/api_client.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import '../helpers/catalog_fixtures.dart';
-import '../helpers/in_memory_key_value_store.dart';
 import '../helpers/mock_api_interceptor.dart';
 import '../helpers/test_overrides.dart';
-
-void _initStaticApiClient(MockApiInterceptor mock) {
-  final store = InMemoryKeyValueStore();
-  final fakeClient = SupabaseClient(
-    'http://localhost:0',
-    'fake-anon-key',
-    authOptions: const AuthClientOptions(autoRefreshToken: false),
-  );
-  ApiClient.resetForTest();
-  ApiClient.init(
-    supabaseClient: fakeClient,
-    storage: store,
-    testInterceptor: mock,
-  );
-}
 
 void _mockSupportingRoutes(MockApiInterceptor mock) {
   mock.when('/operators', body: []);
@@ -69,7 +50,6 @@ void main() {
       final mock = MockApiInterceptor();
       _mockSupportingRoutes(mock);
       _mockDetailTabs(mock);
-      _initStaticApiClient(mock);
 
       await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();
@@ -112,7 +92,6 @@ void main() {
       _mockDetailTabs(mock);
       mock.when('/api/v1/catalogs/{id}/items',
           method: 'POST', body: kCreatedItem);
-      _initStaticApiClient(mock);
 
       await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();
@@ -181,7 +160,6 @@ void main() {
       _mockDetailTabs(mock);
       mock.when('/api/v1/catalogs/{id}/items/{id}',
           method: 'PUT', body: kCatalogItems[0]);
-      _initStaticApiClient(mock);
 
       await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();
@@ -250,7 +228,6 @@ void main() {
       _mockDetailTabs(mock);
       mock.when('/api/v1/catalogs/{id}/items/{id}',
           method: 'DELETE', body: kDeletedItemResponse);
-      _initStaticApiClient(mock);
 
       await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();

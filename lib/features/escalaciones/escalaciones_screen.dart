@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/escalaciones_api.dart';
 import '../../core/providers/escalaciones_provider.dart';
 import '../../core/providers/tenant_provider.dart';
@@ -80,6 +81,7 @@ class _EscalacionesScreenState extends ConsumerState<EscalacionesScreen>
     });
     try {
       final data = await EscalacionesApi.getEscalaciones(
+        dio:        ref.read(apiClientProvider).dio,
         status:     status,
         assignedTo: _assignedToFilter,
       );

@@ -1,20 +1,21 @@
 import 'package:dio/dio.dart';
-import 'package:conectamos_platform/core/api/api_client.dart';
 
 class ChannelsApi {
-  static Future<List<Map<String, dynamic>>> listChannels() async {
-    final response = await ApiClient.instance.get('/channels');
+  static Future<List<Map<String, dynamic>>> listChannels({required Dio dio}) async {
+    final response = await dio.get('/channels');
     return List<Map<String, dynamic>>.from(response.data);
   }
 
   static Future<Map<String, dynamic>> getChannel({
+    required Dio dio,
     required String channelId,
   }) async {
-    final response = await ApiClient.instance.get('/channels/$channelId');
+    final response = await dio.get('/channels/$channelId');
     return Map<String, dynamic>.from(response.data);
   }
 
   static Future<Map<String, dynamic>> createChannel({
+    required Dio dio,
     required String tenantWorkerId,
     required String displayName,
     required String color,
@@ -35,7 +36,7 @@ class ChannelsApi {
       config = creds.isNotEmpty ? {'credentials': creds} : null;
     }
 
-    final response = await ApiClient.instance.post('/channels', data: {
+    final response = await dio.post('/channels', data: {
       'tenant_worker_id': tenantWorkerId,
       'display_name':     displayName,
       'color':            color,
@@ -46,6 +47,7 @@ class ChannelsApi {
   }
 
   static Future<Map<String, dynamic>> updateChannel({
+    required Dio dio,
     required String channelId,
     String? displayName,
     String? color,
@@ -71,7 +73,7 @@ class ChannelsApi {
       effectiveConfig = base;
     }
 
-    final response = await ApiClient.instance.patch(
+    final response = await dio.patch(
       '/channels/$channelId',
       data: {
         'display_name':     ?displayName,
@@ -86,20 +88,22 @@ class ChannelsApi {
   }
 
   static Future<Map<String, dynamic>> deleteChannel({
+    required Dio dio,
     required String tenantWorkerId,
     required String channelId,
   }) async {
-    final resp = await ApiClient.instance.delete(
+    final resp = await dio.delete(
       '/workers/$tenantWorkerId/channels/$channelId',
     );
     return resp.data as Map<String, dynamic>;
   }
 
   static Future<void> verifyCredentials({
+    required Dio dio,
     required String phoneNumberId,
     required String accessToken,
   }) async {
-    await ApiClient.instance.post(
+    await dio.post(
       '/channels/verify-credentials',
       data: {
         'phone_number_id': phoneNumberId,
@@ -110,12 +114,13 @@ class ChannelsApi {
   }
 
   static Future<void> activateWhatsapp({
+    required Dio dio,
     required String phoneNumberId,
     required String wabaId,
     required String accessToken,
     required String pin,
   }) async {
-    await ApiClient.instance.post(
+    await dio.post(
       '/channels/activate-whatsapp',
       data: {
         'phone_number_id': phoneNumberId,
@@ -128,6 +133,11 @@ class ChannelsApi {
   }
 
   static Future<Map<String, dynamic>> verifyTelegramToken(String botToken) async {
+    // SECURITY: Dio crudo INTENCIONAL. Este request va a un host externo
+    // (api.telegram.org). NO migrar al Dio inyectado del apiClientProvider:
+    // su interceptor adjunta el JWT de Supabase y X-Tenant-ID a todo request,
+    // lo que filtraría credenciales de la plataforma a Telegram.
+    // Ver PLA-212 / evidencia en PLA-173.
     final dio = Dio(BaseOptions(
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
@@ -155,15 +165,17 @@ class ChannelsApi {
   }
 
   static Future<void> activateChannel({
+    required Dio dio,
     required String channelId,
   }) async {
-    await ApiClient.instance.post('/channels/$channelId/activate');
+    await dio.post('/channels/$channelId/activate');
   }
 
   static Future<Map<String, dynamic>> syncTemplates({
+    required Dio dio,
     required String channelId,
   }) async {
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/templates/sync',
       queryParameters: {'channel_id': channelId},
     );
@@ -171,9 +183,10 @@ class ChannelsApi {
   }
 
   static Future<List<Map<String, dynamic>>> listTemplates({
+    required Dio dio,
     required String channelId,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/templates',
       queryParameters: {'channel_id': channelId},
     );
@@ -185,22 +198,24 @@ class ChannelsApi {
   }
 
   static Future<void> updateWelcomeTemplate({
+    required Dio dio,
     required String channelId,
     required String templateId,
   }) async {
-    await ApiClient.instance.patch(
+    await dio.patch(
       '/channels/$channelId/welcome-template',
       data: {'template_id': templateId},
     );
   }
 
   static Future<Map<String, dynamic>> embeddedSignup({
+    required Dio dio,
     required String code,
     String? phoneNumberId,
     String? wabaId,
     String? businessId,
   }) async {
-    final response = await ApiClient.instance.post(
+    final response = await dio.post(
       '/channels/embedded-signup',
       data: {
         'code': code,
@@ -213,18 +228,20 @@ class ChannelsApi {
   }
 
   static Future<void> postSignupEvent(
-    Map<String, dynamic> eventData,
-  ) async {
-    await ApiClient.instance.post(
+    Map<String, dynamic> eventData, {
+    required Dio dio,
+  }) async {
+    await dio.post(
       '/channels/embedded-signup/events',
       data: eventData,
     );
   }
 
   static Future<List<Map<String, dynamic>>> listChannelsByWorker({
+    required Dio dio,
     required String tenantWorkerId,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/channels',
       queryParameters: {'tenant_worker_id': tenantWorkerId},
     );

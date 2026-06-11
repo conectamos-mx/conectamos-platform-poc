@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/groups_api.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_badge.dart';
@@ -31,7 +32,7 @@ class _WhatsAppGroupsScreenState extends ConsumerState<WhatsAppGroupsScreen> {
   Future<void> _loadGroups() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final list = await GroupsApi.listGroups(channelId: widget.channelId);
+      final list = await GroupsApi.listGroups(dio: ref.read(apiClientProvider).dio, channelId: widget.channelId);
       if (mounted) setState(() { _groups = list; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
@@ -72,7 +73,7 @@ class _WhatsAppGroupsScreenState extends ConsumerState<WhatsAppGroupsScreen> {
     );
     if (confirm != true || !mounted) return;
     try {
-      await GroupsApi.deleteGroup(groupId: groupId);
+      await GroupsApi.deleteGroup(dio: ref.read(apiClientProvider).dio, groupId: groupId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

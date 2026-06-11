@@ -1,15 +1,15 @@
+import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
-
-import 'api_client.dart';
 
 class SupabaseReadReceipts {
   /// Carga todos los last_read_at del usuario desde el backend.
   static Future<Map<String, DateTime>> loadAll({
+    required Dio dio,
     required String userId,
     required String tenantId,
   }) async {
     try {
-      final response = await ApiClient.instance.get(
+      final response = await dio.get(
         '/read-receipts',
         queryParameters: {'user_id': userId, 'tenant_id': tenantId},
       );
@@ -33,13 +33,14 @@ class SupabaseReadReceipts {
   static Future<void> setLastRead(
     String chatId,
     DateTime time,
-    String tenantId,
-  ) async {
+    String tenantId, {
+    required Dio dio,
+  }) async {
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) return;
 
-      await ApiClient.instance.post(
+      await dio.post(
         '/read-receipts',
         data: {
           'user_id': userId,

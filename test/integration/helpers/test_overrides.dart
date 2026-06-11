@@ -15,12 +15,11 @@ import 'mock_api_interceptor.dart';
 
 // Usage:
 //   await initTestLocale();                       // once per test file
-//   await tester.pumpWidget(buildTestApp());
+//   await tester.pumpWidget(buildTestAppWithMock(mock));
 //   await tester.pumpAndSettle();
 //   // App starts at /overview in mock mode.
 //
-// Requires: flutter test --platform chrome \
-//   --dart-define=MOCK_MODE=true --dart-define=API_BASE_URL=http://localhost:0
+// Requires: flutter test --platform chrome --dart-define=MOCK_MODE=true
 
 /// Initializes locale data required by DateFormat('es_MX'/'es') in production
 /// code. Mirrors main.dart:29-30. Idempotent — safe to call multiple times.
@@ -29,44 +28,6 @@ import 'mock_api_interceptor.dart';
 Future<void> initTestLocale() async {
   await initializeDateFormatting('es_MX', null);
   await initializeDateFormatting('es', null);
-}
-
-/// Builds the ConectamosApp wrapped in a ProviderScope with all providers
-/// overridden so no Supabase, dart:html, or network calls occur.
-Widget buildTestApp() {
-  final store = InMemoryKeyValueStore();
-  final fakeClient = SupabaseClient(
-    'http://localhost:0',
-    'fake-anon-key',
-    authOptions: const AuthClientOptions(autoRefreshToken: false),
-  );
-
-  return ProviderScope(
-    overrides: [
-      // Storage — in-memory, no dart:html
-      keyValueStoreProvider.overrideWithValue(store),
-
-      // Supabase — fake client, no Supabase.initialize() needed
-      supabaseClientProvider.overrideWithValue(fakeClient),
-
-      // Auth — fake stream that never emits; currentUser stays null (mock mode)
-      authStateProvider.overrideWith(
-        (ref) => const Stream<AuthState>.empty(),
-      ),
-
-      // Tenant — pre-loaded so screens don't hit TenantsApi
-      activeTenantIdProvider.overrideWithValue('test-tenant-id'),
-      activeTenantDisplayProvider.overrideWithValue('Test Tenant'),
-      allTenantsProvider.overrideWithValue([
-        TenantInfo(
-          id: 'test-tenant-id',
-          slug: 'test',
-          displayName: 'Test Tenant',
-        ),
-      ]),
-    ],
-    child: const _TestApp(),
-  );
 }
 
 /// Builds a test app with a [MockApiInterceptor] injected into [apiClientProvider].

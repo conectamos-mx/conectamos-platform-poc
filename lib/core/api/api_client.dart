@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:meta/meta.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../providers/auth_provider.dart';
@@ -26,42 +25,6 @@ class ApiClient {
 
   static const String baseUrl = _apiBaseUrl;
 
-  // ── Legacy static accessor (used by ~30 API classes) ───────────────────────
-  // Initialized once via init() in main.dart before runApp.
-  // Immutable after first init — use resetForTest() in tests only.
-  static ApiClient? _default;
-  static bool _initialized = false;
-
-  static Dio get instance {
-    assert(_initialized, 'ApiClient.init() must be called before accessing instance');
-    return _default!.dio;
-  }
-
-  static void init({
-    required SupabaseClient supabaseClient,
-    required KeyValueStore storage,
-    Interceptor? testInterceptor,
-  }) {
-    if (_initialized) {
-      throw StateError(
-        'ApiClient.init() already called. '
-        'In tests, call ApiClient.resetForTest() before re-initializing.',
-      );
-    }
-    _default = ApiClient(
-      supabaseClient: supabaseClient,
-      storage: storage,
-      testInterceptor: testInterceptor,
-    );
-    _initialized = true;
-  }
-
-  @visibleForTesting
-  static void resetForTest() {
-    _default = null;
-    _initialized = false;
-  }
-
   // ── Shared Dio factory ─────────────────────────────────────────────────────
 
   static Dio _createDio({
@@ -69,10 +32,6 @@ class ApiClient {
     required KeyValueStore storage,
     Interceptor? testInterceptor,
   }) {
-    assert(
-      baseUrl.isNotEmpty,
-      'API_BASE_URL no está definida. Usa run_dev.sh para correr en local.',
-    );
     final dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
@@ -100,8 +59,7 @@ class ApiClient {
   }
 }
 
-/// Provider-based ApiClient — uses same Dio factory with injected deps.
-/// Future sprints will migrate API classes from ApiClient.instance to this.
+/// Provider-based ApiClient — the only way to obtain a Dio instance.
 final apiClientProvider = Provider<ApiClient>((ref) {
   final supabaseClient = ref.watch(supabaseClientProvider);
   final storage = ref.watch(keyValueStoreProvider);

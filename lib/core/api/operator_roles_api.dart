@@ -1,10 +1,11 @@
-import 'package:conectamos_platform/core/api/api_client.dart';
+import 'package:dio/dio.dart';
 
 class OperatorRolesApi {
   static Future<List<Map<String, dynamic>>> listRoles({
+    required Dio dio,
     required String tenantId,
   }) async {
-    final res = await ApiClient.instance.get('/api/v1/operator-roles');
+    final res = await dio.get('/api/v1/operator-roles');
     final raw = res.data;
     final list = raw is List
         ? raw
@@ -16,10 +17,11 @@ class OperatorRolesApi {
   }
 
   static Future<Map<String, dynamic>> createRole({
+    required Dio dio,
     required String tenantId,
     required Map<String, dynamic> body,
   }) async {
-    final res = await ApiClient.instance.post(
+    final res = await dio.post(
       '/api/v1/operator-roles',
       data: {'tenant_id': tenantId, ...body},
     );
@@ -27,11 +29,12 @@ class OperatorRolesApi {
   }
 
   static Future<Map<String, dynamic>> updateRole({
+    required Dio dio,
     required String tenantId,
     required String roleId,
     required Map<String, dynamic> body,
   }) async {
-    final res = await ApiClient.instance.put(
+    final res = await dio.put(
       '/api/v1/operator-roles/$roleId',
       queryParameters: {'tenant_id': tenantId},
       data: body,
@@ -39,15 +42,16 @@ class OperatorRolesApi {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  static Future<void> deleteRole({required String roleId}) async {
-    await ApiClient.instance.delete('/api/v1/operator-roles/$roleId');
+  static Future<void> deleteRole({required Dio dio, required String roleId}) async {
+    await dio.delete('/api/v1/operator-roles/$roleId');
   }
 
   static Future<List<Map<String, dynamic>>> listOperatorsByRole({
+    required Dio dio,
     required String tenantId,
     required String roleId,
   }) async {
-    final res = await ApiClient.instance.get(
+    final res = await dio.get(
       '/api/v1/operator-roles/$roleId/operators',
       queryParameters: {'tenant_id': tenantId},
     );

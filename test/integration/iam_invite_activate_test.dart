@@ -6,10 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:patrol_finders/patrol_finders.dart';
 
-import 'package:conectamos_platform/core/api/api_client.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
-import 'helpers/in_memory_key_value_store.dart';
 import 'helpers/mock_api_interceptor.dart';
 import 'helpers/test_overrides.dart';
 
@@ -27,21 +23,6 @@ const _kFakeRoles = [
   {'id': 'role-1', 'name': 'Supervisor'},
   {'id': 'role-2', 'name': 'Agente'},
 ];
-
-void _initStaticApiClient(MockApiInterceptor mock) {
-  final store = InMemoryKeyValueStore();
-  final fakeClient = SupabaseClient(
-    'http://localhost:0',
-    'fake-anon-key',
-    authOptions: const AuthClientOptions(autoRefreshToken: false),
-  );
-  ApiClient.resetForTest();
-  ApiClient.init(
-    supabaseClient: fakeClient,
-    storage: store,
-    testInterceptor: mock,
-  );
-}
 
 void _mockSupportingRoutes(MockApiInterceptor mock) {
   mock.when('/operators', body: []);
@@ -67,7 +48,6 @@ void main() {
       mock.when('/iam/roles', body: _kFakeRoles);
       mock.when('/iam/invite', body: null);
       _mockSupportingRoutes(mock);
-      _initStaticApiClient(mock);
 
       await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();
@@ -143,8 +123,7 @@ void main() {
         _mockSupportingRoutes(mock);
         mock.when('/iam/users', body: []);
         mock.when('/iam/roles', body: _kFakeRoles);
-        _initStaticApiClient(mock);
-
+  
         await tester.pumpWidget(buildTestAppWithMock(mock));
         await tester.pumpAndSettle();
 

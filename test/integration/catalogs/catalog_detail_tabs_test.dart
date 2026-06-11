@@ -5,28 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:conectamos_platform/core/api/api_client.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import '../helpers/catalog_fixtures.dart';
-import '../helpers/in_memory_key_value_store.dart';
 import '../helpers/mock_api_interceptor.dart';
 import '../helpers/test_overrides.dart';
-
-void _initStaticApiClient(MockApiInterceptor mock) {
-  final store = InMemoryKeyValueStore();
-  final fakeClient = SupabaseClient(
-    'http://localhost:0',
-    'fake-anon-key',
-    authOptions: const AuthClientOptions(autoRefreshToken: false),
-  );
-  ApiClient.resetForTest();
-  ApiClient.init(
-    supabaseClient: fakeClient,
-    storage: store,
-    testInterceptor: mock,
-  );
-}
 
 void _mockSupportingRoutes(MockApiInterceptor mock) {
   mock.when('/operators', body: []);
@@ -86,7 +67,6 @@ void main() {
         'selected_sheet': 'Sheet1',
         'columns': ['id', 'nombre'],
       });
-      _initStaticApiClient(mock);
 
       await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();
@@ -136,7 +116,6 @@ void main() {
       final mock = MockApiInterceptor();
       _mockSupportingRoutes(mock);
       _mockManualDetailTabs(mock);
-      _initStaticApiClient(mock);
 
       await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();
@@ -173,7 +152,6 @@ void main() {
       mock.when('/api/v1/catalogs/{id}/items', method: 'GET', body: kItemsPage);
       mock.when('/api/v1/catalogs/{id}/sync-log', body: []);
       mock.when('/api/v1/catalogs/{id}/usages', body: []);
-      _initStaticApiClient(mock);
 
       await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();
@@ -205,7 +183,6 @@ void main() {
       _mockSupportingRoutes(mock);
       _mockManualDetailTabs(mock);
       mock.when('/api/v1/catalogs/{id}', method: 'DELETE', body: null);
-      _initStaticApiClient(mock);
 
       await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();
@@ -268,7 +245,6 @@ void main() {
       mock.when('/integrations/google/status', body: kGoogleConnected);
       mock.when('/api/v1/catalogs/{id}/sync',
           method: 'POST', body: <String, dynamic>{'status': 'running'});
-      _initStaticApiClient(mock);
 
       await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();

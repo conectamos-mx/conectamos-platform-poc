@@ -98,7 +98,7 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
         widget.tenantWorkerId != null
             ? FlowsApi.getFlowsByWorker(dio: dio, tenantWorkerId: widget.tenantWorkerId!)
             : FlowsApi.listFlows(dio: dio),
-        AiWorkersApi.listWorkers(),
+        AiWorkersApi.listWorkers(dio: dio),
       ]);
       if (!mounted) return;
       setState(() {
@@ -682,7 +682,7 @@ class _NewFlowDialogState extends ConsumerState<_NewFlowDialog> {
   Future<void> _loadRoles() async {
     setState(() => _loadingRoles = true);
     try {
-      final roles = await OperatorRolesApi.listRoles(tenantId: widget.tenantId);
+      final roles = await OperatorRolesApi.listRoles(dio: ref.read(apiClientProvider).dio, tenantId: widget.tenantId);
       if (mounted) {
         setState(() => _availableRoles = List<Map<String, dynamic>>.from(roles));
       }

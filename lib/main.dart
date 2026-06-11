@@ -30,6 +30,8 @@ Future<void> main() async {
   await initializeDateFormatting('es', null);
   initTz();
 
+  assert(ApiClient.baseUrl.isNotEmpty,
+      'API_BASE_URL no está definida. Usa run_dev.sh para correr en local.');
   assert(supabaseUrl.isNotEmpty, 'SUPABASE_URL no está definida. Usa run_dev.sh.');
   assert(supabaseAnonKey.isNotEmpty, 'SUPABASE_ANON_KEY no está definida. Usa run_dev.sh.');
 
@@ -39,10 +41,6 @@ Future<void> main() async {
   );
 
   final store = WebKeyValueStore();
-  ApiClient.init(
-    supabaseClient: Supabase.instance.client,
-    storage: store,
-  );
 
   runApp(
     ProviderScope(

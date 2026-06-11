@@ -50,7 +50,7 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
   Future<void> _loadChannelTypes() async {
     setState(() => _channelTypesLoading = true);
     try {
-      final channels = await ChannelsApi.listChannels();
+      final channels = await ChannelsApi.listChannels(dio: ref.read(apiClientProvider).dio);
       final types = channels
           .map((ch) => ch['channel_type'] as String? ?? '')
           .where((t) => t.isNotEmpty)
@@ -134,7 +134,7 @@ class _CreateOperatorDialogState extends ConsumerState<CreateOperatorDialog> {
     setState(() => _rolesLoading = true);
     try {
       final tenantId = ref.read(activeTenantIdProvider);
-      final roles = await OperatorRolesApi.listRoles(tenantId: tenantId);
+      final roles = await OperatorRolesApi.listRoles(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
       if (mounted) {
         setState(() {
           _availableRoles = roles;

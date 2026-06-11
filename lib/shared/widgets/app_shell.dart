@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/overview_api.dart';
 import '../../core/config.dart';
 import '../../core/providers/auth_provider.dart';
@@ -31,7 +32,7 @@ final activeTenantProvider = Provider<String>((ref) {
 final _kpiDataProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, tenantId) async {
   if (tenantId.isEmpty) return {};
-  return OverviewApi.getKpis(tenantId: tenantId);
+  return OverviewApi.getKpis(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
 });
 
 // ── AppShell ──────────────────────────────────────────────────────────────────

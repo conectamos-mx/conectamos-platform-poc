@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../../core/api/groups_api.dart';
@@ -28,11 +29,15 @@ import 'app_avatar.dart';
 class ImagePickerAvatar extends StatefulWidget {
   const ImagePickerAvatar({
     super.key,
+    required this.dio,
     this.imageUrl,
     required this.fallback,
     required this.onImageSelected,
     this.size = 80,
   });
+
+  /// Dio instance for API calls
+  final Dio dio;
 
   /// Current image URL (nullable)
   final String? imageUrl;
@@ -70,6 +75,7 @@ class _ImagePickerAvatarState extends State<ImagePickerAvatar> {
     try {
       // Upload to backend
       final url = await GroupsApi.uploadControlTowerIcon(
+        dio: widget.dio,
         fileBytes: file.bytes!,
         fileName: file.name,
       );
