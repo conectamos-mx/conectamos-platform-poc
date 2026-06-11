@@ -39,10 +39,11 @@ class ConnectionsApi {
   /// Fetches the header row (first row) from an Excel file in OneDrive.
   /// Returns a list of column names.
   static Future<List<String>> getExcelHeaders({
+    required Dio dio,
     required String fileId,
     required String sheetName,
   }) async {
-    final resp = await ApiClient.instance.get(
+    final resp = await dio.get(
       '/integrations/microsoft/excel/headers',
       queryParameters: {
         'file_id': fileId,
@@ -86,9 +87,10 @@ class ConnectionsApi {
 
   /// Lists Excel files from OneDrive for the tenant.
   static Future<List<Map<String, dynamic>>> getOnedriveFiles({
+    required Dio dio,
     required String tenantId,
   }) async {
-    final response = await ApiClient.instance.get(
+    final response = await dio.get(
       '/api/v1/catalogs/tools/onedrive-files',
       queryParameters: {'tenant_id': tenantId},
     );

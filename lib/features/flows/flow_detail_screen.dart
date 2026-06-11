@@ -5200,7 +5200,10 @@ class _ActionDialogState extends State<_ActionDialog> {
   Future<void> _checkMicrosoftOAuthForAction() async {
     setState(() => _checkingMicrosoftOAuth = true);
     try {
-      final status = await ConnectionsApi.getMicrosoftStatus(tenantId: widget.tenantId);
+      final status = await ConnectionsApi.getMicrosoftStatus(
+        dio: widget.dio,
+        tenantId: widget.tenantId,
+      );
       debugPrint('[_checkMicrosoftOAuthForAction] Full status response: $status');
       final connections = status['connections'] as List? ?? [];
       debugPrint('[_checkMicrosoftOAuthForAction] Connections: $connections');
@@ -5226,7 +5229,10 @@ class _ActionDialogState extends State<_ActionDialog> {
   Future<void> _loadOnedriveFilesForAction() async {
     setState(() => _loadingOnedriveFiles = true);
     try {
-      final files = await ConnectionsApi.getOnedriveFiles(tenantId: widget.tenantId);
+      final files = await ConnectionsApi.getOnedriveFiles(
+        dio: widget.dio,
+        tenantId: widget.tenantId,
+      );
       if (mounted) {
         setState(() {
           _onedriveFiles = files;
@@ -5247,7 +5253,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     });
     try {
       final result = await CatalogsApi.getOnedrivePreview(
-        dio: ApiClient.instance,
+        dio: widget.dio,
         tenantId: widget.tenantId,
         fileId: _selectedExcelFileId!,
         sheetName: sheetName ?? _selectedExcelSheet,
@@ -5354,6 +5360,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     });
     try {
       final headers = await ConnectionsApi.getExcelHeaders(
+        dio: widget.dio,
         fileId: fileId,
         sheetName: sheetName,
       );
