@@ -4643,7 +4643,6 @@ class _ActionDialogState extends State<_ActionDialog> {
   // excel_onedrive_append_row
   final _excelFileIdCtrl = TextEditingController();
   final _excelSheetNameCtrl = TextEditingController();
-  List<String> _excelHeaders = [];
   bool _loadingExcelHeaders = false;
   String? _excelHeadersError;
   bool _microsoftConnected = false;
@@ -4651,7 +4650,6 @@ class _ActionDialogState extends State<_ActionDialog> {
   bool _loadingOnedriveFiles = false;
   List<Map<String, dynamic>> _onedriveFiles = [];
   String? _selectedExcelFileId;
-  String? _selectedExcelFileName;
   bool _loadingExcelPreview = false;
   bool _excelPreviewLoaded = false;
   List<String> _availableExcelSheets = [];
@@ -5349,7 +5347,6 @@ class _ActionDialogState extends State<_ActionDialog> {
     if (fileId.isEmpty) {
       setState(() {
         _excelHeadersError = 'Ingresa un ID de archivo de Excel válido';
-        _excelHeaders = [];
       });
       return;
     }
@@ -5359,14 +5356,13 @@ class _ActionDialogState extends State<_ActionDialog> {
       _excelHeadersError = null;
     });
     try {
-      final headers = await ConnectionsApi.getExcelHeaders(
+      await ConnectionsApi.getExcelHeaders(
         dio: widget.dio,
         fileId: fileId,
         sheetName: sheetName,
       );
       if (mounted) {
         setState(() {
-          _excelHeaders = headers;
           _loadingExcelHeaders = false;
         });
       }
@@ -5374,7 +5370,6 @@ class _ActionDialogState extends State<_ActionDialog> {
       if (mounted) {
         setState(() {
           _excelHeadersError = 'Error al cargar headers: $e';
-          _excelHeaders = [];
           _loadingExcelHeaders = false;
         });
       }
@@ -7380,8 +7375,6 @@ class _ActionDialogState extends State<_ActionDialog> {
                       onChanged: (v) {
                         setState(() {
                           _selectedExcelFileId = v;
-                          _selectedExcelFileName = _onedriveFiles
-                              .firstWhere((f) => f['id'] == v, orElse: () => {})['name'] as String?;
                           _excelFileIdCtrl.text = v ?? '';
                           _selectedExcelSheet = null;
                           _availableExcelSheets = [];
