@@ -7490,6 +7490,245 @@ class _ActionDialogState extends State<_ActionDialog> {
                 ),
                 const SizedBox(height: 6),
                 ..._columnMappingRows.asMap().entries.map((e) => _buildColumnMappingRow(e.key)),
+              ] else if (_type == 'excel_onedrive_update_row') ...[
+                // Excel OneDrive Update Row UI
+                if (_checkingMicrosoftOAuth)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ctTeal),
+                    ),
+                  )
+                else if (!_microsoftConnected)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      border: Border.all(color: const Color(0xFFF59E0B)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded,
+                                size: 16, color: Color(0xFFB45309)),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Tu cuenta de Microsoft no está conectada.',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFFB45309),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Para usar Excel OneDrive, conecta tu cuenta de Microsoft en Configuración → Integraciones.',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: const Color(0xFF92400E),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else ...[
+                  if (_loadingOnedriveFiles) ...[
+                    const SizedBox(height: 12),
+                    const LinearProgressIndicator(color: AppColors.ctTeal),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Cargando archivos de OneDrive…',
+                      style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+                    ),
+                  ] else if (_onedriveFiles.isEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'No se encontraron archivos Excel en OneDrive',
+                      style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+                    ),
+                  ] else ...[
+                    Text('Archivo Excel', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 6),
+                    AppDropdown<String?>(
+                      hint: 'Selecciona un archivo…',
+                      value: _selectedExcelFileId,
+                      items: _onedriveFiles.map((f) {
+                        final id = f['id'] as String?;
+                        final name = f['name'] as String? ?? id ?? '';
+                        return AppDropdownItem<String?>(value: id, label: name);
+                      }).toList(),
+                      onChanged: (v) {
+                        setState(() {
+                          _selectedExcelFileId = v;
+                          _excelFileIdCtrl.text = v ?? '';
+                          _selectedExcelSheet = null;
+                          _availableExcelSheets = [];
+                          _excelPreviewLoaded = false;
+                        });
+                        _loadExcelPreview();
+                      },
+                    ),
+                    if (_loadingExcelPreview) ...[
+                      const SizedBox(height: 6),
+                      const LinearProgressIndicator(color: AppColors.ctTeal),
+                    ],
+                    if (_excelPreviewLoaded && _availableExcelSheets.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text('Hoja', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 6),
+                      AppDropdown<String?>(
+                        hint: 'Selecciona una hoja…',
+                        value: _selectedExcelSheet,
+                        items: _availableExcelSheets.map((sheet) {
+                          return AppDropdownItem<String?>(value: sheet, label: sheet);
+                        }).toList(),
+                        onChanged: (s) {
+                          setState(() => _selectedExcelSheet = s);
+                          if (s != null) {
+                            _excelSheetNameCtrl.text = s;
+                            _loadExcelPreview(sheetName: s);
+                          }
+                        },
+                      ),
+                      if (_excelPreviewColumns.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Se detectaron ${_excelPreviewColumns.length} columnas: '
+                          '${_excelPreviewColumns.take(5).join(', ')}'
+                          '${_excelPreviewColumns.length > 5 ? '…' : ''}',
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
+                        ),
+                      ],
+                    ],
+                  ],
+                  const SizedBox(height: 12),
+                  _FormField(
+                    label: 'Nombre de la hoja (manual)',
+                    controller: _excelSheetNameCtrl,
+                    placeholder: 'Sheet1',
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _hasHeaders,
+                        onChanged: (v) => setState(() {
+                          _hasHeaders = v ?? false;
+                          if (_hasHeaders && _excelFileIdCtrl.text.isNotEmpty) {
+                            _fetchExcelHeaders();
+                          }
+                        }),
+                        activeColor: AppColors.ctTeal,
+                      ),
+                      const SizedBox(width: 8),
+                      Text('La hoja tiene headers (primera fila)',
+                          style: AppTextStyles.bodySmall),
+                    ],
+                  ),
+                  if (_hasHeaders && _excelFileIdCtrl.text.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    AppButton(
+                      label: 'Cargar headers',
+                      variant: AppButtonVariant.outline,
+                      size: AppButtonSize.sm,
+                      onPressed: () {
+                        if (!_loadingExcelHeaders) _fetchExcelHeaders();
+                      },
+                      prefixIcon: _loadingExcelHeaders
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: AppColors.ctTeal))
+                          : const Icon(Icons.refresh, size: 14),
+                    ),
+                  ],
+                  if (_excelHeadersError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(_excelHeadersError!,
+                        style: AppTextStyles.bodySmall
+                            .copyWith(color: AppColors.ctDanger)),
+                  ],
+                ],
+                const SizedBox(height: 16),
+                Text('Columna de búsqueda',
+                    style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 6),
+                if (_hasHeaders && _sheetHeaders.isNotEmpty)
+                  AppDropdown<String?>(
+                    hint: 'Selecciona columna…',
+                    value: _lookupColumnCtrl.text.isNotEmpty
+                        ? _lookupColumnCtrl.text : null,
+                    items: _sheetHeaders
+                        .map((h) => AppDropdownItem<String?>(value: h, label: h))
+                        .toList(),
+                    onChanged: (v) => setState(() =>
+                        _lookupColumnCtrl.text = v ?? ''),
+                  )
+                else
+                  _FormField(
+                    label: '',
+                    controller: _lookupColumnCtrl,
+                    placeholder: _hasHeaders ? 'Nombre de columna' : 'ej. A',
+                  ),
+                const SizedBox(height: 12),
+                Text('Campo fuente del valor de búsqueda',
+                    style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 6),
+                Builder(builder: (context) {
+                  final allKeys = _buildAllValidKeys();
+                  final effectiveLookupKey = (_lookupValueFieldKey != null &&
+                      (allKeys.contains(_lookupValueFieldKey) ||
+                       (_loadingCatalogSchemas && _lookupValueFieldKey!.contains('.'))))
+                      ? _lookupValueFieldKey
+                      : null;
+                  return AppDropdown<String?>(
+                    hint: _loadingCatalogSchemas
+                        ? 'Cargando campos…'
+                        : 'Campo del flujo…',
+                    value: effectiveLookupKey,
+                    items: [
+                      ..._buildFieldDropdownItems(),
+                      if (_loadingCatalogSchemas &&
+                          _lookupValueFieldKey != null &&
+                          _lookupValueFieldKey!.contains('.') &&
+                          !allKeys.contains(_lookupValueFieldKey))
+                        AppDropdownItem<String?>(
+                          value: _lookupValueFieldKey,
+                          label: 'Cargando…',
+                        ),
+                    ],
+                    onChanged: (v) => setState(() => _lookupValueFieldKey = v),
+                  );
+                }),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Mapeo de columnas',
+                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
+                    ),
+                    AppButton(
+                      label: '+ Agregar columna',
+                      variant: AppButtonVariant.ghost,
+                      size: AppButtonSize.sm,
+                      prefixIcon: const Icon(Icons.add, size: 14, color: AppColors.ctTeal),
+                      onPressed: () => setState(() {
+                        _columnMappingRows.add((
+                          TextEditingController(),
+                          TextEditingController(),
+                        ));
+                        _columnMappingKeys.add(null);
+                      }),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ..._columnMappingRows.asMap().entries.map((e) => _buildColumnMappingRow(e.key)),
               ],
               if (!_isKnownType) ..._renderDynamicActionFields(),
 
