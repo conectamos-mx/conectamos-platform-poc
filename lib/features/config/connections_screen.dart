@@ -1696,7 +1696,7 @@ class _IntegrationLogo extends StatelessWidget {
     'gdrive':     'assets/logos/drive.png',
     'gcal':       'assets/logos/google_calendar.png',
     'gsheets':    'assets/logos/google-sheets',
-    'onedrive':   'assets/logos/ondrive.svg',
+    'onedrive':   'assets/logos/onedrive.svg',
     'outlook':    'assets/logos/outlook.png',
     'dropbox':    'assets/logos/dropbox.svg',
     'n8n':        'assets/logos/n8n.webp',
