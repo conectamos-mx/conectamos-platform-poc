@@ -550,3 +550,15 @@ Pantallas de detalle con edicion por seccion usan `AppEditableSection` (lib/shar
 **Prohibido:**
 - Dialogs modales para editar campos en pantallas de detalle (patron anterior).
 - Auto-save sin confirmacion explicita del usuario.
+
+---
+
+## Integration tests — comando canónico
+
+```bash
+flutter test test/integration/ --platform chrome \
+  --dart-define=MOCK_MODE=true \
+  --dart-define=API_BASE_URL=http://mock.local
+```
+
+> API_BASE_URL es obligatorio aunque MOCK_MODE intercepte los requests: 2 tests resuelven el provider canónico (leak documentado en PLA-213). Workaround temporal hasta cerrar PLA-213.
