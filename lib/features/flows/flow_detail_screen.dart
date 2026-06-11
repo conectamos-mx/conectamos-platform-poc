@@ -5243,6 +5243,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     });
     try {
       final result = await CatalogsApi.getOnedrivePreview(
+        dio: ApiClient.instance,
         tenantId: widget.tenantId,
         fileId: _selectedExcelFileId!,
         sheetName: sheetName ?? _selectedExcelSheet,
