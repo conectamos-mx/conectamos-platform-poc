@@ -133,6 +133,11 @@ class ChannelsApi {
   }
 
   static Future<Map<String, dynamic>> verifyTelegramToken(String botToken) async {
+    // SECURITY: Dio crudo INTENCIONAL. Este request va a un host externo
+    // (api.telegram.org). NO migrar al Dio inyectado del apiClientProvider:
+    // su interceptor adjunta el JWT de Supabase y X-Tenant-ID a todo request,
+    // lo que filtraría credenciales de la plataforma a Telegram.
+    // Ver PLA-212 / evidencia en PLA-173.
     final dio = Dio(BaseOptions(
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
