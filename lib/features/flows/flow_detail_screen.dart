@@ -7416,12 +7416,15 @@ class _ActionDialogState extends State<_ActionDialog> {
                       ],
                     ],
                   ],
-                  const SizedBox(height: 12),
-                  _FormField(
-                    label: 'Nombre de la hoja (manual)',
-                    controller: _excelSheetNameCtrl,
-                    placeholder: 'Sheet1',
-                  ),
+                  // Campo manual solo como fallback cuando no hay hojas automáticas
+                  if (_onedriveFiles.isEmpty || _availableExcelSheets.isEmpty) ...[
+                    const SizedBox(height: 12),
+                    _FormField(
+                      label: 'Nombre de la hoja (manual)',
+                      controller: _excelSheetNameCtrl,
+                      placeholder: 'Sheet1',
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -7604,12 +7607,15 @@ class _ActionDialogState extends State<_ActionDialog> {
                       ],
                     ],
                   ],
-                  const SizedBox(height: 12),
-                  _FormField(
-                    label: 'Nombre de la hoja (manual)',
-                    controller: _excelSheetNameCtrl,
-                    placeholder: 'Sheet1',
-                  ),
+                  // Campo manual solo como fallback cuando no hay hojas automáticas
+                  if (_onedriveFiles.isEmpty || _availableExcelSheets.isEmpty) ...[
+                    const SizedBox(height: 12),
+                    _FormField(
+                      label: 'Nombre de la hoja (manual)',
+                      controller: _excelSheetNameCtrl,
+                      placeholder: 'Sheet1',
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Row(
                     children: [
