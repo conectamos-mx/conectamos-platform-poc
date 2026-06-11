@@ -32,10 +32,6 @@ class ApiClient {
     required KeyValueStore storage,
     Interceptor? testInterceptor,
   }) {
-    assert(
-      baseUrl.isNotEmpty,
-      'API_BASE_URL no está definida. Usa run_dev.sh para correr en local.',
-    );
     final dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),

@@ -4,6 +4,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/api/api_client.dart';
 import 'core/build_info.dart';
 import 'core/router/app_router.dart';
 import 'core/storage/key_value_store.dart';
@@ -29,6 +30,8 @@ Future<void> main() async {
   await initializeDateFormatting('es', null);
   initTz();
 
+  assert(ApiClient.baseUrl.isNotEmpty,
+      'API_BASE_URL no está definida. Usa run_dev.sh para correr en local.');
   assert(supabaseUrl.isNotEmpty, 'SUPABASE_URL no está definida. Usa run_dev.sh.');
   assert(supabaseAnonKey.isNotEmpty, 'SUPABASE_ANON_KEY no está definida. Usa run_dev.sh.');
 
