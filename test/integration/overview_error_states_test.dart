@@ -38,7 +38,7 @@ void main() {
         // Other sections succeed — isolate KPI error
         _mockSupportingRoutes(mock);
 
-        await tester.pumpWidget(buildTestApp());
+        await tester.pumpWidget(buildTestAppWithMock(mock));
         await tester.pumpAndSettle();
 
         // The HeroBand should show an error indicator — not silent dashes.
