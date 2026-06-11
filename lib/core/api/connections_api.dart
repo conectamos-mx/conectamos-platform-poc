@@ -36,6 +36,23 @@ class ConnectionsApi {
     return List<String>.from(resp.data['headers'] as List);
   }
 
+  /// Fetches the header row (first row) from an Excel file in OneDrive.
+  /// Returns a list of column names.
+  static Future<List<String>> getExcelHeaders({
+    required Dio dio,
+    required String fileId,
+    required String sheetName,
+  }) async {
+    final resp = await dio.get(
+      '/integrations/microsoft/excel/headers',
+      queryParameters: {
+        'file_id': fileId,
+        'sheet_name': sheetName,
+      },
+    );
+    return List<String>.from(resp.data['headers'] as List);
+  }
+
   // ── Microsoft OAuth ────────────────────────────────────────────────────────
 
   /// Returns the Microsoft OAuth authorization URL.
@@ -66,5 +83,20 @@ class ConnectionsApi {
       '/oauth/microsoft/revoke',
       queryParameters: {'tenant_id': tenantId},
     );
+  }
+
+  /// Lists Excel files from OneDrive for the tenant.
+  static Future<List<Map<String, dynamic>>> getOnedriveFiles({
+    required Dio dio,
+    required String tenantId,
+  }) async {
+    final response = await dio.get(
+      '/api/v1/catalogs/tools/onedrive-files',
+      queryParameters: {'tenant_id': tenantId},
+    );
+    final raw = response.data;
+    final list = raw is Map ? (raw['files'] ?? []) : (raw is List ? raw : []);
+    return List<Map<String, dynamic>>.from(
+        (list as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
   }
 }
