@@ -5698,7 +5698,24 @@ class _ActionDialogState extends State<_ActionDialog> {
       for (final f in widget.flowFields) {
         final key = f['key'] as String? ?? '';
         final label = f['label'] as String? ?? key;
-        if (key.isNotEmpty) {
+        final type = f['type'] as String?;
+        final slug = f['catalog_slug'] as String?;
+
+        if (key.isEmpty) continue;
+
+        // Expandir campos de catálogo (asset_ref) con sus propiedades
+        if (type == 'asset_ref' && slug != null && _catalogSchemas.containsKey(slug)) {
+          for (final col in _catalogSchemas[slug]!) {
+            final colKey = col['key'] as String? ?? '';
+            final colLabel = col['label'] as String? ?? colKey;
+            if (colKey.isNotEmpty) {
+              items.add(AppDropdownItem<String>(
+                value: '{{fields.$key.data.$colKey}}',
+                label: '$label > $colLabel',
+              ));
+            }
+          }
+        } else {
           items.add(AppDropdownItem<String>(
             value: '{{fields.$key}}',
             label: '$label (fields.$key)',
