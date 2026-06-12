@@ -25,6 +25,8 @@ class ActionMiniDiagram extends StatelessWidget {
         'webhook_out' => _webhookOut(),
         'google_sheets_append_row' => _sheetsAppend(),
         'google_sheets_update_row' => _sheetsUpdate(),
+        'excel_onedrive_append_row' => _sheetsAppend(),
+        'excel_onedrive_update_row' => _sheetsUpdate(),
         'emit_event' => _emitEvent(),
         'notify_group' => _notifyGroup(),
         _ => const SizedBox.expand(),

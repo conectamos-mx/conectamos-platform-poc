@@ -269,7 +269,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
       ref.read(topbarSubtitleProvider.notifier).state = 'Centro de aplicaciones';
       ref.read(topbarActionsProvider.notifier).state = [];
       _loadGoogleStatus();
-      _loadMicrosoftStatus();
+      // Microsoft status is loaded reactively in build() when tenant becomes available
     });
   }
 
@@ -298,14 +298,20 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
     try {
       final tenantId = ref.read(activeTenantIdProvider);
       if (tenantId.isEmpty) return;
-      final status = await ConnectionsApi.getMicrosoftStatus(dio: ref.read(apiClientProvider).dio, tenantId: tenantId);
+
+      final status = await ConnectionsApi.getMicrosoftStatus(
+        dio: ref.read(apiClientProvider).dio,
+        tenantId: tenantId,
+      );
       if (!mounted) return;
+
       final connections = (status['connections'] as List?) ?? [];
       final microsoftConn = connections
           .cast<Map<String, dynamic>>()
           .where((c) => c['provider'] == 'microsoft' && c['status'] == 'active')
           .firstOrNull;
       final connected = microsoftConn != null;
+
       setState(() {
         if (connected) {
           _connectedIds = {..._connectedIds, 'onedrive'};
@@ -614,6 +620,13 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Listen to tenant changes and reload Microsoft status when available
+    ref.listen(activeTenantIdProvider, (previous, next) {
+      if (next.isNotEmpty) {
+        _loadMicrosoftStatus();
+      }
+    });
+
     final filtered = _filtered;
     final showRecommended = _activeTab == 'apps' &&
         _activeCategory == IntegrationCategory.all &&
@@ -1168,9 +1181,10 @@ class _ContentArea extends StatelessWidget {
               onCardTap: onCardTap,
             ),
           const SizedBox(height: 40),
-          const Divider(color: AppColors.ctBorder),
-          const SizedBox(height: 32),
-          const _CatalogsSection(),
+          // TODO: Re-enable catalogs section when needed
+          // const Divider(color: AppColors.ctBorder),
+          // const SizedBox(height: 32),
+          // const _CatalogsSection(),
         ],
       ),
     );
@@ -1193,13 +1207,26 @@ class _CatalogsSectionState extends ConsumerState<_CatalogsSection> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadWithRetry();
+  }
+
+  Future<void> _loadWithRetry({int attempt = 0}) async {
+    final tenantId = ref.read(activeTenantIdProvider);
+    if (tenantId.isEmpty && attempt < 3) {
+      Future.delayed(Duration(milliseconds: 100 * (attempt + 1)), () => _loadWithRetry(attempt: attempt + 1));
+      return;
+    }
+    await _load();
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
       final tenantId = ref.read(activeTenantIdProvider);
+      if (tenantId.isEmpty) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
       final dio = ref.read(apiClientProvider).dio;
       final data = await CatalogsApi.listCatalogs(dio: dio, tenantId: tenantId);
       if (mounted) setState(() { _catalogs = data; _loading = false; });
@@ -1696,7 +1723,7 @@ class _IntegrationLogo extends StatelessWidget {
     'gdrive':     'assets/logos/drive.png',
     'gcal':       'assets/logos/google_calendar.png',
     'gsheets':    'assets/logos/google-sheets',
-    'onedrive':   'assets/logos/ondrive.svg',
+    'onedrive':   'assets/logos/onedrive.svg',
     'outlook':    'assets/logos/outlook.png',
     'dropbox':    'assets/logos/dropbox.svg',
     'n8n':        'assets/logos/n8n.webp',

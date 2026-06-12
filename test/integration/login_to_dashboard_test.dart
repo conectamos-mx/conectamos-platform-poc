@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:patrol_finders/patrol_finders.dart';
 
+import 'helpers/mock_api_interceptor.dart';
 import 'helpers/test_overrides.dart';
 
 void main() {
@@ -22,7 +23,16 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
 
-      await tester.pumpWidget(buildTestApp());
+      final mock = MockApiInterceptor();
+      // Routes hit by AppShell + OverviewScreen after login redirect
+      mock.when('/tenants/{id}/kpis', body: <String, dynamic>{});
+      mock.when('/operators', body: []);
+      mock.when('/workers', body: []);
+      mock.when('/escalations', body: []);
+      mock.when('/iam/users', body: []);
+      mock.when('/iam/roles', body: []);
+
+      await tester.pumpWidget(buildTestAppWithMock(mock));
       await tester.pumpAndSettle();
 
       // App starts at /overview in mock mode. Navigate to /login.
