@@ -5721,12 +5721,12 @@ class _ActionDialogState extends State<_ActionDialog> {
     // ── Execution metadata ──
     items.add(const AppDropdownItem<String>(
       value: '',
-      label: '━━━ Metadata del Execution ━━━',
+      label: '━━━ Metadata de la Ejecución ━━━',
       enabled: false,
     ));
     items.add(const AppDropdownItem<String>(
       value: '{{execution.execution_id}}',
-      label: 'ID del execution',
+      label: 'ID de ejecución',
     ));
     items.add(const AppDropdownItem<String>(
       value: '{{execution.flow_definition_id}}',
