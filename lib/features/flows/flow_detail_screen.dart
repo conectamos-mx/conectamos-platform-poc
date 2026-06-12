@@ -4632,7 +4632,6 @@ class _ActionDialogState extends State<_ActionDialog> {
   bool _loadingCatalogSchemas = false;
   // parent flows that have open_flow actions pointing to this flow
   List<Map<String, dynamic>> _parentFlows = [];
-  bool _loadingParentFlows = false;
   // Each entry: (col: controller, val: controller)
   final List<(TextEditingController, TextEditingController)> _columnMappingRows = [];
   // Parallel list: selected flowField key per row (null = custom text mode)
@@ -5025,7 +5024,6 @@ class _ActionDialogState extends State<_ActionDialog> {
   }
 
   Future<void> _loadParentFlows() async {
-    setState(() => _loadingParentFlows = true);
     try {
       final allFlows = await FlowsApi.listFlows(dio: widget.dio);
       final parents = <Map<String, dynamic>>[];
@@ -5052,14 +5050,9 @@ class _ActionDialogState extends State<_ActionDialog> {
       }
 
       if (!mounted) return;
-      setState(() {
-        _parentFlows = parents;
-        _loadingParentFlows = false;
-      });
+      setState(() => _parentFlows = parents);
     } catch (e) {
       debugPrint('[_loadParentFlows] ERROR: $e');
-      if (!mounted) return;
-      setState(() => _loadingParentFlows = false);
     }
   }
 
@@ -5761,7 +5754,7 @@ class _ActionDialogState extends State<_ActionDialog> {
         } else {
           items.add(AppDropdownItem<String>(
             value: '{{fields.$key}}',
-            label: '$label',
+            label: label,
           ));
         }
       }
