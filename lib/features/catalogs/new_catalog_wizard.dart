@@ -52,7 +52,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
   bool _loadingPreview  = false;
   List<String> _availableSheets = [];
   String? _selectedSheet;
-  List<String> _previewColumns = [];
+  List<Map<String, dynamic>> _previewColumnSpecs = [];
   bool _previewLoaded = false;
   Timer? _sheetUrlDebounce;
 
@@ -301,10 +301,31 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
         sheetName: sheetName ?? _selectedSheet,
       );
       if (!mounted) return;
+      final rawSpecs = result['column_specs'] as List?;
+      final rawColumns = result['columns'] as List?;
+      if ((rawSpecs == null || rawSpecs.isEmpty) &&
+          rawColumns != null &&
+          rawColumns.isNotEmpty) {
+        setState(() => _loadingOnedrivePreview = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            key: const Key('preview_missing_specs_error'),
+            content: const Text(
+              'El servidor no devolvió las columnas normalizadas (column_specs). '
+              'Actualiza el backend antes de crear catálogos con fuente.',
+            ),
+            backgroundColor: AppColors.ctDanger,
+            duration: const Duration(seconds: 4),
+          ));
+        }
+        return;
+      }
       setState(() {
         _availableSheets       = List<String>.from(result['sheets'] as List? ?? []);
         _selectedSheet         = result['selected_sheet'] as String?;
-        _previewColumns        = List<String>.from(result['columns'] as List? ?? []);
+        _previewColumnSpecs    = List<Map<String, dynamic>>.from(
+          (rawSpecs ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)),
+        );
         _previewLoaded         = true;
         _loadingOnedrivePreview = false;
       });
@@ -332,10 +353,31 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
         sheetUrl: _sheetUrlCtrl.text.trim(),
         sheetName: sheetName ?? _selectedSheet,
       );
+      final rawSpecs = result['column_specs'] as List?;
+      final rawColumns = result['columns'] as List?;
+      if ((rawSpecs == null || rawSpecs.isEmpty) &&
+          rawColumns != null &&
+          rawColumns.isNotEmpty) {
+        setState(() => _loadingPreview = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            key: const Key('preview_missing_specs_error'),
+            content: const Text(
+              'El servidor no devolvió las columnas normalizadas (column_specs). '
+              'Actualiza el backend antes de crear catálogos con fuente.',
+            ),
+            backgroundColor: AppColors.ctDanger,
+            duration: const Duration(seconds: 4),
+          ));
+        }
+        return;
+      }
       setState(() {
         _availableSheets = List<String>.from(result['sheets'] as List? ?? []);
         _selectedSheet   = result['selected_sheet'] as String?;
-        _previewColumns  = List<String>.from(result['columns'] as List? ?? []);
+        _previewColumnSpecs = List<Map<String, dynamic>>.from(
+          (rawSpecs ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)),
+        );
         _previewLoaded   = true;
         _loadingPreview  = false;
       });
@@ -352,7 +394,7 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
   }
 
   Future<void> _prepopulateSchemaFromColumns() async {
-    if (_previewColumns.isEmpty) return;
+    if (_previewColumnSpecs.isEmpty) return;
 
     if (_fields.isNotEmpty && !_columnsFromPreview) {
       final replace = await showDialog<bool>(
@@ -382,14 +424,10 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
       if (replace != true) return;
     }
 
-    final newFields = _previewColumns.map((col) {
-      final key = col
-          .toLowerCase()
-          .replaceAll(' ', '_')
-          .replaceAll(RegExp(r'[^a-z0-9_]'), '');
+    final newFields = _previewColumnSpecs.map((spec) {
       return {
-        'key':        key,
-        'label':      col,
+        'key':        spec['key'] as String? ?? '',
+        'label':      spec['header'] as String? ?? '',
         'type':       'text',
         'searchable': false,
         'is_primary': false,
@@ -852,12 +890,12 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
               if (s != null) _loadSheetPreview(sheetName: s);
             },
           ),
-          if (_previewColumns.isNotEmpty) ...[
+          if (_previewColumnSpecs.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
-              'Se detectaron ${_previewColumns.length} columnas: '
-              '${_previewColumns.take(5).join(', ')}'
-              '${_previewColumns.length > 5 ? '…' : ''}',
+              'Se detectaron ${_previewColumnSpecs.length} columnas: '
+              '${_previewColumnSpecs.take(5).map((s) => s['header'] as String? ?? '').join(', ')}'
+              '${_previewColumnSpecs.length > 5 ? '…' : ''}',
               style: AppFonts.geist(
                   fontSize: 12, color: AppColors.ctText2),
             ),
@@ -1026,12 +1064,12 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
                   if (s != null) _loadOnedrivePreview(sheetName: s);
                 },
               ),
-              if (_previewColumns.isNotEmpty) ...[
+              if (_previewColumnSpecs.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'Se detectaron ${_previewColumns.length} columnas: '
-                  '${_previewColumns.take(5).join(', ')}'
-                  '${_previewColumns.length > 5 ? '…' : ''}',
+                  'Se detectaron ${_previewColumnSpecs.length} columnas: '
+                  '${_previewColumnSpecs.take(5).map((s) => s['header'] as String? ?? '').join(', ')}'
+                  '${_previewColumnSpecs.length > 5 ? '…' : ''}',
                   style: AppFonts.geist(
                       fontSize: 12, color: AppColors.ctText2),
                 ),
@@ -1229,11 +1267,15 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
                   itemBuilder: (ctx, i) {
                     final field = _fields[i];
                     final uid = field['_uid'] as String? ?? i.toString();
+                    final keyRO = _columnsFromPreview &&
+                        (_sourceType == 'google_sheets' ||
+                            _sourceType == 'onedrive_excel');
                     return _FieldRow(
-                      key: ValueKey(uid),
+                      key: Key('field_row_$uid'),
                       field: field,
                       fieldTypes: _fieldTypes,
                       canDelete: _canEditSchema,
+                      keyReadOnly: keyRO,
                       onChange: (updated) =>
                           setState(() => _fields[i] = updated),
                       onDelete: () => setState(() {
@@ -1330,8 +1372,8 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
                 const SizedBox(width: 8),
                 Text(
                   _selectedFileName ??
-                      (_previewColumns.isNotEmpty
-                          ? '${_previewColumns.length} columnas'
+                      (_previewColumnSpecs.isNotEmpty
+                          ? '${_previewColumnSpecs.length} columnas'
                           : 'Configurado'),
                   style: AppFonts.geist(
                       fontSize: 12, color: AppColors.ctText2),
@@ -1363,8 +1405,8 @@ class _NewCatalogWizardState extends State<NewCatalogWizard> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  _previewColumns.isNotEmpty
-                      ? '${_previewColumns.length} columnas detectadas'
+                  _previewColumnSpecs.isNotEmpty
+                      ? '${_previewColumnSpecs.length} columnas detectadas'
                       : 'Configurado',
                   style: AppFonts.geist(
                       fontSize: 12, color: AppColors.ctText2),
@@ -1720,12 +1762,14 @@ class _FieldRow extends StatefulWidget {
     required this.onChange,
     required this.onDelete,
     this.canDelete = true,
+    this.keyReadOnly = false,
   });
   final Map<String, dynamic> field;
   final List<Map<String, dynamic>> fieldTypes;
   final ValueChanged<Map<String, dynamic>> onChange;
   final VoidCallback onDelete;
   final bool canDelete;
+  final bool keyReadOnly;
 
   @override
   State<_FieldRow> createState() => _FieldRowState();
@@ -1807,6 +1851,7 @@ class _FieldRowState extends State<_FieldRow> {
               controller: _keyCtrl,
               hint: 'key',
               inputFormatters: [_SlugInputFormatter()],
+              readOnly: widget.keyReadOnly,
             ),
           ),
           const SizedBox(width: 6),
@@ -2009,10 +2054,12 @@ class _MiniTextField extends StatelessWidget {
     required this.controller,
     required this.hint,
     this.inputFormatters,
+    this.readOnly = false,
   });
   final TextEditingController controller;
   final String hint;
   final List<TextInputFormatter>? inputFormatters;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -2021,7 +2068,8 @@ class _MiniTextField extends StatelessWidget {
       child: TextField(
         controller: controller,
         inputFormatters: inputFormatters,
-        style: AppFonts.geist(fontSize: 12, color: AppColors.ctText),
+        readOnly: readOnly,
+        style: AppFonts.geist(fontSize: 12, color: readOnly ? AppColors.ctText2 : AppColors.ctText),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle:

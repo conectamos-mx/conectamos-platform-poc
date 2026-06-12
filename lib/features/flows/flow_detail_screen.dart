@@ -4630,6 +4630,8 @@ class _ActionDialogState extends State<_ActionDialog> {
   // catalog schemas for asset_ref fields: {catalog_slug: fields_schema}
   Map<String, List<Map<String, dynamic>>> _catalogSchemas = {};
   bool _loadingCatalogSchemas = false;
+  // parent flows that have open_flow actions pointing to this flow
+  List<Map<String, dynamic>> _parentFlows = [];
   // Each entry: (col: controller, val: controller)
   final List<(TextEditingController, TextEditingController)> _columnMappingRows = [];
   // Parallel list: selected flowField key per row (null = custom text mode)
@@ -4924,6 +4926,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     _initProactiveMappingRows();
     _loadFlows();
     _loadCatalogSchemas();
+    _loadParentFlows();
     _loadGroups();
     _loadControlTowers();
     _loadWaChannel();
@@ -5017,6 +5020,39 @@ class _ActionDialogState extends State<_ActionDialog> {
       debugPrint('[_loadCatalogSchemas] ERROR: $e');
       if (!mounted) return;
       setState(() => _loadingCatalogSchemas = false);
+    }
+  }
+
+  Future<void> _loadParentFlows() async {
+    try {
+      final allFlows = await FlowsApi.listFlows(dio: widget.dio);
+      final parents = <Map<String, dynamic>>[];
+
+      for (final flow in allFlows) {
+        final onComplete = flow['on_complete'] as Map<String, dynamic>?;
+        final actions = onComplete?['actions'] as List? ?? [];
+
+        for (final action in actions) {
+          if (action is! Map) continue;
+          if (action['action_type'] != 'open_flow') continue;
+
+          final config = action['config'] as Map? ?? {};
+          final targetSlug = action['flow_slug'] as String? ??
+                            action['target_flow_slug'] as String? ??
+                            config['flow_slug'] as String? ??
+                            config['target_flow_slug'] as String?;
+
+          if (targetSlug == widget.currentFlowSlug) {
+            parents.add(flow);
+            break; // Solo agregar una vez por flujo
+          }
+        }
+      }
+
+      if (!mounted) return;
+      setState(() => _parentFlows = parents);
+    } catch (e) {
+      debugPrint('[_loadParentFlows] ERROR: $e');
     }
   }
 
@@ -5680,6 +5716,142 @@ class _ActionDialogState extends State<_ActionDialog> {
       }
     }
     debugPrint('[_buildFieldDropdownItems] DONE - total items: ${items.length}');
+    return items;
+  }
+
+  /// Builds dropdown items for template variables (notify_group, etc).
+  /// Includes fields, ancestors, execution metadata, and operator metadata.
+  List<AppDropdownItem<String>> _buildTemplateVariableItems() {
+    final items = <AppDropdownItem<String>>[];
+
+    // ── Campos del flujo ──
+    if (widget.flowFields.isNotEmpty) {
+      items.add(const AppDropdownItem<String>(
+        value: '',
+        label: '━━━ Campos del flujo ━━━',
+        enabled: false,
+      ));
+      for (final f in widget.flowFields) {
+        final key = f['key'] as String? ?? '';
+        final label = f['label'] as String? ?? key;
+        final type = f['type'] as String?;
+        final slug = f['catalog_slug'] as String?;
+
+        if (key.isEmpty) continue;
+
+        // Expandir campos de catálogo (asset_ref) con sus propiedades
+        if (type == 'asset_ref' && slug != null && _catalogSchemas.containsKey(slug)) {
+          for (final col in _catalogSchemas[slug]!) {
+            final colKey = col['key'] as String? ?? '';
+            final colLabel = col['label'] as String? ?? colKey;
+            if (colKey.isNotEmpty) {
+              items.add(AppDropdownItem<String>(
+                value: '{{fields.$key.data.$colKey}}',
+                label: '$label > $colLabel',
+              ));
+            }
+          }
+        } else {
+          items.add(AppDropdownItem<String>(
+            value: '{{fields.$key}}',
+            label: label,
+          ));
+        }
+      }
+    }
+
+    // ── Ancestors (campos de flujos padre) ──
+    if (_parentFlows.isNotEmpty) {
+      items.add(const AppDropdownItem<String>(
+        value: '',
+        label: '━━━ Campos heredados ━━━',
+        enabled: false,
+      ));
+
+      for (final parentFlow in _parentFlows) {
+        final parentName = parentFlow['name'] as String? ?? 'Flujo padre';
+        final parentFields = parentFlow['fields'] as List? ?? [];
+
+        for (final field in parentFields) {
+          if (field is! Map) continue;
+          final key = field['key'] as String? ?? '';
+          final label = field['label'] as String? ?? key;
+          if (key.isNotEmpty) {
+            items.add(AppDropdownItem<String>(
+              value: '{{ancestors.$key}}',
+              label: '$parentName > $label',
+            ));
+          }
+        }
+      }
+    }
+
+    // ── Execution metadata ──
+    items.add(const AppDropdownItem<String>(
+      value: '',
+      label: '━━━ Metadata de la Ejecución ━━━',
+      enabled: false,
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.execution_id}}',
+      label: 'ID de ejecución',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.flow_definition_id}}',
+      label: 'ID de definición del flujo',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.flow_name}}',
+      label: 'Nombre del flujo',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.created_at}}',
+      label: 'Fecha de creación (ISO)',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.completed_at}}',
+      label: 'Fecha de completado (ISO)',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.date}}',
+      label: 'Fecha (YYYY-MM-DD)',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.time}}',
+      label: 'Hora (HH:MM:SS)',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.channel_name}}',
+      label: 'Nombre del canal',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.worker_name}}',
+      label: 'Nombre del worker',
+    ));
+
+    // ── Operator metadata ──
+    items.add(const AppDropdownItem<String>(
+      value: '',
+      label: '━━━ Metadata del Operador ━━━',
+      enabled: false,
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{operator.id}}',
+      label: 'ID del operador',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{operator.name}}',
+      label: 'Nombre del operador',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{operator.email}}',
+      label: 'Email del operador',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{operator.phone}}',
+      label: 'Teléfono del operador',
+    ));
+
     return items;
   }
 
@@ -6915,17 +7087,17 @@ class _ActionDialogState extends State<_ActionDialog> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Soporta {{fields.X}} y {{ancestors.X}}.',
+                  'Soporta variables de campos (fields.*), heredados (ancestors.*), execution (execution.*) y operador (operator.*).',
                   style: AppTextStyles.bodySmall.copyWith(fontSize: 11, color: AppColors.ctText2),
                 ),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _messageTemplateCtrl,
-                  maxLines: 3,
-                  style: AppTextStyles.body,
+                  maxLines: 5,
+                  style: AppTextStyles.body.copyWith(fontSize: 13),
                   decoration: InputDecoration(
-                    hintText: 'ej. Se completó el flujo {{fields.nombre}}',
-                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                    hintText: 'ej. 🔔 Notificación de {{execution.flow_name}}\n📅 Fecha: {{execution.date}}\n👤 Operador: {{operator.name}}',
+                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3, fontSize: 13),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
                       borderSide: const BorderSide(color: AppColors.ctBorder),
@@ -6936,6 +7108,91 @@ class _ActionDialogState extends State<_ActionDialog> {
                     ),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
+                ),
+                const SizedBox(height: 8),
+                // ── Selector de variables ──
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: AppDropdown<String>(
+                        hint: 'Selecciona una variable para insertar',
+                        searchable: true,
+                        searchHint: 'Buscar variable...',
+                        items: _buildTemplateVariableItems(),
+                        onChanged: (value) {
+                          if (value != null && value.isNotEmpty && value.startsWith('{{')) {
+                            // Insertar la variable en la posición del cursor
+                            final currentText = _messageTemplateCtrl.text;
+                            final cursorPos = _messageTemplateCtrl.selection.baseOffset;
+                            final newText = cursorPos >= 0
+                                ? currentText.substring(0, cursorPos) + value + currentText.substring(cursorPos)
+                                : currentText + value;
+                            _messageTemplateCtrl.text = newText;
+                            // Mover cursor después de la variable insertada
+                            final newCursorPos = cursorPos >= 0 ? cursorPos + value.length : newText.length;
+                            _messageTemplateCtrl.selection = TextSelection.collapsed(offset: newCursorPos);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Tooltip(
+                      message: 'Ejemplo de template completo',
+                      child: IconButton(
+                        icon: const Icon(Icons.info_outline, size: 20),
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Ejemplo de plantilla'),
+                              content: SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Ejemplo completo:',
+                                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.ctSurface,
+                                        border: Border.all(color: AppColors.ctBorder),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '🔔 Notificación de {{execution.flow_name}}\n\n'
+                                        '📅 Fecha: {{execution.date}} {{execution.time}}\n'
+                                        '👤 Operador: {{operator.name}}\n'
+                                        '📧 Email: {{operator.email}}\n'
+                                        '📱 Teléfono: {{operator.phone}}\n'
+                                        '📊 Canal: {{execution.channel_name}}\n\n'
+                                        'ID: {{execution.execution_id}}',
+                                        style: AppTextStyles.body.copyWith(
+                                          fontFamily: 'Geist',
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cerrar'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        color: AppColors.ctTeal,
+                      ),
+                    ),
+                  ],
                 ),
                 // ── Plantilla WhatsApp (fallback ventana cerrada) ──────────────────
                 Builder(builder: (context) {
