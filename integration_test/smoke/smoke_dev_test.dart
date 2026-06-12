@@ -17,6 +17,9 @@
 //     --dart-define=SMOKE_EMAIL=<user> \
 //     --dart-define=SMOKE_PASSWORD=<pass>
 //
+// Debugging locally (visible browser):
+//   Add --no-headless to flutter drive to watch the test in a real window.
+//
 // Scope: 100 % READ-ONLY. Zero POST/PUT/DELETE.
 //   a. Login real (signInWithPassword against Supabase dev).
 //   b. Overview renders inside AppShell with no error state.
@@ -93,7 +96,10 @@ void main() {
     await tester.enterText(passInput, _password);
     await tester.pump();
 
-    // Submit
+    // Submit — after tap, signInWithPassword runs. If it throws (e.g.
+    // invalid API key, wrong credentials), the login screen catches the
+    // exception and renders it as on-screen text. The _waitUntilFound
+    // helper will include that text in the failure message.
     await tester.tap(find.byKey(const Key('login_submit')));
 
     // ── (b) Overview ──────────────────────────────────────────────────────
@@ -102,7 +108,8 @@ void main() {
       tester,
       find.byType(AppShell),
       timeout: const Duration(seconds: 30),
-      reason: 'AppShell should render after successful login',
+      reason: 'AppShell should render after successful login '
+          '(auth error? check on-screen texts below)',
     );
 
     // Let all overview sections finish loading against the real backend.
@@ -139,6 +146,8 @@ void main() {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /// Pumps frames until [finder] finds at least one widget, or fails on timeout.
+/// On failure, appends all visible [Text] widget strings so the CI log
+/// shows what the user would see (e.g. "Invalid API key", auth errors).
 Future<void> _waitUntilFound(
   WidgetTester tester,
   Finder finder, {
@@ -151,7 +160,9 @@ Future<void> _waitUntilFound(
     await tester.pump(interval);
     if (finder.evaluate().isNotEmpty) return;
   }
-  fail(reason ?? 'Timed out waiting for $finder to appear');
+  final screenTexts = _collectVisibleTexts(tester);
+  final header = reason ?? 'Timed out waiting for $finder to appear';
+  fail('$header\n\n── Visible texts on screen at timeout ──\n$screenTexts');
 }
 
 /// Pumps frames for the given [duration] without asserting anything.
@@ -165,4 +176,29 @@ Future<void> _pumpFor(
   while (DateTime.now().isBefore(deadline)) {
     await tester.pump(interval);
   }
+}
+
+/// Extracts all non-empty strings from [Text] widgets currently in the tree.
+/// Truncates to ~2 KB to keep CI logs readable.
+String _collectVisibleTexts(WidgetTester tester) {
+  final buffer = StringBuffer();
+  final texts = find.byType(Text);
+  var chars = 0;
+  const limit = 2048;
+  for (final element in texts.evaluate()) {
+    final widget = element.widget;
+    if (widget is Text) {
+      final data = widget.data;
+      if (data != null && data.trim().isNotEmpty) {
+        final line = '  • ${data.trim()}';
+        if (chars + line.length > limit) {
+          buffer.writeln('  … (truncated)');
+          break;
+        }
+        buffer.writeln(line);
+        chars += line.length;
+      }
+    }
+  }
+  return buffer.isEmpty ? '  (no text widgets found)' : buffer.toString();
 }
