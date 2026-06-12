@@ -269,6 +269,8 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         _loading = false;
       });
       _loadWorkerFlows();
+      _loadCatalogSchemas();
+      _loadParentFlows();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -4630,6 +4632,9 @@ class _ActionDialogState extends State<_ActionDialog> {
   // catalog schemas for asset_ref fields: {catalog_slug: fields_schema}
   Map<String, List<Map<String, dynamic>>> _catalogSchemas = {};
   bool _loadingCatalogSchemas = false;
+  // parent flows that have open_flow actions pointing to this flow
+  List<Map<String, dynamic>> _parentFlows = [];
+  bool _loadingParentFlows = false;
   // Each entry: (col: controller, val: controller)
   final List<(TextEditingController, TextEditingController)> _columnMappingRows = [];
   // Parallel list: selected flowField key per row (null = custom text mode)
@@ -5017,6 +5022,38 @@ class _ActionDialogState extends State<_ActionDialog> {
       debugPrint('[_loadCatalogSchemas] ERROR: $e');
       if (!mounted) return;
       setState(() => _loadingCatalogSchemas = false);
+    }
+  }
+
+  Future<void> _loadParentFlows() async {
+    setState(() => _loadingParentFlows = true);
+    try {
+      final allFlows = await FlowsApi.listFlows(dio: widget.dio);
+      final parents = <Map<String, dynamic>>[];
+
+      for (final flow in allFlows) {
+        final onComplete = flow['on_complete'] as Map<String, dynamic>?;
+        final actions = onComplete?['actions'] as List? ?? [];
+
+        for (final action in actions) {
+          if (action is Map &&
+              action['action_type'] == 'open_flow' &&
+              action['flow_id'] == widget.flowId) {
+            parents.add(flow);
+            break; // Solo agregar una vez por flujo
+          }
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _parentFlows = parents;
+        _loadingParentFlows = false;
+      });
+    } catch (e) {
+      debugPrint('[_loadParentFlows] ERROR: $e');
+      if (!mounted) return;
+      setState(() => _loadingParentFlows = false);
     }
   }
 
@@ -5718,22 +5755,37 @@ class _ActionDialogState extends State<_ActionDialog> {
         } else {
           items.add(AppDropdownItem<String>(
             value: '{{fields.$key}}',
-            label: '$label (fields.$key)',
+            label: '$label',
           ));
         }
       }
     }
 
-    // ── Ancestors ──
-    items.add(const AppDropdownItem<String>(
-      value: '',
-      label: '━━━ Campos heredados ━━━',
-      enabled: false,
-    ));
-    items.add(const AppDropdownItem<String>(
-      value: '{{ancestors.X}}',
-      label: 'Cualquier campo heredado (ancestors.X)',
-    ));
+    // ── Ancestors (campos de flujos padre) ──
+    if (_parentFlows.isNotEmpty) {
+      items.add(const AppDropdownItem<String>(
+        value: '',
+        label: '━━━ Campos heredados ━━━',
+        enabled: false,
+      ));
+
+      for (final parentFlow in _parentFlows) {
+        final parentName = parentFlow['name'] as String? ?? 'Flujo padre';
+        final parentFields = parentFlow['fields'] as List? ?? [];
+
+        for (final field in parentFields) {
+          if (field is! Map) continue;
+          final key = field['key'] as String? ?? '';
+          final label = field['label'] as String? ?? key;
+          if (key.isNotEmpty) {
+            items.add(AppDropdownItem<String>(
+              value: '{{ancestors.$key}}',
+              label: '$parentName > $label',
+            ));
+          }
+        }
+      }
+    }
 
     // ── Execution metadata ──
     items.add(const AppDropdownItem<String>(
