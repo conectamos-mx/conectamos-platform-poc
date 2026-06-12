@@ -18,6 +18,28 @@ void _mockSupportingRoutes(MockApiInterceptor mock) {
   mock.when('/api/v1/catalogs', body: kCatalogList);
 }
 
+/// Navigate to wizard step 0, fill name, and advance to step 1.
+Future<void> _openWizardAndAdvanceToStep1(WidgetTester tester) async {
+  final scaffold = find.byType(Scaffold).first;
+  GoRouter.of(tester.element(scaffold)).go('/catalogs');
+  await tester.pumpAndSettle();
+
+  await tester.tap(find.byKey(const Key('catalog_new_btn')));
+  await tester.pumpAndSettle();
+
+  // Step 0: fill name so we can advance
+  final nameInput = find.descendant(
+    of: find.byKey(const Key('wizard_name')),
+    matching: find.byType(TextField),
+  );
+  await tester.enterText(nameInput, 'Test');
+  await tester.pumpAndSettle();
+
+  // Advance to step 1
+  await tester.tap(find.byKey(const Key('wizard_next')));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUpAll(() => initTestLocale());
 
@@ -259,6 +281,215 @@ void main() {
         config: const PatrolTesterConfig(),
       );
       expect($('Google conectado'), findsOneWidget);
+
+      // Close dialog to avoid pending timers
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets(
+        'preview with column_specs populates fields with canonical keys',
+        (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final mock = MockApiInterceptor();
+      mock.when('/api/v1/field-types', body: kFieldTypes);
+      mock.when('/integrations/google/status', body: kGoogleConnected);
+      mock.when('/api/v1/catalogs/tools/sheets-preview',
+          body: kSheetsPreviewWithSpecs);
+      _mockSupportingRoutes(mock);
+
+      await tester.pumpWidget(buildTestAppWithMock(mock));
+      await tester.pumpAndSettle();
+
+      await _openWizardAndAdvanceToStep1(tester);
+
+      // Select Google Sheets source
+      final gsCard =
+          find.byKey(const ValueKey('wizard_source_google_sheets'));
+      await tester.tap(gsCard);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+
+      // Enter a sheet URL to trigger preview (debounce = 800ms)
+      final sheetUrlField = find.widgetWithText(
+          TextField, 'https://docs.google.com/spreadsheets/d/…');
+      expect(sheetUrlField, findsOneWidget,
+          reason: 'Sheet URL field should exist');
+      await tester.enterText(
+          sheetUrlField, 'https://docs.google.com/spreadsheets/d/abc123/edit');
+      await tester.pumpAndSettle();
+
+      // Wait for debounce (800ms) + preview load
+      await tester.pump(const Duration(milliseconds: 900));
+      await tester.pumpAndSettle();
+
+      // Advance to step 2: fields
+      await tester.tap(find.byKey(const Key('wizard_next')));
+      await tester.pumpAndSettle();
+
+      // Verify fields were prepopulated with canonical keys from column_specs
+      // Field 1: key=n_de_venta, label=N. de Venta
+      final field0Key = find.byKey(const Key('field_row_0'));
+      expect(field0Key, findsOneWidget,
+          reason: 'First field row should exist');
+      final field1Key = find.byKey(const Key('field_row_1'));
+      expect(field1Key, findsOneWidget,
+          reason: 'Second field row should exist');
+      final field2Key = find.byKey(const Key('field_row_2'));
+      expect(field2Key, findsOneWidget,
+          reason: 'Third field row should exist');
+
+      // Verify canonical keys inside their respective field rows
+      final row0KeyField = find.descendant(
+        of: find.byKey(const Key('field_row_0')),
+        matching: find.widgetWithText(TextField, 'n_de_venta'),
+      );
+      expect(row0KeyField, findsOneWidget,
+          reason: 'Key should be canonical from BE: n_de_venta');
+
+      final row1KeyField = find.descendant(
+        of: find.byKey(const Key('field_row_1')),
+        matching: find.widgetWithText(TextField, 'numero'),
+      );
+      expect(row1KeyField, findsOneWidget,
+          reason: 'Key should be canonical from BE: numero');
+
+      final row2KeyField = find.descendant(
+        of: find.byKey(const Key('field_row_2')),
+        matching: find.widgetWithText(TextField, 'doble_espacio'),
+      );
+      expect(row2KeyField, findsOneWidget,
+          reason: 'Key should be canonical from BE: doble_espacio');
+
+      // Verify label is the original header inside field row 0
+      final row0LabelField = find.descendant(
+        of: find.byKey(const Key('field_row_0')),
+        matching: find.widgetWithText(TextField, 'N. de Venta'),
+      );
+      expect(row0LabelField, findsOneWidget,
+          reason: 'Label should be original header');
+
+      // Verify key fields are read-only (source=google_sheets + columnsFromPreview)
+      for (final rowKey in [
+        const Key('field_row_0'),
+        const Key('field_row_1'),
+        const Key('field_row_2'),
+      ]) {
+        final allTextFields = find.descendant(
+          of: find.byKey(rowKey),
+          matching: find.byType(TextField),
+        );
+        // First TextField in the row is the key field
+        final keyTextField = tester.widget<TextField>(allTextFields.first);
+        expect(keyTextField.readOnly, isTrue,
+            reason: 'Key field in $rowKey should be readOnly for google_sheets');
+      }
+
+      // Close dialog to avoid pending timers
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets(
+        'preview WITHOUT column_specs shows error and creates zero fields',
+        (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final mock = MockApiInterceptor();
+      mock.when('/api/v1/field-types', body: kFieldTypes);
+      mock.when('/integrations/google/status', body: kGoogleConnected);
+      mock.when('/api/v1/catalogs/tools/sheets-preview',
+          body: kSheetsPreviewLegacy);
+      _mockSupportingRoutes(mock);
+
+      await tester.pumpWidget(buildTestAppWithMock(mock));
+      await tester.pumpAndSettle();
+
+      await _openWizardAndAdvanceToStep1(tester);
+
+      // Select Google Sheets source
+      final gsCard =
+          find.byKey(const ValueKey('wizard_source_google_sheets'));
+      await tester.tap(gsCard);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+
+      // Enter a sheet URL to trigger preview
+      final sheetUrlField = find.widgetWithText(
+          TextField, 'https://docs.google.com/spreadsheets/d/…');
+      await tester.enterText(
+          sheetUrlField, 'https://docs.google.com/spreadsheets/d/abc123/edit');
+      await tester.pumpAndSettle();
+
+      // Wait for debounce + preview load
+      await tester.pump(const Duration(milliseconds: 900));
+      await tester.pumpAndSettle();
+
+      // Verify SnackBar error is shown via Key
+      expect(find.byKey(const Key('preview_missing_specs_error')),
+          findsOneWidget,
+          reason: 'SnackBar with missing column_specs error should be visible');
+
+      // Advance to step 2 and verify zero fields were created
+      await tester.tap(find.byKey(const Key('wizard_next')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sin campos — agrega al menos uno.'), findsOneWidget,
+          reason: 'Fields list should be empty when column_specs is missing');
+
+      // Close dialog to avoid pending timers
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('source=manual keeps key field editable', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final mock = MockApiInterceptor();
+      mock.when('/api/v1/field-types', body: kFieldTypes);
+      _mockSupportingRoutes(mock);
+
+      await tester.pumpWidget(buildTestAppWithMock(mock));
+      await tester.pumpAndSettle();
+
+      await _openWizardAndAdvanceToStep1(tester);
+
+      // source=manual is default — advance to step 2
+      await tester.tap(find.byKey(const Key('wizard_next')));
+      await tester.pumpAndSettle();
+
+      // Add a field manually
+      await tester.tap(find.byKey(const Key('wizard_add_field')));
+      await tester.pumpAndSettle();
+
+      // Key field should be editable
+      final keyFields = find.widgetWithText(TextField, 'key');
+      expect(keyFields, findsOneWidget,
+          reason: 'One key field should exist after adding a field');
+      final textField = tester.widget<TextField>(keyFields.first);
+      expect(textField.readOnly, isFalse,
+          reason: 'Key field should be editable for manual source');
 
       // Close dialog to avoid pending timers
       await tester.tap(find.byIcon(Icons.close_rounded));
