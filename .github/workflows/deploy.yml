@@ -146,6 +146,29 @@ jobs:
             --distribution-id ${{ steps.tf.outputs.dist_id }} \
             --paths "/*"
 
+      # ── Purge Cloudflare edge cache ───────────────────────────────────────────
+      # Cloudflare sits in front of CloudFront; without this step the old bundle
+      # stays at Cloudflare's edge until TTL expires even after CloudFront is clean.
+      # Requires CF_ZONE_ID (var) and CF_API_TOKEN (secret, Cache Purge permission).
+      - name: Purge Cloudflare cache
+        if: vars.CF_ZONE_ID != ''
+        env:
+          CF_ZONE_ID: ${{ vars.CF_ZONE_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          RESPONSE=$(curl -s -X POST \
+            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}')
+          echo "$RESPONSE"
+          if echo "$RESPONSE" | grep -q '"success":true'; then
+            echo "✅ Cloudflare cache purged"
+          else
+            echo "❌ Cloudflare purge failed — verifica CF_ZONE_ID y CF_API_TOKEN"
+            exit 1
+          fi
+
   # ── Notify ────────────────────────────────────────────────────────────────────
   notify:
     name: notify
