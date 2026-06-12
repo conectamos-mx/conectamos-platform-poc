@@ -180,3 +180,22 @@ const kSyncLogSuccess = <Map<String, dynamic>>[
     'triggered_by': 'manual',
   },
 ];
+
+// ── Preview column_specs fixtures (PLA-241) ─────────────────────────────────
+
+const kSheetsPreviewWithSpecs = <String, dynamic>{
+  'sheets': ['Sheet1'],
+  'selected_sheet': 'Sheet1',
+  'columns': ['N. de Venta', 'Número', '  Doble  Espacio  '],
+  'column_specs': [
+    {'header': 'N. de Venta', 'key': 'n_de_venta'},
+    {'header': 'Número', 'key': 'numero'},
+    {'header': '  Doble  Espacio  ', 'key': 'doble_espacio'},
+  ],
+};
+
+const kSheetsPreviewLegacy = <String, dynamic>{
+  'sheets': ['Sheet1'],
+  'selected_sheet': 'Sheet1',
+  'columns': ['N. de Venta', 'Número', '  Doble  Espacio  '],
+};
