@@ -7049,6 +7049,8 @@ class _ActionDialogState extends State<_ActionDialog> {
                       flex: 3,
                       child: AppDropdown<String>(
                         hint: 'Selecciona una variable para insertar',
+                        searchable: true,
+                        searchHint: 'Buscar variable...',
                         items: _buildTemplateVariableItems(),
                         onChanged: (value) {
                           if (value != null && value.isNotEmpty && value.startsWith('{{')) {
