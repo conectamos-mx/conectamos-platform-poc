@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/ai_workers_api.dart';
 import '../../core/api/api_client.dart';
+import '../../core/api/catalogs_api.dart';
 import '../../core/api/flows_api.dart';
 import '../../core/api/operator_roles_api.dart';
 import '../../core/providers/permissions_provider.dart';
@@ -13,6 +14,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/display_mappers.dart' as dm;
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_row.dart';
+import '../../shared/widgets/app_dropdown.dart';
 import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/app_wizard_shell.dart';
 import '../../shared/widgets/screen_header.dart';
@@ -647,6 +649,12 @@ class _NewFlowDialogState extends ConsumerState<_NewFlowDialog> {
   final List<String> _selectedTriggers = [];
   bool _loadingRoles = false;
 
+  // Flow type (query vs capture)
+  bool _isQuery = false;
+  List<Map<String, dynamic>> _catalogs = [];
+  String? _selectedCatalogSlug;
+  bool _loadingCatalogs = false;
+
   static const _triggerOptions = [
     ('conversational', 'Conversacional', 'El operador inicia el flujo por chat'),
     ('ingest',         'API / Ingesta',  'Se activa por carga de datos externa'),
@@ -656,8 +664,11 @@ class _NewFlowDialogState extends ConsumerState<_NewFlowDialog> {
 
   String get _slug => _slugify(_nameCtrl.text.trim());
   bool get _slugValid => _slug.length >= 3;
-  bool get _canAdvance =>
-      _nameCtrl.text.trim().isNotEmpty && _slugValid && _selectedWorkerId != null;
+  bool get _canAdvance {
+    if (_nameCtrl.text.trim().isEmpty || !_slugValid || _selectedWorkerId == null) return false;
+    if (_isQuery && _selectedCatalogSlug == null) return false;
+    return true;
+  }
 
   @override
   void initState() {
@@ -692,6 +703,22 @@ class _NewFlowDialogState extends ConsumerState<_NewFlowDialog> {
     }
   }
 
+  Future<void> _loadCatalogs() async {
+    setState(() => _loadingCatalogs = true);
+    try {
+      final catalogs = await CatalogsApi.listCatalogs(
+        dio: ref.read(apiClientProvider).dio,
+        tenantId: widget.tenantId,
+      );
+      if (mounted) {
+        setState(() => _catalogs = List<Map<String, dynamic>>.from(catalogs));
+      }
+    } catch (_) {}
+    finally {
+      if (mounted) setState(() => _loadingCatalogs = false);
+    }
+  }
+
   @override
   void dispose() {
     _nameCtrl.removeListener(_onNameChanged);
@@ -706,6 +733,14 @@ class _NewFlowDialogState extends ConsumerState<_NewFlowDialog> {
     return w?['display_name'] as String? ?? w?['catalog_name'] as String? ?? '\u2014';
   }
 
+  String _catalogName(String? slug) {
+    if (slug == null) return '\u2014';
+    return _catalogs
+        .where((c) => c['slug'] == slug)
+        .map((c) => c['name'] as String? ?? slug)
+        .firstOrNull ?? slug;
+  }
+
   Future<void> _submit() async {
     if (_selectedWorkerId == null) return;
     try {
@@ -717,6 +752,16 @@ class _NewFlowDialogState extends ConsumerState<_NewFlowDialog> {
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         allowedRoleIds: _selectedRoleIds.isEmpty ? null : _selectedRoleIds,
         triggerSources: _selectedTriggers.isEmpty ? null : _selectedTriggers,
+        behavior: _isQuery
+            ? {
+                'query_config': {
+                  'entity': _selectedCatalogSlug,
+                  'metrics': <Map<String, dynamic>>[],
+                  'filter_fields': <String>[],
+                  'group_by_fields': <String>[],
+                },
+              }
+            : const {},
       );
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -747,10 +792,111 @@ class _NewFlowDialogState extends ConsumerState<_NewFlowDialog> {
     );
   }
 
+  Widget _buildTypeTile({
+    required String label,
+    required String subtitle,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.ctTeal.withValues(alpha: 0.08)
+                : AppColors.ctSurface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected ? AppColors.ctTeal : AppColors.ctBorder,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 18,
+                  color: selected ? AppColors.ctTeal : AppColors.ctText2),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: AppTextStyles.body.copyWith(
+                          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                        )),
+                    Text(subtitle,
+                        style: AppTextStyles.bodySmall
+                            .copyWith(fontSize: 11, color: AppColors.ctText3)),
+                  ],
+                ),
+              ),
+              if (selected)
+                const Icon(Icons.check_rounded, size: 16, color: AppColors.ctTeal),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildStep1() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text('Tipo de flujo',
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: _buildTypeTile(
+                label: 'Captura',
+                subtitle: 'Recolecta datos en campo',
+                icon: Icons.edit_note_outlined,
+                selected: !_isQuery,
+                onTap: () => setState(() {
+                  _isQuery = false;
+                  _selectedCatalogSlug = null;
+                }),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildTypeTile(
+                label: 'Consulta',
+                subtitle: 'Consulta datos de cat\u00E1logos',
+                icon: Icons.search_outlined,
+                selected: _isQuery,
+                onTap: () {
+                  setState(() => _isQuery = true);
+                  if (_catalogs.isEmpty && !_loadingCatalogs) _loadCatalogs();
+                },
+              ),
+            ),
+          ],
+        ),
+        if (_isQuery) ...[
+          const SizedBox(height: 16),
+          AppDropdown<String>(
+            label: 'Cat\u00E1logo a consultar',
+            items: _catalogs
+                .map((c) => AppDropdownItem<String>(
+                      value: c['slug'] as String? ?? '',
+                      label: c['name'] as String? ?? c['slug'] as String? ?? '',
+                    ))
+                .toList(),
+            value: _selectedCatalogSlug,
+            hint: _loadingCatalogs
+                ? 'Cargando cat\u00E1logos...'
+                : 'Selecciona un cat\u00E1logo',
+            enabled: !_loadingCatalogs,
+            onChanged: (v) => setState(() => _selectedCatalogSlug = v),
+          ),
+        ],
+        const SizedBox(height: 16),
         AppTextField(
           controller: _nameCtrl,
           label: 'Nombre del flujo',
@@ -988,6 +1134,18 @@ class _NewFlowDialogState extends ConsumerState<_NewFlowDialog> {
         Text('Revisa la configuraci\u00F3n antes de crear el flujo.',
             style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
         const SizedBox(height: 16),
+        AppDetailRow(
+          label: 'Tipo',
+          value: Text(_isQuery ? 'Consulta' : 'Captura', style: AppTextStyles.body),
+        ),
+        const Divider(height: 1),
+        if (_isQuery) ...[
+          AppDetailRow(
+            label: 'Cat\u00E1logo',
+            value: Text(_catalogName(_selectedCatalogSlug), style: AppTextStyles.body),
+          ),
+          const Divider(height: 1),
+        ],
         AppDetailRow(
           label: 'Nombre',
           value: Text(_nameCtrl.text.trim(), style: AppTextStyles.body),
