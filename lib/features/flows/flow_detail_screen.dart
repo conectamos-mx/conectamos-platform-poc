@@ -269,8 +269,6 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         _loading = false;
       });
       _loadWorkerFlows();
-      _loadCatalogSchemas();
-      _loadParentFlows();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -4929,6 +4927,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     _initProactiveMappingRows();
     _loadFlows();
     _loadCatalogSchemas();
+    _loadParentFlows();
     _loadGroups();
     _loadControlTowers();
     _loadWaChannel();
@@ -5036,9 +5035,16 @@ class _ActionDialogState extends State<_ActionDialog> {
         final actions = onComplete?['actions'] as List? ?? [];
 
         for (final action in actions) {
-          if (action is Map &&
-              action['action_type'] == 'open_flow' &&
-              action['flow_id'] == widget.flowId) {
+          if (action is! Map) continue;
+          if (action['action_type'] != 'open_flow') continue;
+
+          final config = action['config'] as Map? ?? {};
+          final targetSlug = action['flow_slug'] as String? ??
+                            action['target_flow_slug'] as String? ??
+                            config['flow_slug'] as String? ??
+                            config['target_flow_slug'] as String?;
+
+          if (targetSlug == widget.currentFlowSlug) {
             parents.add(flow);
             break; // Solo agregar una vez por flujo
           }
