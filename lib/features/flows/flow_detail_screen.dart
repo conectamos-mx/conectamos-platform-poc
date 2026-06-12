@@ -5683,6 +5683,110 @@ class _ActionDialogState extends State<_ActionDialog> {
     return items;
   }
 
+  /// Builds dropdown items for template variables (notify_group, etc).
+  /// Includes fields, ancestors, execution metadata, and operator metadata.
+  List<AppDropdownItem<String>> _buildTemplateVariableItems() {
+    final items = <AppDropdownItem<String>>[];
+
+    // ── Campos del flujo ──
+    if (widget.flowFields.isNotEmpty) {
+      items.add(const AppDropdownItem<String>(
+        value: '',
+        label: '━━━ Campos del flujo ━━━',
+        enabled: false,
+      ));
+      for (final f in widget.flowFields) {
+        final key = f['key'] as String? ?? '';
+        final label = f['label'] as String? ?? key;
+        if (key.isNotEmpty) {
+          items.add(AppDropdownItem<String>(
+            value: '{{fields.$key}}',
+            label: '$label (fields.$key)',
+          ));
+        }
+      }
+    }
+
+    // ── Ancestors ──
+    items.add(const AppDropdownItem<String>(
+      value: '',
+      label: '━━━ Campos heredados ━━━',
+      enabled: false,
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{ancestors.X}}',
+      label: 'Cualquier campo heredado (ancestors.X)',
+    ));
+
+    // ── Execution metadata ──
+    items.add(const AppDropdownItem<String>(
+      value: '',
+      label: '━━━ Metadata del Execution ━━━',
+      enabled: false,
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.execution_id}}',
+      label: 'ID del execution',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.flow_definition_id}}',
+      label: 'ID de definición del flujo',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.flow_name}}',
+      label: 'Nombre del flujo',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.created_at}}',
+      label: 'Fecha de creación (ISO)',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.completed_at}}',
+      label: 'Fecha de completado (ISO)',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.date}}',
+      label: 'Fecha (YYYY-MM-DD)',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.time}}',
+      label: 'Hora (HH:MM:SS)',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.channel_name}}',
+      label: 'Nombre del canal',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{execution.worker_name}}',
+      label: 'Nombre del worker',
+    ));
+
+    // ── Operator metadata ──
+    items.add(const AppDropdownItem<String>(
+      value: '',
+      label: '━━━ Metadata del Operador ━━━',
+      enabled: false,
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{operator.id}}',
+      label: 'ID del operador',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{operator.name}}',
+      label: 'Nombre del operador',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{operator.email}}',
+      label: 'Email del operador',
+    ));
+    items.add(const AppDropdownItem<String>(
+      value: '{{operator.phone}}',
+      label: 'Teléfono del operador',
+    ));
+
+    return items;
+  }
+
   /// Builds a single column-mapping row used by both append_row and
   /// update_row Google Sheets actions.
   Widget _buildColumnMappingRow(int i) {
@@ -6915,17 +7019,17 @@ class _ActionDialogState extends State<_ActionDialog> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Soporta {{fields.X}} y {{ancestors.X}}.',
+                  'Soporta variables de campos (fields.*), heredados (ancestors.*), execution (execution.*) y operador (operator.*).',
                   style: AppTextStyles.bodySmall.copyWith(fontSize: 11, color: AppColors.ctText2),
                 ),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _messageTemplateCtrl,
-                  maxLines: 3,
-                  style: AppTextStyles.body,
+                  maxLines: 5,
+                  style: AppTextStyles.body.copyWith(fontSize: 13),
                   decoration: InputDecoration(
-                    hintText: 'ej. Se completó el flujo {{fields.nombre}}',
-                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3),
+                    hintText: 'ej. 🔔 Notificación de {{execution.flow_name}}\n📅 Fecha: {{execution.date}}\n👤 Operador: {{operator.name}}',
+                    hintStyle: AppTextStyles.body.copyWith(color: AppColors.ctText3, fontSize: 13),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
                       borderSide: const BorderSide(color: AppColors.ctBorder),
@@ -6936,6 +7040,89 @@ class _ActionDialogState extends State<_ActionDialog> {
                     ),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
+                ),
+                const SizedBox(height: 8),
+                // ── Selector de variables ──
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: AppDropdown<String>(
+                        hint: 'Selecciona una variable para insertar',
+                        items: _buildTemplateVariableItems(),
+                        onChanged: (value) {
+                          if (value != null && value.isNotEmpty && value.startsWith('{{')) {
+                            // Insertar la variable en la posición del cursor
+                            final currentText = _messageTemplateCtrl.text;
+                            final cursorPos = _messageTemplateCtrl.selection.baseOffset;
+                            final newText = cursorPos >= 0
+                                ? currentText.substring(0, cursorPos) + value + currentText.substring(cursorPos)
+                                : currentText + value;
+                            _messageTemplateCtrl.text = newText;
+                            // Mover cursor después de la variable insertada
+                            final newCursorPos = cursorPos >= 0 ? cursorPos + value.length : newText.length;
+                            _messageTemplateCtrl.selection = TextSelection.collapsed(offset: newCursorPos);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Tooltip(
+                      message: 'Ejemplo de template completo',
+                      child: IconButton(
+                        icon: const Icon(Icons.info_outline, size: 20),
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Ejemplo de plantilla'),
+                              content: SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Ejemplo completo:',
+                                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.ctSurface,
+                                        border: Border.all(color: AppColors.ctBorder),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '🔔 Notificación de {{execution.flow_name}}\n\n'
+                                        '📅 Fecha: {{execution.date}} {{execution.time}}\n'
+                                        '👤 Operador: {{operator.name}}\n'
+                                        '📧 Email: {{operator.email}}\n'
+                                        '📱 Teléfono: {{operator.phone}}\n'
+                                        '📊 Canal: {{execution.channel_name}}\n\n'
+                                        'ID: {{execution.execution_id}}',
+                                        style: AppTextStyles.body.copyWith(
+                                          fontFamily: 'Geist',
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cerrar'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        color: AppColors.ctTeal,
+                      ),
+                    ),
+                  ],
                 ),
                 // ── Plantilla WhatsApp (fallback ventana cerrada) ──────────────────
                 Builder(builder: (context) {
