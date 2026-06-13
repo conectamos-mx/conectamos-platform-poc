@@ -312,7 +312,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         dio: ref.read(apiClientProvider).dio,
         flowId: widget.flowId,
         name: _nameCtrl.text.trim(),
-        slug: _derivedSlug,
+        slug: _flow!['slug'] as String? ?? _derivedSlug,
         description: _descCtrl.text.trim(),
         fields: _fields,
         behavior: {
@@ -634,7 +634,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         dio: ref.read(apiClientProvider).dio,
         flowId: widget.flowId,
         name: _nameCtrl.text.trim(),
-        slug: _derivedSlug,
+        slug: _flow!['slug'] as String? ?? _derivedSlug,
         description: _descCtrl.text.trim(),
         fields: _fields,
         behavior: {
@@ -1006,6 +1006,10 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
           flow: _flow!,
           isActive: _flow!['is_active'] as bool? ?? false,
           saving: _saving,
+          nameCtrl: _nameCtrl,
+          descCtrl: _descCtrl,
+          canManage: canManage,
+          onSave: () => _save(silent: true),
           onBack: widget.onBack,
           onToggleActive: _toggleActive,
           onDelete: () {
@@ -1181,6 +1185,10 @@ class _FlowSidePanel extends StatefulWidget {
     required this.flow,
     required this.isActive,
     required this.saving,
+    required this.nameCtrl,
+    required this.descCtrl,
+    required this.canManage,
+    required this.onSave,
     required this.onBack,
     required this.onToggleActive,
     required this.onDelete,
@@ -1189,6 +1197,10 @@ class _FlowSidePanel extends StatefulWidget {
   final Map<String, dynamic> flow;
   final bool isActive;
   final bool saving;
+  final TextEditingController nameCtrl;
+  final TextEditingController descCtrl;
+  final bool canManage;
+  final VoidCallback onSave;
   final VoidCallback onBack;
   final VoidCallback onToggleActive;
   final VoidCallback onDelete;
@@ -1231,10 +1243,16 @@ class _FlowSidePanelState extends State<_FlowSidePanel> {
                       ),
                       const SizedBox(height: 20),
 
-                      // 2. Nombre — solo lectura
-                      Text(
-                        widget.flow['name'] as String? ?? '—',
-                        style: AppTextStyles.cardTitle,
+                      // 2. Nombre — editable
+                      Focus(
+                        onFocusChange: (hasFocus) {
+                          if (!hasFocus) widget.onSave();
+                        },
+                        child: AppTextField(
+                          controller: widget.nameCtrl,
+                          hint: 'Nombre del flujo',
+                          readOnly: !widget.canManage,
+                        ),
                       ),
                       const SizedBox(height: 6),
 
@@ -1277,17 +1295,18 @@ class _FlowSidePanelState extends State<_FlowSidePanel> {
                       ),
                       const SizedBox(height: 6),
 
-                      // 4. Descripción — solo lectura
-                      if ((widget.flow['description'] as String?)?.isNotEmpty == true)
-                        Text(
-                          widget.flow['description'] as String,
-                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2),
-                        )
-                      else
-                        Text(
-                          'Sin descripción',
-                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3),
+                      // 4. Descripción — editable
+                      Focus(
+                        onFocusChange: (hasFocus) {
+                          if (!hasFocus) widget.onSave();
+                        },
+                        child: AppTextField(
+                          controller: widget.descCtrl,
+                          hint: 'Descripción del flujo',
+                          maxLines: 3,
+                          readOnly: !widget.canManage,
                         ),
+                      ),
                       const SizedBox(height: 20),
 
                       const Divider(color: AppColors.ctBorder, height: 1),
