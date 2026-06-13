@@ -1650,7 +1650,7 @@ class _ConsultaTabState extends State<_ConsultaTab> {
 
   String get _entity => widget.queryConfig['entity'] as String? ?? '';
 
-  static const _kAllOps = ['count', 'sum', 'avg', 'min', 'max', 'distinct_count'];
+  static const _kAllOps = ['count', 'sum', 'avg'];
 
   @override
   void initState() {
@@ -1992,6 +1992,9 @@ class _ConsultaTabState extends State<_ConsultaTab> {
     final key = m['key'] as String? ?? '';
     final ops =
         List<String>.from((m['ops'] as List? ?? []).map((e) => e.toString()));
+    final isStar = key == '*';
+    final allowed = isStar ? const ['count'] : _kAllOps;
+    final invalid = ops.where((o) => !allowed.contains(o)).toList();
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -2004,6 +2007,9 @@ class _ConsultaTabState extends State<_ConsultaTab> {
         inheritedLabel: _schemaLabel(key),
         displayName: m['display_name'] as String?,
         canManage: widget.canManage,
+        errorText: invalid.isNotEmpty
+            ? 'Operaciones no soportadas en v1: ${invalid.join(", ")}'
+            : null,
         onKeyChanged: (v) => _updateMetricKey(index, v),
         onOpsChanged: (v) => _updateMetricOps(index, v),
         onDisplayNameCommitted: (v) => _commitDisplayName(index, v),
