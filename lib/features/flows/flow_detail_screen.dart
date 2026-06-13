@@ -1747,6 +1747,7 @@ class _ConsultaTabState extends State<_ConsultaTab> {
             )),
       ];
 
+  // ignore: unused_element
   List<AppMultiSelectItem<String>> get _schemaItems =>
       _catalogSchema.map((f) => AppMultiSelectItem<String>(
             value: f['key'] as String? ?? '',
@@ -1766,6 +1767,7 @@ class _ConsultaTabState extends State<_ConsultaTab> {
 
   // ── Metric management ──────────────────────────────────────────────────────
 
+  // ignore: unused_element
   void _addMetric() {
     setState(() {
       _metrics = [..._metrics, {'key': '', 'ops': <String>[]}];
@@ -1876,122 +1878,16 @@ class _ConsultaTabState extends State<_ConsultaTab> {
             onChanged: (_) {},
           ),
 
-          const SizedBox(height: 24),
-
-          // ── M\u00E9tricas ──
-          Row(
-            children: [
-              Expanded(
-                child: Text('M\u00C9TRICAS', style: AppTextStyles.kpiLabel),
-              ),
-              if (widget.canManage)
-                AppButton(
-                  label: '+ Agregar',
-                  variant: AppButtonVariant.ghost,
-                  size: AppButtonSize.sm,
-                  onPressed: _addMetric,
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (_metrics.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text('Sin m\u00E9tricas configuradas.',
-                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)),
-            )
-          else
-            ...List.generate(_metrics.length, _buildMetricRow),
-          if (widget.fieldErrors['metrics'] != null) ...[
-            const SizedBox(height: 4),
-            Text(widget.fieldErrors['metrics']!,
-                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger)),
-          ],
-
-          const SizedBox(height: 24),
-
-          // ── Campos de filtro ──
-          Text('CAMPOS DE FILTRO (m\u00E1x. 5)', style: AppTextStyles.kpiLabel),
-          const SizedBox(height: 8),
-          AppMultiSelect<String>(
-            items: _schemaItems,
-            selectedValues: _filterFields,
-            placeholder: 'Selecciona campos de filtro...',
-            searchable: true,
-            onChanged: widget.canManage
-                ? (vals) {
-                    if (vals.length > 5) return;
-                    setState(() => _filterFields = vals);
-                    _emitChange();
-                  }
-                : (_) {},
-          ),
-          if (widget.fieldErrors['filter_fields'] != null) ...[
-            const SizedBox(height: 4),
-            Text(widget.fieldErrors['filter_fields']!,
-                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger)),
-          ],
-
-          const SizedBox(height: 24),
-
-          // ── Campos de agrupaci\u00F3n ──
-          Text('CAMPOS DE AGRUPACI\u00D3N', style: AppTextStyles.kpiLabel),
-          const SizedBox(height: 8),
-          AppMultiSelect<String>(
-            items: _schemaItems,
-            selectedValues: _groupByFields,
-            placeholder: 'Selecciona campos de agrupaci\u00F3n...',
-            searchable: true,
-            onChanged: widget.canManage
-                ? (vals) {
-                    setState(() => _groupByFields = vals);
-                    _emitChange();
-                  }
-                : (_) {},
-          ),
-
-          const SizedBox(height: 24),
-
-          // ── Campo de fecha ──
-          Text('CAMPO DE FECHA', style: AppTextStyles.kpiLabel),
-          const SizedBox(height: 8),
-          AppDropdown<String>(
-            items: _dateFieldItems(),
-            value: _dateField,
-            hint: 'Ninguno (opcional)',
-            enabled: widget.canManage,
-            onChanged: (v) {
-              setState(() => _dateField = v);
-              _emitChange();
-            },
-          ),
-
-          const SizedBox(height: 24),
-
-          // ── Vinculaci\u00F3n de operador ──
-          Text('VINCULACI\u00D3N DE OPERADOR', style: AppTextStyles.kpiLabel),
-          const SizedBox(height: 4),
-          Text('Define c\u00F3mo se vincula el operador con los datos del cat\u00E1logo.',
-              style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
-          const SizedBox(height: 8),
-          AppDropdown<String>(
-            items: const [
-              AppDropdownItem(value: '', label: 'Sin vinculaci\u00F3n'),
-              AppDropdownItem(value: 'phone', label: 'Tel\u00E9fono'),
-              AppDropdownItem(value: 'external_id', label: 'ID externo'),
-            ],
-            value: _operatorBinding ?? '',
-            enabled: widget.canManage,
-            onChanged: (v) {
-              setState(() => _operatorBinding = v == '' ? null : v);
-              _emitChange();
-            },
-          ),
+          // Editores de métricas/filtros/agrupación/fecha/binding ocultos (PLA-284).
+          // El estado (_metrics, _filterFields, etc.) sigue inicializándose
+          // desde queryConfig en _syncFromConfig para preservar el query_config
+          // existente en guardados disparados por otros triggers.
         ],
       ),
     );
   }
 
+  // ignore: unused_element
   List<AppDropdownItem<String>> _dateFieldItems() {
     final dateFields = _catalogSchema.where((f) {
       final type = f['type'] as String? ?? '';
@@ -2006,6 +1902,7 @@ class _ConsultaTabState extends State<_ConsultaTab> {
         .toList();
   }
 
+  // ignore: unused_element
   Widget _buildMetricRow(int index) {
     final m = _metrics[index];
     final key = m['key'] as String? ?? '';
