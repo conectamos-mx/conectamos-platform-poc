@@ -1648,7 +1648,7 @@ class _ConsultaTabState extends State<_ConsultaTab> {
   String? _dateField;
   String? _operatorBinding;
 
-  String get _entity => widget.queryConfig['entity'] as String? ?? '';
+  String get _entity => widget.queryConfig['catalog_slug'] as String? ?? '';
 
   static const _kAllOps = ['count', 'sum', 'avg'];
 
@@ -1735,7 +1735,7 @@ class _ConsultaTabState extends State<_ConsultaTab> {
           )).toList();
 
   Map<String, dynamic> _buildConfig() => {
-        'entity': _entity,
+        'catalog_slug': _entity,
         'metrics': _metrics,
         'filter_fields': _filterFields,
         'group_by_fields': _groupByFields,

@@ -23,7 +23,7 @@ void main() {
         isQueryFlow({
           'behavior': {
             'query_config': {
-              'entity': 'orders',
+              'catalog_slug': 'orders',
               'metrics': <dynamic>[],
               'filter_fields': <dynamic>[],
               'group_by_fields': <dynamic>[],
