@@ -29,6 +29,7 @@ import 'widgets/precond_mini_diagram.dart';
 import 'widgets/variable_picker_dropdown.dart';
 
 import '../../shared/widgets/app_dropdown.dart';
+import '../../shared/widgets/app_metric_config_row.dart';
 import '../../shared/widgets/app_multi_select.dart';
 import '../../shared/widgets/app_text_field.dart';
 import '../../core/utils/flow_helpers.dart';
@@ -1645,8 +1646,6 @@ class _ConsultaTabState extends State<_ConsultaTab> {
   String? _dateField;
   String? _operatorBinding;
 
-  final List<TextEditingController> _dnCtrls = [];
-
   String get _entity => widget.queryConfig['entity'] as String? ?? '';
 
   static const _kAllOps = ['count', 'sum', 'avg', 'min', 'max', 'distinct_count'];
@@ -1664,14 +1663,6 @@ class _ConsultaTabState extends State<_ConsultaTab> {
     if (old.queryConfig != widget.queryConfig) _syncFromConfig();
   }
 
-  @override
-  void dispose() {
-    for (final c in _dnCtrls) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
   void _syncFromConfig() {
     final qc = widget.queryConfig;
     _metrics = List<Map<String, dynamic>>.from(
@@ -1687,20 +1678,6 @@ class _ConsultaTabState extends State<_ConsultaTab> {
     );
     _dateField = qc['date_field'] as String?;
     _operatorBinding = qc['operator_binding'] as String?;
-    _syncDnCtrls();
-  }
-
-  void _syncDnCtrls() {
-    while (_dnCtrls.length < _metrics.length) {
-      _dnCtrls.add(TextEditingController());
-    }
-    while (_dnCtrls.length > _metrics.length) {
-      _dnCtrls.removeLast().dispose();
-    }
-    for (int i = 0; i < _metrics.length; i++) {
-      final dn = _metrics[i]['display_name'] as String? ?? '';
-      if (_dnCtrls[i].text != dn) _dnCtrls[i].text = dn;
-    }
   }
 
   Future<void> _loadCatalogSchema() async {
@@ -1771,14 +1748,12 @@ class _ConsultaTabState extends State<_ConsultaTab> {
   void _addMetric() {
     setState(() {
       _metrics = [..._metrics, {'key': '', 'ops': <String>[]}];
-      _dnCtrls.add(TextEditingController());
     });
   }
 
   void _removeMetric(int index) {
     setState(() {
       _metrics = [..._metrics]..removeAt(index);
-      _dnCtrls.removeAt(index).dispose();
     });
     _emitChange();
   }
@@ -1791,7 +1766,6 @@ class _ConsultaTabState extends State<_ConsultaTab> {
       if (key == '*') {
         m['ops'] = ['count'];
         m.remove('display_name');
-        _dnCtrls[index].clear();
       }
       if (m['display_name'] == _schemaLabel(key)) m.remove('display_name');
       _metrics = [..._metrics]..[index] = m;
@@ -1808,8 +1782,7 @@ class _ConsultaTabState extends State<_ConsultaTab> {
     _emitChange();
   }
 
-  void _commitDisplayName(int index) {
-    final value = _dnCtrls[index].text.trim();
+  void _commitDisplayName(int index, String value) {
     final m = Map<String, dynamic>.from(_metrics[index]);
     final key = m['key'] as String? ?? '';
     final inherited = _schemaLabel(key);
@@ -2017,86 +1990,22 @@ class _ConsultaTabState extends State<_ConsultaTab> {
     final key = m['key'] as String? ?? '';
     final ops =
         List<String>.from((m['ops'] as List? ?? []).map((e) => e.toString()));
-    final isStar = key == '*';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppColors.ctSurface2,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.ctBorder),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: AppDropdown<String>(
-                    label: 'Campo',
-                    items: _fieldItems,
-                    value: key.isEmpty ? null : key,
-                    hint: 'Selecciona campo',
-                    enabled: widget.canManage,
-                    onChanged: (v) => _updateMetricKey(index, v),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Operaciones',
-                          style: AppTextStyles.bodySmall
-                              .copyWith(fontWeight: FontWeight.w500)),
-                      const SizedBox(height: 4),
-                      AppMultiSelect<String>(
-                        items: (isStar ? ['count'] : _kAllOps)
-                            .map((op) =>
-                                AppMultiSelectItem(value: op, label: op))
-                            .toList(),
-                        selectedValues: ops,
-                        placeholder: 'Selecciona...',
-                        onChanged: (v) => _updateMetricOps(index, v),
-                      ),
-                    ],
-                  ),
-                ),
-                if (widget.canManage) ...[
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => _removeMetric(index),
-                    child: const MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: Icon(Icons.close_rounded,
-                          size: 18, color: AppColors.ctText3),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            if (!isStar && key.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Focus(
-                onFocusChange: (hasFocus) {
-                  if (!hasFocus) _commitDisplayName(index);
-                },
-                child: AppTextField(
-                  controller: _dnCtrls[index],
-                  label: 'Nombre de presentaci\u00F3n',
-                  hint: _schemaLabel(key).isNotEmpty
-                      ? _schemaLabel(key)
-                      : 'Nombre personalizado',
-                  onChanged: (_) {},
-                ),
-              ),
-            ],
-          ],
-        ),
+      child: AppMetricConfigRow(
+        key: ValueKey('metric_$index'),
+        fieldItems: _fieldItems,
+        selectedKey: key.isEmpty ? null : key,
+        ops: ops,
+        allOps: _kAllOps,
+        inheritedLabel: _schemaLabel(key),
+        displayName: m['display_name'] as String?,
+        canManage: widget.canManage,
+        onKeyChanged: (v) => _updateMetricKey(index, v),
+        onOpsChanged: (v) => _updateMetricOps(index, v),
+        onDisplayNameCommitted: (v) => _commitDisplayName(index, v),
+        onRemove: () => _removeMetric(index),
       ),
     );
   }
