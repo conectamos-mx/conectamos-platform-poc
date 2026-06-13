@@ -12,6 +12,7 @@ import '../../core/providers/permissions_provider.dart';
 import '../../core/providers/tenant_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/display_mappers.dart' as dm;
+import '../../core/utils/flow_helpers.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_detail_row.dart';
 import '../../shared/widgets/app_dropdown.dart';
@@ -372,7 +373,9 @@ class _FlowCardState extends State<_FlowCard> {
                         spacing: 6,
                         runSpacing: 6,
                         children: [
-                          if (fields.isNotEmpty)
+                          if (isQueryFlow(f))
+                            _MetadataChip(label: 'Consulta')
+                          else if (fields.isNotEmpty)
                             _MetadataChip(label: '${fields.length} campo${fields.length == 1 ? '' : 's'}'),
                           if (workerName != null)
                             _WorkerChip(
@@ -471,9 +474,11 @@ class _FlowCardState extends State<_FlowCard> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    _expanded
-                        ? 'Ocultar campos'
-                        : 'Ver campos ${fields.length}',
+                    isQueryFlow(f)
+                        ? 'Flujo de consulta'
+                        : _expanded
+                            ? 'Ocultar campos'
+                            : 'Ver campos ${fields.length}',
                     style: AppTextStyles.bodySmall.copyWith(fontSize: 12, fontWeight: FontWeight.w500),
                   ),
                 ],

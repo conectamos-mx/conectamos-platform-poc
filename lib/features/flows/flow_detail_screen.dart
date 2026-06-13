@@ -1328,11 +1328,13 @@ class _FlowSidePanelState extends State<_FlowSidePanel> {
                         label: 'Ejecuciones activas',
                         value: (widget.flow['active_executions_count'] as int? ?? 0).toString(),
                       ),
-                      const SizedBox(height: 6),
-                      _MetricRow(
-                        label: 'Campos configurados',
-                        value: ((widget.flow['fields'] as List?)?.length ?? 0).toString(),
-                      ),
+                      if (!isQueryFlow(widget.flow)) ...[
+                        const SizedBox(height: 6),
+                        _MetricRow(
+                          label: 'Campos configurados',
+                          value: ((widget.flow['fields'] as List?)?.length ?? 0).toString(),
+                        ),
+                      ],
                       const SizedBox(height: 24),
                     ],
                   ),
