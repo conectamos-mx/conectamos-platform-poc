@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
+import '../../core/api/api_error.dart';
 import '../../core/api/catalogs_api.dart';
 import '../../core/api/connections_api.dart';
 import '../../core/api/channels_api.dart';
@@ -30,6 +31,7 @@ import 'widgets/variable_picker_dropdown.dart';
 import '../../shared/widgets/app_dropdown.dart';
 import '../../shared/widgets/app_multi_select.dart';
 import '../../shared/widgets/app_text_field.dart';
+import '../../core/utils/flow_helpers.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -145,7 +147,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
   String? _error;
   bool _saving = false;
 
-  late TabController _tabCtrl;
+  TabController? _tabCtrl;
 
   // Info tab controllers — initialized in _load()
   final _nameCtrl = TextEditingController();
@@ -168,6 +170,10 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
   // Precondiciones tab state
   List<Map<String, dynamic>> _precondiciones = [];
 
+  // Query config state (query flows only)
+  Map<String, dynamic> _queryConfig = {};
+  Map<String, String> _queryFieldErrors = {};
+
   // Roles autorizados
   List<String> _allowedRoleIds = [];
   List<Map<String, dynamic>> _availableRoles = [];
@@ -183,13 +189,12 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   @override
   void dispose() {
-    _tabCtrl.dispose();
+    _tabCtrl?.dispose();
     _nameCtrl.dispose();
     _descCtrl.dispose();
     _deleteConfirmCtrl.dispose();
@@ -240,6 +245,10 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
           ? Map<String, dynamic>.from(
               rawBehavior['proactive_trigger'] as Map)
           : <String, dynamic>{};
+      final queryConfig = rawBehavior['query_config'] is Map
+          ? Map<String, dynamic>.from(
+              rawBehavior['query_config'] as Map)
+          : <String, dynamic>{};
       final rawOnComplete =
           (flow['on_complete'] as Map<String, dynamic>?) ?? {};
       final actions = List<Map<String, dynamic>>.from(
@@ -264,10 +273,17 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         _allowedRoleIds = List<String>.from(
             (flow['allowed_role_ids'] as List? ?? []).map((e) => e.toString()));
         _availableRoles = roles;
+        _queryConfig = queryConfig;
+        _queryFieldErrors = {};
         _nameCtrl.text = flow['name'] as String? ?? '';
         _descCtrl.text = flow['description'] as String? ?? '';
         _loading = false;
       });
+      _tabCtrl?.dispose();
+      _tabCtrl = TabController(
+        length: isQueryFlow(flow) ? 2 : 4,
+        vsync: this,
+      );
       _loadWorkerFlows();
     } catch (e) {
       if (!mounted) return;
@@ -299,6 +315,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         description: _descCtrl.text.trim(),
         fields: _fields,
         behavior: {
+          if (_queryConfig.isNotEmpty) 'query_config': _queryConfig,
           'conditions': _conditions,
           if (_proactiveTrigger.isNotEmpty)
             'proactive_trigger': _proactiveTrigger,
@@ -323,6 +340,9 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
       final updatedProactiveTrigger = rawBeh['proactive_trigger'] is Map
           ? Map<String, dynamic>.from(rawBeh['proactive_trigger'] as Map)
           : <String, dynamic>{};
+      final updatedQueryConfig = rawBeh['query_config'] is Map
+          ? Map<String, dynamic>.from(rawBeh['query_config'] as Map)
+          : _queryConfig;
       final rawOC = (updated['on_complete'] as Map<String, dynamic>?) ?? {};
       final updatedActions = List<Map<String, dynamic>>.from(
           (rawOC['actions'] as List? ?? [])
@@ -338,6 +358,8 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         _fields = fields;
         _conditions = updatedConditions;
         _proactiveTrigger = updatedProactiveTrigger;
+        _queryConfig = updatedQueryConfig;
+        _queryFieldErrors = {};
         _actions = updatedActions;
         _precondiciones = updatedPrecondiciones;
         _saving = false;
@@ -352,6 +374,21 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
+      if (e is DioException &&
+          e.response?.statusCode == 422 &&
+          _flow != null &&
+          isQueryFlow(_flow!)) {
+        final apiErr = ApiError.from(e);
+        if (apiErr != null) {
+          setState(() {
+            final field = apiErr.meta['field'] as String?;
+            _queryFieldErrors = {
+              if (field != null) field: apiErr.message else '_general': apiErr.message,
+            };
+          });
+          return;
+        }
+      }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(_dioError(e)),
         backgroundColor: AppColors.ctDanger,
@@ -600,6 +637,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
         description: _descCtrl.text.trim(),
         fields: _fields,
         behavior: {
+          if (_queryConfig.isNotEmpty) 'query_config': _queryConfig,
           'conditions': _conditions,
           if (_proactiveTrigger.isNotEmpty)
             'proactive_trigger': _proactiveTrigger,
@@ -957,6 +995,7 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
       );
     }
     final canManage = hasPermission(ref, 'flows', 'manage');
+    final isQuery = isQueryFlow(_flow!);
     return Stack(
       children: [
         Row(
@@ -993,12 +1032,17 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
                       unselectedLabelColor: AppColors.ctText2,
                       indicatorColor: AppColors.ctTeal,
                       indicatorWeight: 2,
-                      tabs: const [
-                        Tab(text: 'Campos'),
-                        Tab(text: 'Comportamiento'),
-                        Tab(text: 'Precondiciones'),
-                        Tab(text: 'Al cerrar'),
-                      ],
+                      tabs: isQuery
+                          ? const [
+                              Tab(text: 'Consulta'),
+                              Tab(text: 'Comportamiento'),
+                            ]
+                          : const [
+                              Tab(text: 'Campos'),
+                              Tab(text: 'Comportamiento'),
+                              Tab(text: 'Precondiciones'),
+                              Tab(text: 'Al cerrar'),
+                            ],
                     ),
                   ],
                 ),
@@ -1006,68 +1050,116 @@ class _FlowDetailPanelState extends ConsumerState<FlowDetailPanel>
               Expanded(
                 child: TabBarView(
                   controller: _tabCtrl,
-                  children: [
-                    _CamposTab(
-                      fields: _fields,
-                      canManage: canManage,
-                      onReorder: _onReorder,
-                      onEditField: (field, index) => _openFieldDialog(field: field, index: index),
-                      onDeleteField: (field, index) => _confirmDeleteField(field, index),
-                      onAddField: () => _openFieldDialog(),
-                    ),
-                    _ComportamientoTab(
-                      dio: ref.read(apiClientProvider).dio,
-                      conditions: _conditions,
-                      flowFields: _fields,
-                      canManage: canManage,
-                      triggerSources: _triggerSources,
-                      flowId: widget.flowId,
-                      tenantId: ref.read(activeTenantIdProvider),
-                      tenantWorkerId: _flow!['tenant_worker_id'] as String? ?? '',
-                      proactiveTrigger: _proactiveTrigger,
-                      availableRoles: _availableRoles,
-                      allowedRoleIds: _allowedRoleIds,
-                      onChanged: (updated) { setState(() => _conditions = updated); _save(silent: true); },
-                      onAllowedRoleIdsChanged: (updated) { setState(() => _allowedRoleIds = updated); _save(silent: true); },
-                      onProactiveTriggerChanged: (updated) { setState(() => _proactiveTrigger = updated); _save(silent: true); },
-                      onTriggerSourcesChanged: (updated) async {
-                        final previous = List<String>.from(_triggerSources);
-                        setState(() => _triggerSources = updated);
-                        try {
-                          await _saveWithResult(triggerSources: updated);
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          setState(() => _triggerSources = previous);
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            content: Text(_parseTriggerError(e)),
-                            backgroundColor: AppColors.ctDanger,
-                            duration: const Duration(seconds: 4),
-                          ));
-                        }
-                      },
-                    ),
-                    _PrecondicionesTab(
-                      rules: _precondiciones,
-                      canManage: canManage,
-                      availableRoles: _availableRoles,
-                      tenantId: ref.read(activeTenantIdProvider),
-                      tenantWorkerId: _flow!['tenant_worker_id'] as String? ?? '',
-                      currentFlowSlug: _flow!['slug'] as String? ?? '',
-                      currentFlowFields: _fields,
-                      dio: ref.read(apiClientProvider).dio,
-                      onChanged: (updated) { setState(() => _precondiciones = updated); _save(silent: true); },
-                    ),
-                    _AlCerrarTab(
-                      actions: _actions,
-                      canManage: canManage,
-                      tenantId: ref.read(activeTenantIdProvider),
-                      tenantWorkerId: _flow!['tenant_worker_id'] as String? ?? '',
-                      currentFlowSlug: _flow!['slug'] as String? ?? '',
-                      flowFields: _fields,
-                      dio: ref.read(apiClientProvider).dio,
-                      onChanged: (updated) { setState(() => _actions = updated); _save(silent: true); },
-                    ),
-                  ],
+                  children: isQuery
+                      ? [
+                          _ConsultaTab(
+                            queryConfig: _queryConfig,
+                            fieldErrors: _queryFieldErrors,
+                            tenantId: ref.read(activeTenantIdProvider),
+                            dio: ref.read(apiClientProvider).dio,
+                            canManage: canManage,
+                            onChanged: (updated) {
+                              setState(() {
+                                _queryConfig = updated;
+                                _queryFieldErrors = {};
+                              });
+                              _save(silent: true);
+                            },
+                          ),
+                          _ComportamientoTab(
+                            dio: ref.read(apiClientProvider).dio,
+                            conditions: _conditions,
+                            flowFields: _fields,
+                            canManage: canManage,
+                            triggerSources: _triggerSources,
+                            flowId: widget.flowId,
+                            tenantId: ref.read(activeTenantIdProvider),
+                            tenantWorkerId: _flow!['tenant_worker_id'] as String? ?? '',
+                            proactiveTrigger: _proactiveTrigger,
+                            availableRoles: _availableRoles,
+                            allowedRoleIds: _allowedRoleIds,
+                            onChanged: (updated) { setState(() => _conditions = updated); _save(silent: true); },
+                            onAllowedRoleIdsChanged: (updated) { setState(() => _allowedRoleIds = updated); _save(silent: true); },
+                            onProactiveTriggerChanged: (updated) { setState(() => _proactiveTrigger = updated); _save(silent: true); },
+                            onTriggerSourcesChanged: (updated) async {
+                              final previous = List<String>.from(_triggerSources);
+                              setState(() => _triggerSources = updated);
+                              try {
+                                await _saveWithResult(triggerSources: updated);
+                              } catch (e) {
+                                if (!context.mounted) return;
+                                setState(() => _triggerSources = previous);
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text(_parseTriggerError(e)),
+                                  backgroundColor: AppColors.ctDanger,
+                                  duration: const Duration(seconds: 4),
+                                ));
+                              }
+                            },
+                          ),
+                        ]
+                      : [
+                          _CamposTab(
+                            fields: _fields,
+                            canManage: canManage,
+                            onReorder: _onReorder,
+                            onEditField: (field, index) => _openFieldDialog(field: field, index: index),
+                            onDeleteField: (field, index) => _confirmDeleteField(field, index),
+                            onAddField: () => _openFieldDialog(),
+                          ),
+                          _ComportamientoTab(
+                            dio: ref.read(apiClientProvider).dio,
+                            conditions: _conditions,
+                            flowFields: _fields,
+                            canManage: canManage,
+                            triggerSources: _triggerSources,
+                            flowId: widget.flowId,
+                            tenantId: ref.read(activeTenantIdProvider),
+                            tenantWorkerId: _flow!['tenant_worker_id'] as String? ?? '',
+                            proactiveTrigger: _proactiveTrigger,
+                            availableRoles: _availableRoles,
+                            allowedRoleIds: _allowedRoleIds,
+                            onChanged: (updated) { setState(() => _conditions = updated); _save(silent: true); },
+                            onAllowedRoleIdsChanged: (updated) { setState(() => _allowedRoleIds = updated); _save(silent: true); },
+                            onProactiveTriggerChanged: (updated) { setState(() => _proactiveTrigger = updated); _save(silent: true); },
+                            onTriggerSourcesChanged: (updated) async {
+                              final previous = List<String>.from(_triggerSources);
+                              setState(() => _triggerSources = updated);
+                              try {
+                                await _saveWithResult(triggerSources: updated);
+                              } catch (e) {
+                                if (!context.mounted) return;
+                                setState(() => _triggerSources = previous);
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text(_parseTriggerError(e)),
+                                  backgroundColor: AppColors.ctDanger,
+                                  duration: const Duration(seconds: 4),
+                                ));
+                              }
+                            },
+                          ),
+                          _PrecondicionesTab(
+                            rules: _precondiciones,
+                            canManage: canManage,
+                            availableRoles: _availableRoles,
+                            tenantId: ref.read(activeTenantIdProvider),
+                            tenantWorkerId: _flow!['tenant_worker_id'] as String? ?? '',
+                            currentFlowSlug: _flow!['slug'] as String? ?? '',
+                            currentFlowFields: _fields,
+                            dio: ref.read(apiClientProvider).dio,
+                            onChanged: (updated) { setState(() => _precondiciones = updated); _save(silent: true); },
+                          ),
+                          _AlCerrarTab(
+                            actions: _actions,
+                            canManage: canManage,
+                            tenantId: ref.read(activeTenantIdProvider),
+                            tenantWorkerId: _flow!['tenant_worker_id'] as String? ?? '',
+                            currentFlowSlug: _flow!['slug'] as String? ?? '',
+                            flowFields: _fields,
+                            dio: ref.read(apiClientProvider).dio,
+                            onChanged: (updated) { setState(() => _actions = updated); _save(silent: true); },
+                          ),
+                        ],
                 ),
               ),
             ],
@@ -1515,6 +1607,496 @@ class _InfoTabState extends State<_InfoTab> {
             const SizedBox(height: 8),
           ],
         ],
+      ),
+    );
+  }
+}
+
+// ── _ConsultaTab ──────────────────────────────────────────────────────────────
+
+class _ConsultaTab extends StatefulWidget {
+  const _ConsultaTab({
+    required this.queryConfig,
+    required this.fieldErrors,
+    required this.tenantId,
+    required this.dio,
+    required this.canManage,
+    required this.onChanged,
+  });
+  final Map<String, dynamic> queryConfig;
+  final Map<String, String> fieldErrors;
+  final String tenantId;
+  final Dio dio;
+  final bool canManage;
+  final ValueChanged<Map<String, dynamic>> onChanged;
+
+  @override
+  State<_ConsultaTab> createState() => _ConsultaTabState();
+}
+
+class _ConsultaTabState extends State<_ConsultaTab> {
+  List<Map<String, dynamic>> _catalogSchema = [];
+  bool _loadingSchema = false;
+  String? _schemaError;
+
+  List<Map<String, dynamic>> _metrics = [];
+  List<String> _filterFields = [];
+  List<String> _groupByFields = [];
+  String? _dateField;
+  String? _operatorBinding;
+
+  final List<TextEditingController> _dnCtrls = [];
+
+  String get _entity => widget.queryConfig['entity'] as String? ?? '';
+
+  static const _kAllOps = ['count', 'sum', 'avg', 'min', 'max', 'distinct_count'];
+
+  @override
+  void initState() {
+    super.initState();
+    _syncFromConfig();
+    if (_entity.isNotEmpty) _loadCatalogSchema();
+  }
+
+  @override
+  void didUpdateWidget(_ConsultaTab old) {
+    super.didUpdateWidget(old);
+    if (old.queryConfig != widget.queryConfig) _syncFromConfig();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _dnCtrls) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _syncFromConfig() {
+    final qc = widget.queryConfig;
+    _metrics = List<Map<String, dynamic>>.from(
+      (qc['metrics'] as List? ?? [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e)),
+    );
+    _filterFields = List<String>.from(
+      (qc['filter_fields'] as List? ?? []).map((e) => e.toString()),
+    );
+    _groupByFields = List<String>.from(
+      (qc['group_by_fields'] as List? ?? []).map((e) => e.toString()),
+    );
+    _dateField = qc['date_field'] as String?;
+    _operatorBinding = qc['operator_binding'] as String?;
+    _syncDnCtrls();
+  }
+
+  void _syncDnCtrls() {
+    while (_dnCtrls.length < _metrics.length) {
+      _dnCtrls.add(TextEditingController());
+    }
+    while (_dnCtrls.length > _metrics.length) {
+      _dnCtrls.removeLast().dispose();
+    }
+    for (int i = 0; i < _metrics.length; i++) {
+      final dn = _metrics[i]['display_name'] as String? ?? '';
+      if (_dnCtrls[i].text != dn) _dnCtrls[i].text = dn;
+    }
+  }
+
+  Future<void> _loadCatalogSchema() async {
+    setState(() {
+      _loadingSchema = true;
+      _schemaError = null;
+    });
+    try {
+      final catalog = await CatalogsApi.getCatalogBySlug(
+        dio: widget.dio,
+        tenantId: widget.tenantId,
+        slug: _entity,
+      );
+      if (!mounted) return;
+      final schema = (catalog['fields_schema'] as List?)
+              ?.whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList() ??
+          [];
+      setState(() {
+        _catalogSchema = schema;
+        _loadingSchema = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _schemaError = 'Error al cargar esquema del cat\u00E1logo';
+        _loadingSchema = false;
+      });
+    }
+  }
+
+  String _schemaLabel(String key) {
+    if (key == '*') return '';
+    for (final f in _catalogSchema) {
+      if (f['key'] == key) return f['label'] as String? ?? key;
+    }
+    return key;
+  }
+
+  List<AppDropdownItem<String>> get _fieldItems => [
+        const AppDropdownItem(value: '*', label: '* (todos \u2014 solo conteo)'),
+        ..._catalogSchema.map((f) => AppDropdownItem<String>(
+              value: f['key'] as String? ?? '',
+              label: f['label'] as String? ?? f['key'] as String? ?? '',
+            )),
+      ];
+
+  List<AppMultiSelectItem<String>> get _schemaItems =>
+      _catalogSchema.map((f) => AppMultiSelectItem<String>(
+            value: f['key'] as String? ?? '',
+            label: f['label'] as String? ?? f['key'] as String? ?? '',
+          )).toList();
+
+  Map<String, dynamic> _buildConfig() => {
+        'entity': _entity,
+        'metrics': _metrics,
+        'filter_fields': _filterFields,
+        'group_by_fields': _groupByFields,
+        if (_dateField != null) 'date_field': _dateField,
+        if (_operatorBinding != null) 'operator_binding': _operatorBinding,
+      };
+
+  void _emitChange() => widget.onChanged(_buildConfig());
+
+  // ── Metric management ──────────────────────────────────────────────────────
+
+  void _addMetric() {
+    setState(() {
+      _metrics = [..._metrics, {'key': '', 'ops': <String>[]}];
+      _dnCtrls.add(TextEditingController());
+    });
+  }
+
+  void _removeMetric(int index) {
+    setState(() {
+      _metrics = [..._metrics]..removeAt(index);
+      _dnCtrls.removeAt(index).dispose();
+    });
+    _emitChange();
+  }
+
+  void _updateMetricKey(int index, String? key) {
+    if (key == null) return;
+    setState(() {
+      final m = Map<String, dynamic>.from(_metrics[index]);
+      m['key'] = key;
+      if (key == '*') {
+        m['ops'] = ['count'];
+        m.remove('display_name');
+        _dnCtrls[index].clear();
+      }
+      if (m['display_name'] == _schemaLabel(key)) m.remove('display_name');
+      _metrics = [..._metrics]..[index] = m;
+    });
+    _emitChange();
+  }
+
+  void _updateMetricOps(int index, List<String> ops) {
+    setState(() {
+      final m = Map<String, dynamic>.from(_metrics[index]);
+      m['ops'] = ops;
+      _metrics = [..._metrics]..[index] = m;
+    });
+    _emitChange();
+  }
+
+  void _commitDisplayName(int index) {
+    final value = _dnCtrls[index].text.trim();
+    final m = Map<String, dynamic>.from(_metrics[index]);
+    final key = m['key'] as String? ?? '';
+    final inherited = _schemaLabel(key);
+    if (value.isEmpty || value == inherited) {
+      m.remove('display_name');
+    } else {
+      m['display_name'] = value;
+    }
+    setState(() => _metrics = [..._metrics]..[index] = m);
+    _emitChange();
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loadingSchema) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.ctTeal),
+      );
+    }
+    if (_schemaError != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_schemaError!,
+                style: AppTextStyles.body.copyWith(color: AppColors.ctDanger)),
+            const SizedBox(height: 12),
+            AppButton(
+              label: 'Reintentar',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.sm,
+              onPressed: _loadCatalogSchema,
+            ),
+          ],
+        ),
+      );
+    }
+
+    final generalError = widget.fieldErrors['_general'];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (generalError != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.ctDanger.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.ctDanger.withValues(alpha: 0.3)),
+              ),
+              child: Text(generalError,
+                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger)),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // ── Cat\u00E1logo (read-only) ──
+          Text('CAT\u00C1LOGO', style: AppTextStyles.kpiLabel),
+          const SizedBox(height: 8),
+          AppDropdown<String>(
+            items: [AppDropdownItem(value: _entity, label: _entity)],
+            value: _entity,
+            enabled: false,
+            onChanged: (_) {},
+          ),
+
+          const SizedBox(height: 24),
+
+          // ── M\u00E9tricas ──
+          Row(
+            children: [
+              Expanded(
+                child: Text('M\u00C9TRICAS', style: AppTextStyles.kpiLabel),
+              ),
+              if (widget.canManage)
+                AppButton(
+                  label: '+ Agregar',
+                  variant: AppButtonVariant.ghost,
+                  size: AppButtonSize.sm,
+                  onPressed: _addMetric,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_metrics.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text('Sin m\u00E9tricas configuradas.',
+                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText3)),
+            )
+          else
+            ...List.generate(_metrics.length, _buildMetricRow),
+          if (widget.fieldErrors['metrics'] != null) ...[
+            const SizedBox(height: 4),
+            Text(widget.fieldErrors['metrics']!,
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger)),
+          ],
+
+          const SizedBox(height: 24),
+
+          // ── Campos de filtro ──
+          Text('CAMPOS DE FILTRO (m\u00E1x. 5)', style: AppTextStyles.kpiLabel),
+          const SizedBox(height: 8),
+          AppMultiSelect<String>(
+            items: _schemaItems,
+            selectedValues: _filterFields,
+            placeholder: 'Selecciona campos de filtro...',
+            searchable: true,
+            onChanged: widget.canManage
+                ? (vals) {
+                    if (vals.length > 5) return;
+                    setState(() => _filterFields = vals);
+                    _emitChange();
+                  }
+                : (_) {},
+          ),
+          if (widget.fieldErrors['filter_fields'] != null) ...[
+            const SizedBox(height: 4),
+            Text(widget.fieldErrors['filter_fields']!,
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger)),
+          ],
+
+          const SizedBox(height: 24),
+
+          // ── Campos de agrupaci\u00F3n ──
+          Text('CAMPOS DE AGRUPACI\u00D3N', style: AppTextStyles.kpiLabel),
+          const SizedBox(height: 8),
+          AppMultiSelect<String>(
+            items: _schemaItems,
+            selectedValues: _groupByFields,
+            placeholder: 'Selecciona campos de agrupaci\u00F3n...',
+            searchable: true,
+            onChanged: widget.canManage
+                ? (vals) {
+                    setState(() => _groupByFields = vals);
+                    _emitChange();
+                  }
+                : (_) {},
+          ),
+
+          const SizedBox(height: 24),
+
+          // ── Campo de fecha ──
+          Text('CAMPO DE FECHA', style: AppTextStyles.kpiLabel),
+          const SizedBox(height: 8),
+          AppDropdown<String>(
+            items: _dateFieldItems(),
+            value: _dateField,
+            hint: 'Ninguno (opcional)',
+            enabled: widget.canManage,
+            onChanged: (v) {
+              setState(() => _dateField = v);
+              _emitChange();
+            },
+          ),
+
+          const SizedBox(height: 24),
+
+          // ── Vinculaci\u00F3n de operador ──
+          Text('VINCULACI\u00D3N DE OPERADOR', style: AppTextStyles.kpiLabel),
+          const SizedBox(height: 4),
+          Text('Define c\u00F3mo se vincula el operador con los datos del cat\u00E1logo.',
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctText2)),
+          const SizedBox(height: 8),
+          AppDropdown<String>(
+            items: const [
+              AppDropdownItem(value: '', label: 'Sin vinculaci\u00F3n'),
+              AppDropdownItem(value: 'phone', label: 'Tel\u00E9fono'),
+              AppDropdownItem(value: 'external_id', label: 'ID externo'),
+            ],
+            value: _operatorBinding ?? '',
+            enabled: widget.canManage,
+            onChanged: (v) {
+              setState(() => _operatorBinding = v == '' ? null : v);
+              _emitChange();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<AppDropdownItem<String>> _dateFieldItems() {
+    final dateFields = _catalogSchema.where((f) {
+      final type = f['type'] as String? ?? '';
+      return type == 'date' || type == 'datetime' || type == 'timestamp';
+    }).toList();
+    final source = dateFields.isNotEmpty ? dateFields : _catalogSchema;
+    return source
+        .map((f) => AppDropdownItem<String>(
+              value: f['key'] as String? ?? '',
+              label: f['label'] as String? ?? f['key'] as String? ?? '',
+            ))
+        .toList();
+  }
+
+  Widget _buildMetricRow(int index) {
+    final m = _metrics[index];
+    final key = m['key'] as String? ?? '';
+    final ops =
+        List<String>.from((m['ops'] as List? ?? []).map((e) => e.toString()));
+    final isStar = key == '*';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.ctSurface2,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.ctBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: AppDropdown<String>(
+                    label: 'Campo',
+                    items: _fieldItems,
+                    value: key.isEmpty ? null : key,
+                    hint: 'Selecciona campo',
+                    enabled: widget.canManage,
+                    onChanged: (v) => _updateMetricKey(index, v),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Operaciones',
+                          style: AppTextStyles.bodySmall
+                              .copyWith(fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 4),
+                      AppMultiSelect<String>(
+                        items: (isStar ? ['count'] : _kAllOps)
+                            .map((op) =>
+                                AppMultiSelectItem(value: op, label: op))
+                            .toList(),
+                        selectedValues: ops,
+                        placeholder: 'Selecciona...',
+                        onChanged: (v) => _updateMetricOps(index, v),
+                      ),
+                    ],
+                  ),
+                ),
+                if (widget.canManage) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => _removeMetric(index),
+                    child: const MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Icon(Icons.close_rounded,
+                          size: 18, color: AppColors.ctText3),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (!isStar && key.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Focus(
+                onFocusChange: (hasFocus) {
+                  if (!hasFocus) _commitDisplayName(index);
+                },
+                child: AppTextField(
+                  controller: _dnCtrls[index],
+                  label: 'Nombre de presentaci\u00F3n',
+                  hint: _schemaLabel(key).isNotEmpty
+                      ? _schemaLabel(key)
+                      : 'Nombre personalizado',
+                  onChanged: (_) {},
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
