@@ -192,7 +192,7 @@ class _CreateFlowDialogState extends ConsumerState<CreateFlowDialog> {
         behavior: _isQuery
             ? {
                 'query_config': {
-                  'entity': _selectedCatalogSlug,
+                  'catalog_slug': _selectedCatalogSlug,
                   'metrics': <Map<String, dynamic>>[],
                   'filter_fields': <String>[],
                   'group_by_fields': <String>[],
