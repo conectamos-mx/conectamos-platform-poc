@@ -591,9 +591,46 @@ AppMultiSelect<String>(
 - Overlay con checkboxes — toggle al hacer click
 - Mismo patrón de TapRegion groupId que AppDropdown
 - Si no hay selección, muestra placeholder
+- `errorText` (opcional): borde rojo + texto de error debajo (misma mecánica que AppTextField)
 
 **PROHIBIDO usar en su lugar:**
 - Múltiples `Checkbox` + `ListView` inline — usar `AppMultiSelect`
+
+---
+
+### 2.11b AppMetricConfigRow · `lib/shared/widgets/app_metric_config_row.dart`
+
+Fila compuesta para configurar una métrica de consulta: dropdown de campo + multi-select de operaciones + nombre de presentación opcional + botón eliminar.
+
+```dart
+import '../../shared/widgets/app_metric_config_row.dart';
+
+AppMetricConfigRow(
+  fieldItems: fieldDropdownItems,
+  selectedKey: metric['key'],
+  ops: metric['ops'],
+  allOps: ['count', 'sum', 'avg', 'min', 'max', 'distinct_count'],
+  inheritedLabel: schemaLabelForKey,
+  displayName: metric['display_name'],
+  canManage: true,
+  onKeyChanged: (key) => _updateKey(i, key),
+  onOpsChanged: (ops) => _updateOps(i, ops),
+  onDisplayNameCommitted: (name) => _commitName(i, name),
+  onRemove: () => _removeMetric(i),
+)
+```
+
+**Props:**
+- `fieldItems` — items para el dropdown de campo (incluir `*` para solo conteo)
+- `selectedKey` — clave seleccionada (null si vacía)
+- `ops` / `allOps` — operaciones seleccionadas y disponibles
+- `inheritedLabel` — label del schema del catálogo; se muestra como hint del display_name
+- `displayName` — valor actual del nombre de presentación (null si hereda)
+- `canManage` — habilita/deshabilita edición y botón eliminar
+- `onDisplayNameCommitted` — se emite al perder foco; valor vacío o igual a inheritedLabel indica "sin override"
+- `errorText` — error de validación (borde rojo + texto)
+
+**Cuándo usarlo:** Siempre que se edite `query_config.metrics[]` de un flujo de consulta (PLA-205).
 
 ---
 

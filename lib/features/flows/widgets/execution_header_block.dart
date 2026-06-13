@@ -61,7 +61,7 @@ class ExecutionHeaderBlock extends StatelessWidget {
         _ => true,
       };
     }).toList();
-    final total = visibleFields.length.clamp(1, 9999);
+    final total = visibleFields.isEmpty ? 0 : visibleFields.length;
     int filled = 0;
     for (final field in visibleFields) {
       final key = field['key'];

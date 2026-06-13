@@ -616,6 +616,15 @@ class _FieldsBlockState extends State<_FieldsBlock> {
     return null;
   }
 
+  Widget _buildEmptyFieldsView() {
+    return Center(
+      child: Text(
+        'Este flujo no tiene campos de captura.',
+        style: AppTextStyles.body.copyWith(color: AppColors.ctText2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final rawFields = widget.flow['fields'] as List? ?? [];
@@ -653,10 +662,11 @@ class _FieldsBlockState extends State<_FieldsBlock> {
         .map((f) => _normalizeType(f['type'] as String? ?? 'text'))
         .toSet();
 
-    // Progress — count only non-hidden fields
+    // Progress — count only non-hidden fields (safe for query flows with 0 fields)
     final expectedFields = fields.where((f) =>
         fieldVis[f['key'] as String? ?? ''] != 'hidden');
     final total = expectedFields.length;
+    if (total == 0) return _buildEmptyFieldsView();
     final filled = expectedFields.where((f) {
       final key = f['key'];
       if (key is! String) return false;

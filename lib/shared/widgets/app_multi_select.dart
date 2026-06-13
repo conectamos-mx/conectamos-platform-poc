@@ -21,6 +21,7 @@ class AppMultiSelect<T> extends StatefulWidget {
     this.placeholder = 'Selecciona...',
     this.searchable = false,
     this.maxOverlayHeight = 280.0,
+    this.errorText,
   });
 
   final List<AppMultiSelectItem<T>> items;
@@ -29,6 +30,7 @@ class AppMultiSelect<T> extends StatefulWidget {
   final String placeholder;
   final bool searchable;
   final double maxOverlayHeight;
+  final String? errorText;
 
   @override
   State<AppMultiSelect<T>> createState() => _AppMultiSelectState<T>();
@@ -123,67 +125,85 @@ class _AppMultiSelectState<T> extends State<AppMultiSelect<T>> {
 
   @override
   Widget build(BuildContext context) {
-    return CompositedTransformTarget(
-      link: _link,
-      child: OverlayPortal(
-        controller: _controller,
-        overlayChildBuilder: (_) => _buildOverlay(),
-        child: TapRegion(
-          groupId: _tapGroupId,
-          onTapOutside: (_) => _close(),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _open_,
-            child: Container(
-              key: _triggerKey,
-              width: double.infinity,
-              constraints: const BoxConstraints(minHeight: 40),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.ctSurface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: _open ? AppColors.ctTeal : AppColors.ctBorder2,
-                  width: _open ? 1.5 : 1.0,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: widget.selectedValues.isEmpty
-                        ? Text(
-                            widget.placeholder,
-                            style: AppTextStyles.body
-                                .copyWith(color: AppColors.ctText3),
-                          )
-                        : Wrap(
-                            spacing: 4,
-                            runSpacing: 4,
-                            children: widget.selectedValues.map((v) {
-                              return _Chip(
-                                label: _labelFor(v),
-                                onRemove: () => _remove(v),
-                              );
-                            }).toList(),
-                          ),
-                  ),
-                  const SizedBox(width: 6),
-                  AnimatedRotation(
-                    turns: _open ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 150),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 18,
-                      color: AppColors.ctText2,
+    final hasError = widget.errorText != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CompositedTransformTarget(
+          link: _link,
+          child: OverlayPortal(
+            controller: _controller,
+            overlayChildBuilder: (_) => _buildOverlay(),
+            child: TapRegion(
+              groupId: _tapGroupId,
+              onTapOutside: (_) => _close(),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _open_,
+                child: Container(
+                  key: _triggerKey,
+                  width: double.infinity,
+                  constraints: const BoxConstraints(minHeight: 40),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.ctSurface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: hasError
+                          ? AppColors.ctDanger
+                          : _open
+                              ? AppColors.ctTeal
+                              : AppColors.ctBorder2,
+                      width: _open || hasError ? 1.5 : 1.0,
                     ),
                   ),
-                ],
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: widget.selectedValues.isEmpty
+                            ? Text(
+                                widget.placeholder,
+                                style: AppTextStyles.body
+                                    .copyWith(color: AppColors.ctText3),
+                              )
+                            : Wrap(
+                                spacing: 4,
+                                runSpacing: 4,
+                                children: widget.selectedValues.map((v) {
+                                  return _Chip(
+                                    label: _labelFor(v),
+                                    onRemove: () => _remove(v),
+                                  );
+                                }).toList(),
+                              ),
+                      ),
+                      const SizedBox(width: 6),
+                      AnimatedRotation(
+                        turns: _open ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 150),
+                        child: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: AppColors.ctText2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
         ),
-      ),
+        if (hasError) ...[
+          const SizedBox(height: 4),
+          Text(
+            widget.errorText!,
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.ctDanger),
+          ),
+        ],
+      ],
     );
   }
 
